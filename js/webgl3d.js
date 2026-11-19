@@ -1,5 +1,5 @@
-import { GAME_CONFIG } from './config.js?v=69';
-import { gameState } from './state.js?v=69';
+import { GAME_CONFIG } from './config.js?v=70';
+import { gameState } from './state.js?v=70';
 import {
   createAlleyBackdropTexture,
   createBuildingFacadeTexture,
@@ -8,7 +8,7 @@ import {
   createKanjiSignTextures,
   createPedestrianTextures,
   AnimeCustomerTextureRenderer
-} from './art3d.js?v=69';
+} from './art3d.js?v=70';
 
 /**
  * Полноэкранный WebGL 3D движок от первого лица с процедурной высокодетализированной
@@ -1154,13 +1154,16 @@ export class FirstPersonWebGLScene {
           return;
         }
 
-        // ТОЛЬКО при свайпе вверх на клиента С ОСНОВНОЙ СТОЛЕШНИЦЫ (worktable) поднимаем поднос/пакет, если на нём что-то стоит!
+        // ТОЛЬКО при свайпе вверх на клиента С ОСНОВНОЙ СТОЛЕШНИЦЫ (worktable) поднимаем поднос/пакет,
+        // если на нём что-то стоит И левая рука свободна (не держим тарелку или коробку)!
         if (dy > 0 && gameState.runtime.activeSector === 1 && !this._startedOnCustomer && !this._startedUnderCounter) {
           const a = gameState.runtime.assembly || {};
+          const v = gameState.runtime.activeVessel;
+          const hasHeldVessel = Boolean(v && v.type);
           const hasAssembled = Boolean((a.hasTray || a.hasBag) && (a.vessel || a.hasChopsticks || a.drink));
           gameState.runtime.cameraFocus = 'customer';
           gameState.runtime.customerPanSide = 0;
-          gameState.runtime.carryingAssembly = hasAssembled;
+          gameState.runtime.carryingAssembly = !hasHeldVessel && hasAssembled;
           audio.playTapPop();
           return;
         }
@@ -2613,6 +2616,7 @@ export class FirstPersonWebGLScene {
       rt.cameraFocus === 'customer' &&
       (rt.customerPanSide || 0) === 0 &&
       Boolean(rt.carryingAssembly) &&
+      !hasHeldVessel &&
       hasAssembled;
 
     // 0. ПОДСТОЛЬНЫЙ МЕТАЛЛИЧЕСКИЙ БАК-МУСОРКА СЛЕВА СПЕРЕДИ (x = -0.54, z = +0.06 — не мешает камере под прилавком!)
@@ -4556,19 +4560,10 @@ export class FirstPersonWebGLScene {
 
     const v = rt.activeVessel;
     if (!v || (v.type !== 'bowl' && v.type !== 'box')) return;
-    const a = rt.assembly || {};
-    const hasAssembled = Boolean((a.hasTray || a.hasBag) && (a.vessel || a.hasChopsticks || a.drink));
-    const isCarryingOrder =
-      rt.activeSector === 1 &&
-      rt.cameraFocus === 'customer' &&
-      (rt.customerPanSide || 0) === 0 &&
-      Boolean(rt.carryingAssembly) &&
-      hasAssembled;
     if (
       this.droneDeliverAnim.active ||
       this.trashTossAnim.active ||
       rt.cameraFocus === 'under_counter' ||
-      isCarryingOrder ||
       (rt.activeSector === -1 && (this.sinkWashAnim.active || this.rackPickupAnim.active))
     ) {
       return;
@@ -5142,12 +5137,15 @@ export class FirstPersonWebGLScene {
   drawCarriedAssemblyToCustomer3D() {
     const rt = gameState.runtime;
     const a = rt.assembly || {};
+    const v = rt.activeVessel;
+    const hasHeldVessel = Boolean(v && v.type);
     const hasAssembled = Boolean((a.hasTray || a.hasBag) && (a.vessel || a.hasChopsticks || a.drink));
     const isCarrying =
       rt.activeSector === 1 &&
       rt.cameraFocus === 'customer' &&
       (rt.customerPanSide || 0) === 0 &&
       Boolean(rt.carryingAssembly) &&
+      !hasHeldVessel &&
       hasAssembled;
 
     if (!isCarrying && !this.servePushAnim.active) return;

@@ -1,16 +1,16 @@
-import { GAME_CONFIG } from './config.js?v=69';
-import { gameState, createShiftRuntimeState } from './state.js?v=69';
-import { audio } from './audio.js?v=69';
+import { GAME_CONFIG } from './config.js?v=70';
+import { gameState, createShiftRuntimeState } from './state.js?v=70';
+import { audio } from './audio.js?v=70';
 import {
   buildCustomerPortraitSVG,
   buildCourierDroneSVG,
   generateAppleTouchIcon
-} from './renderer.js?v=69';
-import { FirstPersonWebGLScene } from './webgl3d.js?v=69';
-import { CustomerAndDeliverySystem } from './customers.js?v=69';
-import { KitchenSystem } from './kitchen.js?v=69';
-import { EconomySystem } from './economy.js?v=69';
-import { TutorialSystem } from './tutorial.js?v=69';
+} from './renderer.js?v=70';
+import { FirstPersonWebGLScene } from './webgl3d.js?v=70';
+import { CustomerAndDeliverySystem } from './customers.js?v=70';
+import { KitchenSystem } from './kitchen.js?v=70';
+import { EconomySystem } from './economy.js?v=70';
+import { TutorialSystem } from './tutorial.js?v=70';
 
 class CyberRamenApp {
   constructor() {
@@ -195,7 +195,8 @@ class CyberRamenApp {
 
     if (hitId === 'customer_serve') {
       if (gameState.runtime.cameraFocus === 'customer') {
-        if (gameState.runtime.carryingAssembly && this.kitchenSystem.hasAssembledOrder()) {
+        const hasHeld = Boolean(gameState.runtime.activeVessel && gameState.runtime.activeVessel.type);
+        if (gameState.runtime.carryingAssembly && !hasHeld && this.kitchenSystem.hasAssembledOrder()) {
           const served = this.kitchenSystem.serveToCounterCustomer();
           if (served) {
             this.scene3D.triggerServePushAnim(Boolean(served.servedBag));
@@ -264,7 +265,7 @@ class CyberRamenApp {
 
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker
-        .register('./sw.js?v=69', { updateViaCache: 'none' })
+        .register('./sw.js?v=70', { updateViaCache: 'none' })
         .then((reg) => reg.update())
         .catch(() => {});
     }
