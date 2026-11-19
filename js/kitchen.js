@@ -1,6 +1,6 @@
-import { GAME_CONFIG } from './config.js?v=60';
-import { gameState } from './state.js?v=60';
-import { audio } from './audio.js?v=60';
+import { GAME_CONFIG } from './config.js?v=61';
+import { gameState } from './state.js?v=61';
+import { audio } from './audio.js?v=61';
 
 export class KitchenSystem {
   constructor(callbacks) {
@@ -83,17 +83,9 @@ export class KitchenSystem {
     // 2. Свист закипающего чайника: свистит на Al Dente и ещё сильнее свистит при переваре, пока не тапнешь корзину!
     audio.syncKettleWhistle(highestWhistle);
 
-    // 3. Таймер остывания блюд, временно отставленных на 3 слота центрального стола
-    if (Array.isArray(rt.tableSlots)) {
-      for (const slotVessel of rt.tableSlots) {
-        if (
-          slotVessel &&
-          slotVessel.type &&
-          (slotVessel.broth || slotVessel.noodleState || slotVessel.toppings.length > 0)
-        ) {
-          slotVessel.tableAgeSec = (slotVessel.tableAgeSec || 0) + dt;
-        }
-      }
+    // 3. Таймер остывания блюда на подносе / в пакете (если долго стоит на столе)
+    if (rt.assembly && rt.assembly.vessel && (rt.assembly.vessel.broth || rt.assembly.vessel.noodleState)) {
+      rt.assembly.vessel.tableAgeSec = (rt.assembly.vessel.tableAgeSec || 0) + dt;
     }
 
     // 4. Таймеры гостей, которые едят из керамических мисок и затем оставляют грязную миску на ЛЕВОЙ полке прилавка (слева от котика)!
@@ -610,6 +602,152 @@ export class KitchenSystem {
     this.renderAllKitchen();
   }
 
+  // Проверяет, собран ли на столе заказ (поднос или пакет, на котором лежит хоть что-то: посуда, палочки или напиток)
+  hasAssembledOrder() {
+    const a = gameState.runtime.assembly;
+    if (!a) return false;
+    return Boolean((a.hasTray || a.hasBag) && (a.vessel || a.hasChopsticks || a.drink));
+  }
+
+  // Достать поднос из-под прилавка и поставить на центральную столешницу
+  takeTrayFromUnderCounter() {
+    const rt = gameState.runtime;
+    if (!rt.assembly) {
+      rt.assembly = { hasTray: false, hasBag: false, vessel: null, hasChopsticks: false, drink: null };
+    }
+    if (rt.assembly.hasTray) {
+      audio.playPenaltyBuzz();
+      this.onToast('🍱 Поднос уже стоит на столешнице!', '#ffaa00');
+      return false;
+    }
+
+    rt.assembly.hasTray = true;
+    rt.cameraFocus = 'worktable';
+    rt.underCounterSide = 0;
+    audio.playTapPop();
+    this.onToast('🍱 Поднос поставлен на стол! Ставьте на него блюдо и кладите палочки.', '#00f5d4');
+    this.renderAllKitchen();
+    return true;
+  }
+
+  // Достать бумажный пакет для заказа «с собой» из-под прилавка (ставит пакет на стол или прямо на поднос с перекладыванием!)
+  takeBagFromUnderCounter() {
+    const rt = gameState.runtime;
+    if (!rt.assembly) {
+      rt.assembly = { hasTray: false, hasBag: false, vessel: null, hasChopsticks: false, drink: null };
+    }
+    if (rt.assembly.hasBag) {
+      audio.playPenaltyBuzz();
+      this.onToast('🛍️ Пакет уже стоит на столе!', '#ffaa00');
+      return null;
+    }
+
+    const hadItems = Boolean(rt.assembly.vessel || rt.assembly.hasChopsticks || rt.assembly.drink);
+    const prevVessel = rt.assembly.vessel ? JSON.parse(JSON.stringify(rt.assembly.vessel)) : null;
+    const prevChopsticks = Boolean(rt.assembly.hasChopsticks);
+    const onTray = Boolean(rt.assembly.hasTray);
+
+    rt.assembly.hasBag = true;
+    rt.cameraFocus = 'worktable';
+    rt.underCounterSide = 0;
+    audio.playTapPop();
+    if (hadItems) {
+      audio.playSealerPress();
+      this.onToast(
+        '🛍️ Заказ переложен с подноса в пакет! Пакет стоит на подносе — поднимитесь к гостю!',
+        '#00f5d4'
+      );
+    } else if (onTray) {
+      this.onToast('🛍️ Пакет поставлен на поднос! Кладите в него заказ с собой.', '#00f5d4');
+    } else {
+      this.onToast('🛍️ Пакет для заказа с собой поставлен на столешницу!', '#00f5d4');
+    }
+    this.renderAllKitchen();
+    return { hadItems, onTray, prevVessel, prevChopsticks };
+  }
+
+  // Поставить посуду (полную или даже пустую!) из левой руки на поднос / в пакет, или забрать обратно в руку
+  handleAssemblyZoneTap() {
+    const rt = gameState.runtime;
+    if (!rt.assembly) {
+      rt.assembly = { hasTray: false, hasBag: false, vessel: null, hasChopsticks: false, drink: null };
+    }
+    const a = rt.assembly;
+    const handV = rt.activeVessel;
+    const hasHand = Boolean(handV && handV.type);
+
+    if (!a.hasTray && !a.hasBag) {
+      audio.playPenaltyBuzz();
+      this.onToast('Свайпните вверх ↑ под прилавок, чтобы достать 🍱 Поднос или 🛍️ Пакет!', '#ffaa00');
+      return null;
+    }
+
+    // 1. В левой руке есть тарелка/коробка (полная или пустая) и место на подносе/в пакете свободно -> СТАВИМ!
+    if (hasHand && !a.vessel) {
+      const placed = JSON.parse(JSON.stringify(handV));
+      a.vessel = placed;
+      rt.activeVessel = this.createEmptyVessel(null);
+      rt.vesselHeldInLeft = false;
+      rt.sauceModeArmed = false;
+      audio.playTapPop();
+      this.onToast(
+        a.hasBag
+          ? `${placed.type === 'box' ? '📦 Коробка' : '🍜 Миска'} положена в пакет!`
+          : `${placed.type === 'box' ? '📦 Коробка' : '🍜 Миска'} поставлена на поднос!`,
+        '#00f5d4'
+      );
+      this.renderAllKitchen();
+      return { action: 'place', vessel: placed, intoBag: a.hasBag };
+    }
+
+    // 2. Левая рука пустая, а на подносе/в пакете стоит посуда -> ЗАБИРАЕМ обратно в левую руку!
+    if (!hasHand && a.vessel) {
+      const picked = JSON.parse(JSON.stringify(a.vessel));
+      rt.activeVessel = picked;
+      rt.vesselHeldInLeft = true;
+      a.vessel = null;
+      audio.playTapPop();
+      this.onToast(
+        `${picked.type === 'box' ? '📦 Коробка' : '🍜 Миска'} взята обратно в левую руку.`,
+        '#00f5d4'
+      );
+      this.renderAllKitchen();
+      return { action: 'pickup', vessel: picked, fromBag: a.hasBag };
+    }
+
+    if (hasHand && a.vessel) {
+      audio.playPenaltyBuzz();
+      this.onToast('На подносе уже стоит посуда! Сначала отдайте заказ или освободите место.', '#ffaa00');
+      return null;
+    }
+
+    return null;
+  }
+
+  // Положить бамбуковые палочки Варибаси на поднос или в пакет
+  addChopsticksToAssembly() {
+    const rt = gameState.runtime;
+    if (!rt.assembly || (!rt.assembly.hasTray && !rt.assembly.hasBag)) {
+      audio.playPenaltyBuzz();
+      this.onToast('Сначала достаньте 🍱 Поднос или 🛍️ Пакет из-под прилавка (свайп вверх ↑)!', '#ffaa00');
+      return false;
+    }
+    if (rt.assembly.hasChopsticks) {
+      audio.playTapPop();
+      this.onToast('🥢 Палочки уже положены к заказу!', '#ffaa00');
+      return false;
+    }
+
+    rt.assembly.hasChopsticks = true;
+    audio.playTapPop();
+    this.onToast(
+      rt.assembly.hasBag ? '🥢 Палочки Варибаси положены в пакет!' : '🥢 Палочки Варибаси положены на поднос!',
+      '#00f5d4'
+    );
+    this.renderAllKitchen();
+    return true;
+  }
+
   serveToCounterCustomer() {
     const rt = gameState.runtime;
     const cust = rt.currentCustomer;
@@ -617,68 +755,74 @@ export class KitchenSystem {
       this.onToast('У окна сейчас нет посетителя!', '#ffaa00');
       return false;
     }
-    if (!rt.activeVessel.type) {
-      this.onToast('В левой руке пусто! Возьмите посуду со стола или справа на складе.', '#ffaa00');
-      return false;
-    }
-    if (!rt.activeVessel.broth && !rt.activeVessel.noodleState) {
-      this.onToast('Посуда в руке пуста! Сварите лапшу и налейте бульон ◀ слева', '#ffaa00');
+
+    const a = rt.assembly;
+    if (!this.hasAssembledOrder()) {
+      audio.playPenaltyBuzz();
+      this.onToast(
+        '🍱 Соберите заказ на подносе или в пакете (свайп вверх ↑ на столе → под прилавок за подносом/пакетом)!',
+        '#ffaa00'
+      );
       return false;
     }
 
-    // 1. Если прохожий заказал «с собой в коробочке» (wantsTakeout), а у вас в руке миска — он говорит «Мне надо было с собой!»
-    // Поворачиваемся к складу справа и тапаем на коробку, чтобы перелить рамен из миски прямо в коробку!
-    if (cust.order.wantsTakeout && rt.activeVessel.type !== 'box') {
+    const servingBag = Boolean(a.hasBag);
+    const v = a.vessel;
+
+    if (!v || (!v.broth && !v.noodleState)) {
       audio.playPenaltyBuzz();
-      audio.speakCustomerOrder('Мне надо было с собой!', cust.id);
+      this.onToast('🙅‍♂️ Гость: «А где сам рамен?! Поставьте готовое блюдо на поднос!»', '#ff385c');
+      return false;
+    }
+
+    // 1. Если гость просил «с собой», а мы поднялись с подносом без пакета -> отказывается и просит в пакет!
+    if (cust.order.wantsTakeout && !servingBag) {
+      audio.playPenaltyBuzz();
+      audio.speakCustomerOrder('Эй, мне нужно с собой!', cust.id);
       this.onToast(
-        '🙅‍♂️ Гость: «Мне надо было с собой!» Повернитесь к складу справа ▶ и тапните на 📦 Коробку!',
+        '🙅‍♂️ Гость: «Эй, мне нужно с собой!» Опуститесь на стол, свайпните вверх ↑ под стол → влево к 🛍️ Пакетам!',
         '#ff385c'
       );
       return false;
     }
 
-    // 2. Если гостю дают совсем другой бульон — он отказывается брать заказ!
-    // Придётся либо отставить его на один из 3 слотов стола в надежде, что купит следующий, либо выбросить!
-    if (rt.activeVessel.broth !== cust.order.broth) {
+    // 2. Если гостю дают совсем другой бульон — отказывается брать заказ!
+    if (v.broth !== cust.order.broth) {
       audio.playPenaltyBuzz();
       this.onToast(
-        '🙅‍♂️ Гость отказался: «Я заказывал совсем другой бульон!» Отставьте на стол или выбросьте в мусорку.',
+        '🙅‍♂️ Гость отказался: «Я заказывал совсем другой бульон!» Опуститесь и замените блюдо.',
         '#ff385c'
       );
       return false;
     }
 
-    // 3. Если блюдо долго стояло на столе (> 18 сек) — большинство гостей откажутся брать, либо оставят плохой отзыв!
-    const tableAge = rt.activeVessel.tableAgeSec || 0;
-    if (tableAge > 18 && Math.random() < 0.68) {
-      audio.playPenaltyBuzz();
-      this.onToast(
-        '🙅‍♂️ Гость отказался: «Оно давно стояло на столе и остыло! Сделай свежее!»',
-        '#ff385c'
-      );
-      return false;
-    }
+    const evalRes = this.evaluateDish(v, cust.order);
+    let penaltyNote = false;
 
-    const evalRes = this.evaluateDish(rt.activeVessel, cust.order);
-    let leftBadReviewFromTable = false;
-    if (rt.activeVessel.wasStagedOnTable && tableAge > 8) {
-      leftBadReviewFromTable = true;
+    // 3. Если гость заказывал НА МЕСТЕ, а мы отдали ему заказ в ПАКЕТЕ — он берёт, но ухудшается рейтинг и нет чаевых!
+    const wrongBagForDineIn = !cust.order.wantsTakeout && servingBag;
+    if (wrongBagForDineIn) {
+      penaltyNote = true;
       evalRes.isPerfect = false;
-      evalRes.multiplier = Math.max(0.3, evalRes.multiplier - 0.25);
-      evalRes.notes.push('Со стола (плохой отзыв -0.15★)');
+      evalRes.notes.push('В пакете для заказа на месте (-0.15★, без чаевых)');
       rt.dailyStats.badReviews = (rt.dailyStats.badReviews || 0) + 1;
       gameState.persistent.rating = Math.max(1.0, +(gameState.persistent.rating - 0.15).toFixed(2));
     }
 
+    // Небольшой бонус за положенные палочки Варибаси
+    const chopstickBonus = a.hasChopsticks && !wrongBagForDineIn ? 6 : 0;
+    if (a.hasChopsticks) {
+      evalRes.notes.push('🥢 Палочки');
+    }
+
     const district = gameState.getCurrentDistrict();
-    const basePay = Math.round(cust.basePrice * evalRes.multiplier);
+    const basePay = Math.round(cust.basePrice * evalRes.multiplier) + chopstickBonus;
 
     const speedFactor = cust.patience / 100;
     let rawTip = Math.round(
       basePay * 0.35 * speedFactor * district.tipMultiplier * (evalRes.isPerfect ? 1.35 : 0.7)
     );
-    if (evalRes.multiplier < 0.75 || leftBadReviewFromTable) rawTip = 0;
+    if (evalRes.multiplier < 0.75 || wrongBagForDineIn) rawTip = 0;
 
     let collectorCut = 0;
     if (gameState.persistent.inDebtCollector && rawTip > 0) {
@@ -703,29 +847,51 @@ export class KitchenSystem {
 
     const qualityTag = evalRes.notes.join(', ');
     const collectorNote = collectorCut > 0 ? ` (Коллектор -¥${collectorCut})` : '';
+    const vesselIcon = servingBag ? '🛍️' : '🍱';
     this.onToast(
-      `🍜 Подано: +¥${basePay} и чаевые +¥${rawTip}${collectorNote} [${qualityTag}]`,
-      leftBadReviewFromTable ? '#ffaa00' : evalRes.isPerfect ? '#10f56c' : '#00f5d4'
+      wrongBagForDineIn
+        ? `⚠️ Отдано в пакете вместо подноса: +¥${basePay}, чаевые ¥0, рейтинг -0.15★`
+        : `${vesselIcon} Подано: +¥${basePay} и чаевые +¥${rawTip}${collectorNote} [${qualityTag}]`,
+      penaltyNote ? '#ffaa00' : evalRes.isPerfect ? '#10f56c' : '#00f5d4'
     );
 
-    // Если отдали заказ в керамической миске — через 8–10 секунд гость доест и оставит грязную миску на левой полке прилавка (слева от котика)!
-    if (rt.activeVessel.type === 'bowl') {
-      rt.eatingTimers.push({
-        remainingSec: 7.5 + Math.random() * 2.5,
-        side: 'left',
-        broth: rt.activeVessel.broth || 'tonkotsu'
-      });
+    // Закон сохранения 10 керамических мисок:
+    // - На подносе на месте: гость поест 7.5–10 сек и поставит грязную миску на левую полку прилавка;
+    // - В пакете (если перекладывали из миски): освободившаяся миска уходит в раковину, чтобы не потеряться навсегда!
+    if (v.type === 'bowl') {
+      if (servingBag) {
+        rt.dirtyInSink.push({ broth: v.broth || 'tonkotsu' });
+      } else {
+        rt.eatingTimers.push({
+          remainingSec: 7.5 + Math.random() * 2.5,
+          side: 'left',
+          broth: v.broth || 'tonkotsu'
+        });
+      }
     }
 
-    rt.activeVessel = this.createEmptyVessel(null);
-    rt.vesselHeldInLeft = false;
+    // Если отдавали ПАКЕТ -> отдаётся только пакет, а ЧИСТЫЙ ПОДНОС остаётся стоять на столешнице!
+    // Если отдавали ПОДНОС -> отдаётся весь поднос целиком!
+    if (servingBag) {
+      a.hasBag = false;
+      a.vessel = null;
+      a.hasChopsticks = false;
+      a.drink = null;
+    } else {
+      a.hasTray = false;
+      a.hasBag = false;
+      a.vessel = null;
+      a.hasChopsticks = false;
+      a.drink = null;
+    }
+
     rt.sauceModeArmed = false;
     rt.currentCustomer = null;
     rt.customerSpawnTimer = 0.75;
     this.onTutorialEvent('dish_served');
     gameState.save();
     this.renderAllKitchen();
-    return true;
+    return { servedBag: servingBag, keepTray: a.hasTray };
   }
 
   // Забрать одну грязную миску с левой или правой верхней полки прилавка (1 тап = 1 миска уходит в мойку!)
@@ -813,26 +979,33 @@ export class KitchenSystem {
       this.onToast('Сейчас нет активного заказа от дрона-курьера CyberEats!', '#ffaa00');
       return null;
     }
-    if (!rt.activeVessel || !rt.activeVessel.type) {
+    const useAssembly =
+      (!rt.activeVessel || !rt.activeVessel.type) &&
+      rt.assembly &&
+      rt.assembly.vessel &&
+      rt.assembly.vessel.type;
+    const targetV = useAssembly ? rt.assembly.vessel : rt.activeVessel;
+
+    if (!targetV || !targetV.type) {
       audio.playPenaltyBuzz();
-      this.onToast('В левой руке пусто! Возьмите собранную 📦 Вок-коробку.', '#ffaa00');
+      this.onToast('Нет собранной 📦 Вок-коробки для дрона!', '#ffaa00');
       return null;
     }
-    if (rt.activeVessel.type !== 'box') {
+    if (targetV.type !== 'box') {
       audio.playPenaltyBuzz();
       this.onToast(
-        'Дрону нужна 📦 Вок-коробка! Поставьте миску на стол, возьмите пустую коробку и перелейте!',
+        'Дрону нужна 📦 Вок-коробка! Повернитесь к складу справа и тапните 📦 Коробку для переливания!',
         '#ffaa00'
       );
       return null;
     }
-    if (!rt.activeVessel.broth || !rt.activeVessel.noodleState) {
+    if (!targetV.broth || !targetV.noodleState) {
       audio.playPenaltyBuzz();
       this.onToast('Сначала налейте бульон и добавьте лапшу в 📦 Вок-коробку!', '#ffaa00');
       return null;
     }
 
-    const deliveredVessel = JSON.parse(JSON.stringify(rt.activeVessel));
+    const deliveredVessel = JSON.parse(JSON.stringify(targetV));
     const score = this.evaluateDish(deliveredVessel, {
       isDelivery: true,
       broth: del.broth,
@@ -848,8 +1021,15 @@ export class KitchenSystem {
     rt.dailyStats.deliveryCount += 1;
     gameState.persistent.rating = Math.min(5.0, +(gameState.persistent.rating + 0.1).toFixed(1));
 
-    rt.activeVessel = this.createEmptyVessel(null);
-    rt.vesselHeldInLeft = false;
+    if (useAssembly) {
+      rt.assembly.vessel = null;
+      rt.assembly.hasBag = false;
+      rt.assembly.hasChopsticks = false;
+      rt.assembly.drink = null;
+    } else {
+      rt.activeVessel = this.createEmptyVessel(null);
+      rt.vesselHeldInLeft = false;
+    }
     rt.sealerSlot = null;
     rt.activeDelivery = null;
     rt.deliverySpawnTimer = 12 + Math.random() * 6;

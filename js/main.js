@@ -1,16 +1,16 @@
-import { GAME_CONFIG } from './config.js?v=60';
-import { gameState, createShiftRuntimeState } from './state.js?v=60';
-import { audio } from './audio.js?v=60';
+import { GAME_CONFIG } from './config.js?v=61';
+import { gameState, createShiftRuntimeState } from './state.js?v=61';
+import { audio } from './audio.js?v=61';
 import {
   buildCustomerPortraitSVG,
   buildCourierDroneSVG,
   generateAppleTouchIcon
-} from './renderer.js?v=60';
-import { FirstPersonWebGLScene } from './webgl3d.js?v=60';
-import { CustomerAndDeliverySystem } from './customers.js?v=60';
-import { KitchenSystem } from './kitchen.js?v=60';
-import { EconomySystem } from './economy.js?v=60';
-import { TutorialSystem } from './tutorial.js?v=60';
+} from './renderer.js?v=61';
+import { FirstPersonWebGLScene } from './webgl3d.js?v=61';
+import { CustomerAndDeliverySystem } from './customers.js?v=61';
+import { KitchenSystem } from './kitchen.js?v=61';
+import { EconomySystem } from './economy.js?v=61';
+import { TutorialSystem } from './tutorial.js?v=61';
 
 class CyberRamenApp {
   constructor() {
@@ -143,10 +143,35 @@ class CyberRamenApp {
       return;
     }
 
-    if (hitId.startsWith('table_slot_')) {
-      const slotIdx = Number(hitId.replace('table_slot_', ''));
-      const res = this.kitchenSystem.handleTableSlotTap(slotIdx);
-      this.triggerTableSlot3DAnim(res);
+    if (hitId === 'under_tray_stack') {
+      const ok = this.kitchenSystem.takeTrayFromUnderCounter();
+      if (ok) {
+        this.scene3D.triggerTrayPlaceAnim();
+      }
+      return;
+    }
+
+    if (hitId === 'under_bag_stack') {
+      const res = this.kitchenSystem.takeBagFromUnderCounter();
+      if (res) {
+        this.scene3D.triggerBagPackAnim(res);
+      }
+      return;
+    }
+
+    if (hitId === 'assembly_zone' || hitId === 'center_vessel' || hitId.startsWith('table_slot_')) {
+      const res = this.kitchenSystem.handleAssemblyZoneTap();
+      if (res) {
+        this.scene3D.triggerAssemblyVesselAnim(res);
+      }
+      return;
+    }
+
+    if (hitId === 'table_chopsticks') {
+      const ok = this.kitchenSystem.addChopsticksToAssembly();
+      if (ok) {
+        this.scene3D.triggerChopsticksPlaceAnim();
+      }
       return;
     }
 
@@ -168,18 +193,21 @@ class CyberRamenApp {
       return;
     }
 
-    if (hitId === 'center_vessel') {
-      const res = this.kitchenSystem.handleTableSlotTap(1);
-      this.triggerTableSlot3DAnim(res);
-      return;
-    }
-
     if (hitId === 'customer_serve') {
-      const v = gameState.runtime.activeVessel;
-      if (gameState.runtime.cameraFocus === 'customer' && v && v.type && (v.broth || v.noodleState)) {
-        this.kitchenSystem.serveToCounterCustomer();
-      } else if (gameState.runtime.cameraFocus === 'customer') {
-        gameState.runtime.cameraFocus = 'worktable';
+      if (gameState.runtime.cameraFocus === 'customer') {
+        if (this.kitchenSystem.hasAssembledOrder()) {
+          const served = this.kitchenSystem.serveToCounterCustomer();
+          if (served) {
+            this.scene3D.triggerServePushAnim(Boolean(served.servedBag));
+          }
+        } else {
+          const v = gameState.runtime.activeVessel;
+          if (v && v.type && (v.broth || v.noodleState)) {
+            this.kitchenSystem.serveToCounterCustomer();
+          } else {
+            gameState.runtime.cameraFocus = 'worktable';
+          }
+        }
       } else {
         this.customerSystem.announceCurrentCustomerOrder();
       }
@@ -238,7 +266,7 @@ class CyberRamenApp {
 
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker
-        .register('./sw.js?v=60', { updateViaCache: 'none' })
+        .register('./sw.js?v=61', { updateViaCache: 'none' })
         .then((reg) => reg.update())
         .catch(() => {});
     }
@@ -383,10 +411,23 @@ class CyberRamenApp {
 
   handleHorizontalSwipe(dir) {
     const rt = gameState.runtime;
+    // Когда камера опущена ПОД ПРИЛАВОК (cameraFocus === 'under_counter'):
+    // - свайп влево (dir = +1, поворот направо) -> пакеты для заказов с собой (underCounterSide = 1);
+    // - свайп вправо (dir = -1, поворот налево) -> подносы (underCounterSide = 0)!
+    if (rt.activeSector === 1 && rt.cameraFocus === 'under_counter') {
+      const curUnder = rt.underCounterSide || 0;
+      const nextUnder = Math.max(0, Math.min(1, curUnder + dir));
+      if (nextUnder !== curUnder) {
+        rt.underCounterSide = nextUnder;
+        audio.playTapPop();
+      }
+      return;
+    }
+
     // Когда камера поднята наверх (cameraFocus === 'customer'):
-    // - свайпы влево/вправо поворачивают взгляд между левой полкой (-1), гостем (0) и правой полкой с грязной посудой (+1);
-    // - если мы уже смотрим на правую кучу с посудой (+1) и свайпаем вправо (+1) -> опускаемся к холодильнику (Сектор 2)!
-    // - если мы уже смотрим на левую полку (-1) и свайпаем влево (-1) -> опускаемся к плите (Сектор 0)!
+    // - свайпы влево/вправо поворачивают взгляд между левой полкой (-1), гостем (0) и правым дроном (+1);
+    // - если мы уже смотрим вправо (+1) и свайпаем вправо (+1) -> опускаемся к холодильнику (Сектор 2)!
+    // - если мы уже смотрим влево (-1) и свайпаем влево (-1) -> опускаемся к плите (Сектор 0)!
     if (rt.activeSector === 1 && rt.cameraFocus === 'customer') {
       const curSide = rt.customerPanSide || 0;
       if (curSide === 1 && dir === 1) {
@@ -419,6 +460,10 @@ class CyberRamenApp {
 
     gameState.runtime.activeSector = clamped;
     gameState.runtime.customerPanSide = 0;
+    gameState.runtime.underCounterSide = 0;
+    if (gameState.runtime.cameraFocus === 'under_counter') {
+      gameState.runtime.cameraFocus = 'worktable';
+    }
     gameState.runtime.sauceModeArmed = false;
     // Посуда всегда остаётся в левой руке повара при перемещении между секторами,
     // пока игрок не поставит её на один из 3 слотов центрального стола, не отдаст заказу или не выбросит!

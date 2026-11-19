@@ -1,4 +1,4 @@
-import { GAME_CONFIG } from './config.js?v=60';
+import { GAME_CONFIG } from './config.js?v=61';
 
 const BASE_SAVE_KEY = 'CR_NIGHT_YATAI_SAVE_V1';
 
@@ -73,8 +73,9 @@ export function createInitialPersistentState() {
 export function createShiftRuntimeState() {
   return {
     activeSector: 1, // -1: Мойка (слева от плиты), 0: Лево (Варка), 1: Центр (Сборка/Гость), 2: Право (Склад/Курьер)
-    cameraFocus: 'worktable', // 'customer' (верхний ракурс на гостя и полки) | 'worktable' (крупный план стола и лотков)
-    customerPanSide: 0, // -1: взгляд влево на левую полку, 0: по центру на гостя, +1: взгляд вправо на правую полку
+    cameraFocus: 'worktable', // 'customer' (верхний ракурс) | 'worktable' (стол) | 'under_counter' (под прилавком: подносы/пакеты)
+    customerPanSide: 0, // -1: взгляд влево на грязные миски, 0: по центру на гостя, +1: взгляд вправо на дрона
+    underCounterSide: 0, // 0: подносы под прилавком, 1: пакеты для заказов с собой правее под прилавком
     customerTalking: false,
     firstCustomerSeen: false,
     shiftElapsed: 0,
@@ -107,7 +108,14 @@ export function createShiftRuntimeState() {
       wasStagedOnTable: false,
       overflowCount: 0    // перелив через край (перевод продуктов)
     },
-    // 3 места на центральной части стола, куда можно временно поставить до 3 мисок или коробок из левой руки
+    // Зона сборки заказа в центре столешницы (поднос / пакет, поставленная миска или коробка, палочки, будущие напитки)
+    assembly: {
+      hasTray: false,
+      hasBag: false,
+      vessel: null,
+      hasChopsticks: false,
+      drink: null
+    },
     tableSlots: [null, null, null],
     sealerSlot: null,     // { vessel, sealed: false, inAirlock: false }
     currentCustomer: null,
