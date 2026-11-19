@@ -1,6 +1,6 @@
-import { GAME_CONFIG } from './config.js?v=61';
-import { gameState } from './state.js?v=61';
-import { audio } from './audio.js?v=61';
+import { GAME_CONFIG } from './config.js?v=62';
+import { gameState } from './state.js?v=62';
+import { audio } from './audio.js?v=62';
 
 export class KitchenSystem {
   constructor(callbacks) {
@@ -642,6 +642,16 @@ export class KitchenSystem {
       return null;
     }
 
+    // Запрещаем перекладывать керамическую миску в пакет — в пакет можно класть ТОЛЬКО коробки!
+    if (rt.assembly.vessel && rt.assembly.vessel.type === 'bowl') {
+      audio.playPenaltyBuzz();
+      this.onToast(
+        '🚫 Тарелку нельзя положить в пакет — только 📦 Коробку! Заберите миску с подноса и перелейте в коробку на складе!',
+        '#ff385c'
+      );
+      return null;
+    }
+
     const hadItems = Boolean(rt.assembly.vessel || rt.assembly.hasChopsticks || rt.assembly.drink);
     const prevVessel = rt.assembly.vessel ? JSON.parse(JSON.stringify(rt.assembly.vessel)) : null;
     const prevChopsticks = Boolean(rt.assembly.hasChopsticks);
@@ -684,6 +694,16 @@ export class KitchenSystem {
 
     // 1. В левой руке есть тарелка/коробка (полная или пустая) и место на подносе/в пакете свободно -> СТАВИМ!
     if (hasHand && !a.vessel) {
+      // В пакет запрещено класть керамическую тарелку — только коробки!
+      if (a.hasBag && handV.type !== 'box') {
+        audio.playPenaltyBuzz();
+        this.onToast(
+          '🚫 Тарелку нельзя положить в пакет — только 📦 Вок-коробку! Перелейте рамен в коробку на складе справа ▶',
+          '#ff385c'
+        );
+        return null;
+      }
+
       const placed = JSON.parse(JSON.stringify(handV));
       a.vessel = placed;
       rt.activeVessel = this.createEmptyVessel(null);
@@ -780,7 +800,7 @@ export class KitchenSystem {
       audio.playPenaltyBuzz();
       audio.speakCustomerOrder('Эй, мне нужно с собой!', cust.id);
       this.onToast(
-        '🙅‍♂️ Гость: «Эй, мне нужно с собой!» Опуститесь на стол, свайпните вверх ↑ под стол → влево к 🛍️ Пакетам!',
+        '🙅‍♂️ Гость: «Эй, мне нужно с собой!» Опуститесь на стол, возьмите 🛍️ Пакет под холодильником (в пакет идут только 📦 Коробки)!',
         '#ff385c'
       );
       return false;

@@ -1,6 +1,6 @@
-import { GAME_CONFIG } from './config.js?v=61';
-import { gameState } from './state.js?v=61';
-import { audio } from './audio.js?v=61';
+import { GAME_CONFIG } from './config.js?v=62';
+import { gameState } from './state.js?v=62';
+import { audio } from './audio.js?v=62';
 
 export class CustomerAndDeliverySystem {
   constructor(onToast, onCustomerChanged, onDeliveryChanged) {
