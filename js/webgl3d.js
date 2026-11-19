@@ -1,5 +1,5 @@
-import { GAME_CONFIG } from './config.js?v=55';
-import { gameState } from './state.js?v=55';
+import { GAME_CONFIG } from './config.js?v=56';
+import { gameState } from './state.js?v=56';
 import {
   createAlleyBackdropTexture,
   createBuildingFacadeTexture,
@@ -8,7 +8,7 @@ import {
   createKanjiSignTextures,
   createPedestrianTextures,
   AnimeCustomerTextureRenderer
-} from './art3d.js?v=55';
+} from './art3d.js?v=56';
 
 /**
  * Полноэкранный WebGL 3D движок от первого лица с процедурной высокодетализированной
@@ -3450,8 +3450,15 @@ export class FirstPersonWebGLScene {
       const rIdx = this.sinkWashAnim.rackIndex ?? 0;
       const targetRackY = rackY + 0.016 + rIdx * 0.022;
 
-      const lhOrigin = [sinkX + 0.22, rimY + 0.05, sinkZ + 0.16];
-      const rhOrigin = [sinkX + 0.22, rimY + 0.05, sinkZ - 0.18];
+      // Руки стартуют и возвращаются прямо от тела героя (как в анимации взятия чистой миски/коробки!)
+      const bodyLeftPos = this.getLeftHandWorldPos();
+      const { R: camR } = this.getCameraBasis();
+      const lhOrigin = [bodyLeftPos[0], bodyLeftPos[1], bodyLeftPos[2]];
+      const rhOrigin = [
+        bodyLeftPos[0] + camR[0] * 0.24,
+        bodyLeftPos[1],
+        bodyLeftPos[2] + camR[2] * 0.24
+      ];
 
       if (p < 0.22) {
         // ФАЗА 1: Протягиваем руки от себя, захватываем грязную тарелку со дна раковины и поднимаем под кран!
@@ -3577,34 +3584,22 @@ export class FirstPersonWebGLScene {
       }
     }
 
-    // 8. АНИМАЦИЯ ЗАБОРА ЧИСТОЙ МИСКИ С ПЛОЩАДКИ СЛЕВА В ОСНОВНУЮ СТОПКУ ЧИСТОЙ ПОСУДЫ ПРИ ТАПЕ ПО НЕЙ!
+    // 8. АНИМАЦИЯ ЗАБОРА ЧИСТОЙ МИСКИ С ПЛОЩАДКИ СЛЕВА В СТОПКУ ЧИСТОЙ ПОСУДЫ (КАК ПРИ УБОРКЕ ГРЯЗНОЙ МИСКИ С ПОЛОЧКИ!)
     if (this.rackPickupAnim.active) {
       const p = Math.min(1, this.rackPickupAnim.timer / this.rackPickupAnim.duration);
+      const s = p * p * (3 - 2 * p);
       const rIdx = this.rackPickupAnim.fromRackIdx || 0;
       const startY = rackY + 0.016 + rIdx * 0.022;
-      const lhOrigin = [rackX + 0.18, startY + 0.04, rackZ - 0.08];
+      const bx = rackX + (0.28 - rackX) * s;
+      const by = startY + Math.sin(p * Math.PI) * 0.11 - s * 0.04;
+      const bz = rackZ + (-0.18 - rackZ) * s;
+      const sc = 1 - p * 0.25;
+      const rot = [0.18 * (1 - p), 0.38 * p, -0.22 * (1 - p)];
 
-      if (p < 0.35) {
-        const t = p / 0.35;
-        const s = t * t * (3 - 2 * t);
-        this.drawMesh('bowl_lathe', rackX, startY, rackZ, 0.198, 0.074, 0.198, [0.16, 0.1, 0.24], 0.22, null, 0.95, 3);
-        this.drawMesh('torus', rackX, startY + 0.064, rackZ, 0.194, 0.011, 0.194, [0.86, 0.22, 0.32], 0.32, null, 0.96);
-        drawReachingArm(
-          lhOrigin[0] + (rackX + 0.07 - lhOrigin[0]) * s,
-          lhOrigin[1] + (startY + 0.02 - lhOrigin[1]) * s,
-          lhOrigin[2] + (rackZ + 0.03 - lhOrigin[2]) * s,
-          true
-        );
-      } else {
-        const t = (p - 0.35) / 0.65;
-        const s = t * t * (3 - 2 * t);
-        const bx = rackX + 0.14 * s;
-        const by = startY + 0.08 * Math.sin(t * Math.PI) + 0.03 * s;
-        const bz = rackZ - 0.22 * s;
-        this.drawMesh('bowl_lathe', bx, by, bz, 0.198 * (1 - s * 0.25), 0.074 * (1 - s * 0.25), 0.198 * (1 - s * 0.25), [0.16, 0.1, 0.24], 0.24, null, 0.95, 3);
-        this.drawMesh('torus', bx, by + 0.064 * (1 - s * 0.25), bz, 0.194 * (1 - s * 0.25), 0.011, 0.194 * (1 - s * 0.25), [0.86, 0.22, 0.32], 0.35, null, 0.96);
-        drawReachingArm(bx + 0.06, by + 0.01, bz + 0.03, true);
-      }
+      this.drawMesh('bowl_lathe', bx, by, bz, 0.198 * sc, 0.074 * sc, 0.198 * sc, [0.16, 0.1, 0.24], 0.24, rot, 0.95, 3);
+      this.drawMesh('torus', bx, by + 0.064 * sc, bz, 0.194 * sc, 0.011 * sc, 0.194 * sc, [0.86, 0.22, 0.32], 0.35, rot, 0.96);
+      this.drawBox(bx + 0.07, by + 0.025, bz + 0.04, 0.07, 0.042, 0.128, [0.16, 0.14, 0.24], 0.22, [0.18, 1.15, 0]);
+      this.drawBox(bx + 0.07, by + 0.048, bz + 0.04, 0.074, 0.012, 0.04, [0.0, 0.96, 0.83], 0.92, [0.18, 1.15, 0]);
     }
 
     // Общий страховочный хитбокс по чаше раковины ТОЛЬКО когда камера в Секторе -1 (Мойка)
