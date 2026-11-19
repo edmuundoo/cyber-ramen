@@ -1,16 +1,16 @@
-import { GAME_CONFIG } from './config.js?v=52';
-import { gameState, createShiftRuntimeState } from './state.js?v=52';
-import { audio } from './audio.js?v=52';
+import { GAME_CONFIG } from './config.js?v=53';
+import { gameState, createShiftRuntimeState } from './state.js?v=53';
+import { audio } from './audio.js?v=53';
 import {
   buildCustomerPortraitSVG,
   buildCourierDroneSVG,
   generateAppleTouchIcon
-} from './renderer.js?v=52';
-import { FirstPersonWebGLScene } from './webgl3d.js?v=52';
-import { CustomerAndDeliverySystem } from './customers.js?v=52';
-import { KitchenSystem } from './kitchen.js?v=52';
-import { EconomySystem } from './economy.js?v=52';
-import { TutorialSystem } from './tutorial.js?v=52';
+} from './renderer.js?v=53';
+import { FirstPersonWebGLScene } from './webgl3d.js?v=53';
+import { CustomerAndDeliverySystem } from './customers.js?v=53';
+import { KitchenSystem } from './kitchen.js?v=53';
+import { EconomySystem } from './economy.js?v=53';
+import { TutorialSystem } from './tutorial.js?v=53';
 
 class CyberRamenApp {
   constructor() {
@@ -220,7 +220,7 @@ class CyberRamenApp {
 
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker
-        .register('./sw.js?v=52', { updateViaCache: 'none' })
+        .register('./sw.js?v=53', { updateViaCache: 'none' })
         .then((reg) => reg.update())
         .catch(() => {});
     }
@@ -350,9 +350,17 @@ class CyberRamenApp {
   }
 
   startVesselPickupSequence(type) {
-    const ok = this.kitchenSystem.setVesselType(type);
-    if (!ok) return;
-    this.scene3D.triggerRightStackGrabAnim(type);
+    const res = this.kitchenSystem.setVesselType(type);
+    if (!res) return;
+    if (res === 'poured_to_box' || res === 'poured_to_bowl') {
+      this.scene3D.triggerDirectHandPourAnim(
+        res === 'poured_to_box' ? 'bowl' : 'box',
+        type,
+        gameState.runtime.activeVessel
+      );
+    } else {
+      this.scene3D.triggerRightStackGrabAnim(type);
+    }
   }
 
   handleHorizontalSwipe(dir) {

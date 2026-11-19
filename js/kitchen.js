@@ -1,6 +1,6 @@
-import { GAME_CONFIG } from './config.js?v=52';
-import { gameState } from './state.js?v=52';
-import { audio } from './audio.js?v=52';
+import { GAME_CONFIG } from './config.js?v=53';
+import { gameState } from './state.js?v=53';
+import { audio } from './audio.js?v=53';
 
 export class KitchenSystem {
   constructor(callbacks) {
@@ -270,14 +270,55 @@ export class KitchenSystem {
   setVesselType(type) {
     const rt = gameState.runtime;
 
-    // Если в левой руке уже есть наполненная посуда — нельзя взять вторую, пока не поставишь текущую на стол или не выбросишь!
+    // Если в левой руке уже есть наполненная миска, а игрок тапает на коробку (или наоборот) —
+    // БЕРЁМ ПРАВОЙ РУКОЙ КОРОБКУ, ЛЕВОЙ РУКОЙ ПЕРЕЛИВАЕМ РАМЕН ПРЯМО В КОРОБКУ, А ГРЯЗНАЯ МИСКА УХОДИТ В РАКОВИНУ!
     if (rt.activeVessel && rt.activeVessel.type && !this.isVesselEmptyOfFood(rt.activeVessel)) {
-      audio.playPenaltyBuzz();
-      this.onToast(
-        'Левая рука занята! Сначала поставьте посуду на одно из 3 мест на центральном столе.',
-        '#ffaa00'
-      );
-      return false;
+      if (rt.activeVessel.type === type) {
+        audio.playPenaltyBuzz();
+        this.onToast(
+          type === 'bowl'
+            ? 'В левой руке уже наполненная миска! Тапните на 📦 Коробку, чтобы перелить заказ «с собой»!'
+            : 'В левой руке уже наполненная вок-коробка!',
+          '#ffaa00'
+        );
+        return false;
+      }
+
+      if (type === 'box' && rt.activeVessel.type === 'bowl') {
+        // Правой рукой берём вок-коробку (-¥8), левой переливаем из миски в коробку, грязная миска уходит в раковину!
+        rt.dailyStats.restockSpent = (rt.dailyStats.restockSpent || 0) + 8;
+        rt.dirtyInSink.push({ broth: rt.activeVessel.broth || 'tonkotsu' });
+        rt.activeVessel = {
+          ...rt.activeVessel,
+          type: 'box'
+        };
+        rt.vesselHeldInLeft = true;
+        audio.playSauceSizzle();
+        this.onToast(
+          `📦 Перелито в вок-коробку (-¥8)! Грязная миска отправлена в раковину (в мойке: ${rt.dirtyInSink.length})`,
+          '#00f5d4'
+        );
+        this.renderAllKitchen();
+        return 'poured_to_box';
+      }
+
+      if (type === 'bowl' && rt.activeVessel.type === 'box') {
+        if ((rt.cleanBowls ?? 10) <= 0) {
+          audio.playPenaltyBuzz();
+          this.onToast('🍽️ Чистые миски закончились (0/10)! Помойте посуду в раковине слева!', '#ff385c');
+          return false;
+        }
+        rt.cleanBowls = Math.max(0, (rt.cleanBowls ?? 10) - 1);
+        rt.activeVessel = {
+          ...rt.activeVessel,
+          type: 'bowl'
+        };
+        rt.vesselHeldInLeft = true;
+        audio.playSauceSizzle();
+        this.onToast(`🍜 Перелито из коробки в чистую миску (осталось чистых: ${rt.cleanBowls}/10)`, '#00f5d4');
+        this.renderAllKitchen();
+        return 'poured_to_bowl';
+      }
     }
 
     // Если в руке уже есть пустая посуда того же типа — ничего не делаем
@@ -585,11 +626,13 @@ export class KitchenSystem {
       return false;
     }
 
-    // 1. Если прохожий заказал «с собой в коробочке» (wantsTakeout), а у вас в руке миска — он НЕ возьмёт!
+    // 1. Если прохожий заказал «с собой в коробочке» (wantsTakeout), а у вас в руке миска — он говорит «Мне надо было с собой!»
+    // Поворачиваемся к складу справа и тапаем на коробку, чтобы перелить рамен из миски прямо в коробку!
     if (cust.order.wantsTakeout && rt.activeVessel.type !== 'box') {
       audio.playPenaltyBuzz();
+      audio.speakCustomerOrder('Мне надо было с собой!', cust.id);
       this.onToast(
-        '🙅‍♂️ Гость просил С СОБОЙ! Поставьте миску на стол, возьмите пустую вок-коробку и перелейте!',
+        '🙅‍♂️ Гость: «Мне надо было с собой!» Повернитесь к складу справа ▶ и тапните на 📦 Коробку!',
         '#ff385c'
       );
       return false;
