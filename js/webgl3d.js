@@ -1,5 +1,5 @@
-import { GAME_CONFIG } from './config.js?v=59';
-import { gameState } from './state.js?v=59';
+import { GAME_CONFIG } from './config.js?v=60';
+import { gameState } from './state.js?v=60';
 import {
   createAlleyBackdropTexture,
   createBuildingFacadeTexture,
@@ -8,7 +8,7 @@ import {
   createKanjiSignTextures,
   createPedestrianTextures,
   AnimeCustomerTextureRenderer
-} from './art3d.js?v=59';
+} from './art3d.js?v=60';
 
 /**
  * Полноэкранный WebGL 3D движок от первого лица с процедурной высокодетализированной
@@ -4413,9 +4413,30 @@ export class FirstPersonWebGLScene {
       sy /= slen;
       sz /= slen;
 
-      const stickYaw = Math.atan2(sx, sz);
-      const stickPitch = -Math.asin(Math.max(-0.95, Math.min(0.95, sy)));
+      // Перпендикулярная ось разведения двух палочек (в плоскости экрана, чтобы кончики обхватывали ингредиент с двух сторон!)
+      let px = sy * F[2] - sz * F[1];
+      let py = sz * F[0] - sx * F[2];
+      let pz = sx * F[1] - sy * F[0];
+      const plen = Math.hypot(px, py, pz) || 1;
+      px /= plen;
+      py /= plen;
+      pz /= plen;
+
       const stickLen = 0.28;
+
+      // Вспомогательная функция отрисовки стержня строго между точками p0 -> p1 с точным обратным расчётом углов mat4Model!
+      const drawSegmentBox = (ax, ay, az, bx, by, bz, w, col, emissive, spec) => {
+        const vx = bx - ax;
+        const vy = by - ay;
+        const vz = bz - az;
+        const len = Math.hypot(vx, vy, vz) || 0.001;
+        const ux = vx / len;
+        const uy = vy / len;
+        const uz = vz / len;
+        const ry = Math.asin(Math.max(-0.995, Math.min(0.995, ux)));
+        const rx = Math.atan2(-uy, uz);
+        this.drawBox((ax + bx) * 0.5, (ay + by) * 0.5, (az + bz) * 0.5, w, w, len, col, emissive, [rx, ry, 0], spec);
+      };
 
       if (topId === 'chili' && pTop >= 0.3 && pTop < 0.78) {
         // Для острого чили-соуса правая рука сжимает красную бутылочку над миской с огненной струйкой!
@@ -4429,42 +4450,48 @@ export class FirstPersonWebGLScene {
           this.drawMesh('cylinder', dropX, (tipY + dropY) * 0.5, dropZ, 0.012, Math.max(0.04, tipY - dropY + 0.03), 0.012, [1.0, 0.16, 0.14], 0.95);
         }
       } else {
-        // Две длинные бамбуковые кулинарные палочки «Морибаси» с тёмными лакированными ручками!
+        // Две длинные бамбуковые кулинарные палочки «Морибаси»: кончики p0 точно зажимают ингредиент по центру (tipX, tipY, tipZ)!
+        const gripGap = carryingFood ? 0.022 : pinchGap;
         for (const side of [-1, 1]) {
-          const tipOff = side * pinchGap * 0.5;
-          const midX = tipX + sx * (stickLen * 0.5) + R[0] * (tipOff * 0.5) + U[0] * (tipOff * 0.45);
-          const midY = tipY + sy * (stickLen * 0.5) + U[1] * (tipOff * 0.45);
-          const midZ = tipZ + sz * (stickLen * 0.5) + R[2] * (tipOff * 0.5) + U[2] * (tipOff * 0.45);
-          const spreadAngle = side * (pinchGap - 0.012) * 3.4;
-          this.drawBox(midX, midY, midZ, 0.0085, 0.0085, stickLen, [0.92, 0.78, 0.52], 0.16, [stickPitch + spreadAngle, stickYaw, 0], 0.45);
-          // Лакированная тёмно-бордовая верхняя часть палочки
-          const rearX = tipX + sx * (stickLen * 0.78) + R[0] * (tipOff * 0.25) + U[0] * (tipOff * 0.22);
-          const rearY = tipY + sy * (stickLen * 0.78) + U[1] * (tipOff * 0.22);
-          const rearZ = tipZ + sz * (stickLen * 0.78) + R[2] * (tipOff * 0.25) + U[2] * (tipOff * 0.22);
-          this.drawBox(rearX, rearY, rearZ, 0.0105, 0.0105, stickLen * 0.36, [0.46, 0.14, 0.16], 0.18, [stickPitch + spreadAngle, stickYaw, 0], 0.65);
+          const tipOff = side * gripGap * 0.5;
+          const handOff = side * 0.008;
+          // Передний кончик палочки чуть заходит за центр ингредиента (-0.016 вдоль стержня), крепко обхватывая его с двух сторон
+          const p0x = tipX - sx * 0.016 + px * tipOff;
+          const p0y = tipY - sy * 0.016 + py * tipOff;
+          const p0z = tipZ - sz * 0.016 + pz * tipOff;
+          const p1x = tipX + sx * (stickLen - 0.016) + px * handOff;
+          const p1y = tipY + sy * (stickLen - 0.016) + py * handOff;
+          const p1z = tipZ + sz * (stickLen - 0.016) + pz * handOff;
+          // Основная бамбуковая часть палочки
+          drawSegmentBox(p0x, p0y, p0z, p1x, p1y, p1z, 0.0085, [0.92, 0.78, 0.52], 0.16, 0.45);
+          // Лакированная тёмно-бордовая верхняя рукоятка палочки (верхние 38% длины)
+          const r0x = p0x + (p1x - p0x) * 0.62;
+          const r0y = p0y + (p1y - p0y) * 0.62;
+          const r0z = p0z + (p1z - p0z) * 0.62;
+          drawSegmentBox(r0x, r0y, r0z, p1x, p1y, p1z, 0.0108, [0.46, 0.14, 0.16], 0.18, 0.65);
         }
 
-        // Зажатый между кончиками палочек 3D-ингредиент во время переноса в миску/коробку!
+        // Зажатый ровно МЕЖДУ кончиками палочек 3D-ингредиент во время переноса в миску/коробку!
         if (carryingFood) {
           if (topId === 'egg') {
-            this.draw3DAjitamaEggHalf(tipX, tipY - 0.012, tipZ, 0.86, 0.4);
+            this.draw3DAjitamaEggHalf(tipX, tipY - 0.016, tipZ, 0.86, 0.4);
           } else if (topId === 'chashu') {
             this.draw3DChashuSlice(tipX, tipY, tipZ, 0.86, [0.35, 0.3, 0.2]);
           } else if (topId === 'nori') {
-            this.draw3DNoriSheet(tipX, tipY + 0.01, tipZ, 0.9, [-0.22, 0.25, 0.14]);
+            this.draw3DNoriSheet(tipX, tipY, tipZ, 0.9, [-0.22, 0.25, 0.14]);
           } else if (topId === 'scallion') {
             for (let k = 0; k < 5; k++) {
               const a = k * 1.25;
               this.draw3DScallionRing(
-                tipX + Math.cos(a) * 0.016,
-                tipY + (k % 2) * 0.008,
-                tipZ + Math.sin(a) * 0.016,
+                tipX + Math.cos(a) * 0.014,
+                tipY + ((k % 3) - 1) * 0.005,
+                tipZ + Math.sin(a) * 0.014,
                 0.92,
                 [0.2, a, 0.15]
               );
             }
           } else if (topId === 'shrimp') {
-            this.draw3DTempuraShrimp(tipX, tipY, tipZ, 0.92, 0.35);
+            this.draw3DTempuraShrimp(tipX, tipY - 0.014, tipZ, 0.92, 0.35);
           }
         }
       }
