@@ -1,6 +1,6 @@
-import { GAME_CONFIG } from './config.js?v=63';
-import { gameState } from './state.js?v=63';
-import { audio } from './audio.js?v=63';
+import { GAME_CONFIG } from './config.js?v=64';
+import { gameState } from './state.js?v=64';
+import { audio } from './audio.js?v=64';
 
 export class KitchenSystem {
   constructor(callbacks) {
@@ -313,14 +313,25 @@ export class KitchenSystem {
       }
     }
 
-    // Если в руке уже есть пустая посуда того же типа — ничего не делаем
+    // Если в левой руке пустая посуда того же типа — ВОЗВРАЩАЕМ её обратно в стопку!
     if (rt.activeVessel && rt.activeVessel.type === type && this.isVesselEmptyOfFood(rt.activeVessel)) {
-      return false;
-    }
-
-    // Если в руке была пустая чистая миска и игрок меняет её на коробку — возвращаем чистую миску обратно в стопку
-    if (rt.activeVessel && rt.activeVessel.type === 'bowl' && this.isVesselEmptyOfFood(rt.activeVessel)) {
-      rt.cleanBowls = Math.min(rt.maxCleanBowls || 10, (rt.cleanBowls ?? 0) + 1);
+      if (type === 'bowl') {
+        rt.cleanBowls = Math.min(rt.maxCleanBowls || 10, (rt.cleanBowls ?? 0) + 1);
+      } else if (type === 'box') {
+        rt.dailyStats.restockSpent = Math.max(0, (rt.dailyStats.restockSpent || 0) - 8);
+      }
+      rt.activeVessel = this.createEmptyVessel(null);
+      rt.vesselHeldInLeft = false;
+      rt.sauceModeArmed = false;
+      audio.playTapPop();
+      this.onToast(
+        type === 'bowl'
+          ? `🍜 Пустая миска возвращена в стопку (чистых: ${rt.cleanBowls}/10)`
+          : '📦 Пустая вок-коробка возвращена в стопку (+¥8)',
+        '#00f5d4'
+      );
+      this.renderAllKitchen();
+      return type === 'bowl' ? 'returned_bowl' : 'returned_box';
     }
 
     if (type === 'bowl') {
@@ -332,8 +343,16 @@ export class KitchenSystem {
         );
         return false;
       }
+      // Если в руке была пустая коробка и игрок меняет её на миску — возвращаем ¥8 за пустую коробку!
+      if (rt.activeVessel && rt.activeVessel.type === 'box' && this.isVesselEmptyOfFood(rt.activeVessel)) {
+        rt.dailyStats.restockSpent = Math.max(0, (rt.dailyStats.restockSpent || 0) - 8);
+      }
       rt.cleanBowls = Math.max(0, (rt.cleanBowls ?? 10) - 1);
     } else if (type === 'box') {
+      // Если в руке была пустая чистая миска и игрок меняет её на коробку — возвращаем чистую миску обратно в стопку
+      if (rt.activeVessel && rt.activeVessel.type === 'bowl' && this.isVesselEmptyOfFood(rt.activeVessel)) {
+        rt.cleanBowls = Math.min(rt.maxCleanBowls || 10, (rt.cleanBowls ?? 0) + 1);
+      }
       // Картонные вок-коробочки всегда доступны, но стоят ¥8 за штуку
       rt.dailyStats.restockSpent = (rt.dailyStats.restockSpent || 0) + 8;
     }

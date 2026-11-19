@@ -1,5 +1,5 @@
-import { GAME_CONFIG } from './config.js?v=63';
-import { gameState } from './state.js?v=63';
+import { GAME_CONFIG } from './config.js?v=64';
+import { gameState } from './state.js?v=64';
 import {
   createAlleyBackdropTexture,
   createBuildingFacadeTexture,
@@ -8,7 +8,7 @@ import {
   createKanjiSignTextures,
   createPedestrianTextures,
   AnimeCustomerTextureRenderer
-} from './art3d.js?v=63';
+} from './art3d.js?v=64';
 
 /**
  * Полноэкранный WebGL 3D движок от первого лица с процедурной высокодетализированной
@@ -57,8 +57,9 @@ export class FirstPersonWebGLScene {
       quality: 'aldente'
     };
 
-    // Анимации взятия посуды справа (Сектор 2), работы с 3 слотами стола (Сектор 1), мусорки и дрона-курьера
+    // Анимации взятия и возврата посуды справа (Сектор 2), работы с 3 слотами стола (Сектор 1), мусорки и дрона-курьера
     this.rightGrabAnim = { active: false, type: 'bowl', timer: 0, duration: 0.32 };
+    this.rightReturnAnim = { active: false, type: 'bowl', timer: 0, duration: 0.48, targetIdx: 0 };
     this.slotAnim = {
       active: false,
       action: 'place', // 'place' | 'pickup' | 'pour'
@@ -257,12 +258,23 @@ export class FirstPersonWebGLScene {
   }
 
   triggerRightStackGrabAnim(type = 'bowl') {
+    this.rightReturnAnim.active = false;
     this.rightGrabAnim.active = true;
     this.rightGrabAnim.type = type;
     this.rightGrabAnim.timer = 0;
     this.rightGrabAnim.duration = 0.56;
     this.heldVesselAppear = 1.0;
     this.vesselBounce = 0.45;
+  }
+
+  triggerRightStackReturnAnim(type = 'bowl') {
+    this.rightGrabAnim.active = false;
+    this.rightReturnAnim.active = true;
+    this.rightReturnAnim.type = type;
+    this.rightReturnAnim.timer = 0;
+    this.rightReturnAnim.duration = 0.48;
+    this.rightReturnAnim.targetIdx = Math.max(0, Math.min(9, (gameState.runtime.cleanBowls ?? 1) - 1));
+    this.vesselBounce = 0.35;
   }
 
   triggerTableSlotPlaceAnim(slotIndex = 1, vessel = null) {
@@ -1260,11 +1272,17 @@ export class FirstPersonWebGLScene {
       }
     }
 
-    // Таймеры анимаций взятия посуды справа, слотов стола, мусорки и доставки дрону
+    // Таймеры анимаций взятия и возврата посуды справа, слотов стола, мусорки и доставки дрону
     if (this.rightGrabAnim.active) {
       this.rightGrabAnim.timer += dt;
       if (this.rightGrabAnim.timer >= this.rightGrabAnim.duration) {
         this.rightGrabAnim.active = false;
+      }
+    }
+    if (this.rightReturnAnim.active) {
+      this.rightReturnAnim.timer += dt;
+      if (this.rightReturnAnim.timer >= this.rightReturnAnim.duration) {
+        this.rightReturnAnim.active = false;
       }
     }
     if (this.slotAnim.active) {
@@ -4027,14 +4045,21 @@ export class FirstPersonWebGLScene {
       this.drawMesh('cylinder', bowlX + dx, 1.02, bowlZ + dz, 0.014, 0.21, 0.014, [0.58, 0.38, 0.2], 0.08, null, 0.5);
     }
 
-    // Отрисовываем точное количество оставшихся чистых мисок (от 10 до 0: взял одну -> стало 9, потом 8, 7 и т.д.)!
+    // Отрисовываем точное количество оставшихся чистых мисок (от 10 до 0: взял одну -> стало 9, вернул -> снова 10!)
     const pourBowlNotGrabbedYet =
       this.handPourAnim.active &&
       this.handPourAnim.toType === 'bowl' &&
       this.handPourAnim.timer / this.handPourAnim.duration < 0.22;
+    const returningBowlNotLandedYet =
+      this.rightReturnAnim.active &&
+      this.rightReturnAnim.type === 'bowl' &&
+      this.rightReturnAnim.timer / this.rightReturnAnim.duration < 0.72;
     const cleanCount = Math.max(
       0,
-      Math.min(10, (rt.cleanBowls ?? 10) + (pourBowlNotGrabbedYet ? 1 : 0))
+      Math.min(
+        10,
+        (rt.cleanBowls ?? 10) + (pourBowlNotGrabbedYet ? 1 : 0) - (returningBowlNotLandedYet ? 1 : 0)
+      )
     );
 
     if (cleanCount <= 0) {
@@ -4084,6 +4109,9 @@ export class FirstPersonWebGLScene {
     // а верхняя плавно переносится левой рукой в drawHeldVesselInLeftHand3D!
     const grabbingBox =
       (this.rightGrabAnim.active && this.rightGrabAnim.type === 'box') ||
+      (this.rightReturnAnim.active &&
+        this.rightReturnAnim.type === 'box' &&
+        this.rightReturnAnim.timer / this.rightReturnAnim.duration < 0.72) ||
       (this.handPourAnim.active &&
         this.handPourAnim.toType === 'box' &&
         this.handPourAnim.timer / this.handPourAnim.duration >= 0.22);
@@ -4313,6 +4341,81 @@ export class FirstPersonWebGLScene {
   // =========================================================================
   drawHeldVesselInLeftHand3D() {
     const rt = gameState.runtime;
+
+    // АНИМАЦИЯ ВОЗВРАТА ПУСТОЙ МИСКИ ИЛИ КОРОБКИ ИЗ ЛЕВОЙ РУКИ ОБРАТНО НА СТОПКУ (Сектор 2):
+    // 1) p < 0.72: левая рука по дуге переносит пустую посуду обратно на верхушку стопки;
+    // 2) p >= 0.72: посуда уже стоит на стопке, а пустая левая рука плавно уходит обратно вниз.
+    if (this.rightReturnAnim.active) {
+      const basePos = this.getLeftHandWorldPos();
+      const { F, R } = this.getCameraBasis();
+      const yawAngle = Math.atan2(-F[0], -F[2]);
+      const isBox = this.rightReturnAnim.type === 'box';
+      const stackX = 0.84;
+      const topBowlIdx = Math.max(0, Math.min(9, this.rightReturnAnim.targetIdx || 0));
+      const stackY = isBox ? 0.998 : 0.918 + topBowlIdx * 0.02;
+      const stackZ = isBox ? -0.5 : -0.22;
+      const stackScale = isBox ? 0.6 : 0.48;
+      const p = Math.min(1, this.rightReturnAnim.timer / this.rightReturnAnim.duration);
+
+      let handAnchorX, handAnchorY, handAnchorZ;
+      if (p < 0.72) {
+        const t = p / 0.72;
+        const s = t * t * (3 - 2 * t);
+        const liftArc = Math.sin(t * Math.PI) * 0.08;
+        const vx = basePos[0] + (stackX - basePos[0]) * s;
+        const vy = basePos[1] + (stackY - basePos[1]) * s + liftArc;
+        const vz = basePos[2] + (stackZ - basePos[2]) * s;
+        const vsc = 0.64 + (stackScale - 0.64) * s;
+        this.drawFilledVessel3D(
+          vx,
+          vy,
+          vz,
+          { type: this.rightReturnAnim.type, broth: null, noodleState: null, toppings: [] },
+          vsc,
+          false
+        );
+        handAnchorX = vx;
+        handAnchorY = vy;
+        handAnchorZ = vz;
+      } else {
+        const t = (p - 0.72) / 0.28;
+        const s = t * t * (3 - 2 * t);
+        handAnchorX = stackX + (basePos[0] - stackX) * s;
+        handAnchorY = stackY + (basePos[1] - 0.14 - stackY) * s;
+        handAnchorZ = stackZ + (basePos[2] - stackZ) * s;
+      }
+
+      const lhX = handAnchorX - R[0] * 0.092 - F[0] * 0.056;
+      const lhY = handAnchorY - 0.036;
+      const lhZ = handAnchorZ - R[2] * 0.092 - F[2] * 0.056;
+      const lhRot = [0.06, yawAngle - 0.34, 0.12];
+      this.drawBox(lhX, lhY, lhZ, 0.074, 0.034, 0.13, [0.16, 0.14, 0.24], 0.22, lhRot);
+      this.drawBox(lhX, lhY + 0.018, lhZ, 0.078, 0.011, 0.04, [0.0, 0.96, 0.83], 0.92, lhRot);
+      this.drawBox(
+        handAnchorX - R[0] * 0.124 - F[0] * 0.022,
+        handAnchorY + 0.022,
+        handAnchorZ - R[2] * 0.124 - F[2] * 0.022,
+        0.024,
+        0.024,
+        0.048,
+        [0.2, 0.18, 0.3],
+        0.25,
+        [0.08, yawAngle - 0.15, 0.24]
+      );
+      this.drawBox(
+        lhX - R[0] * 0.055 - F[0] * 0.082,
+        lhY - 0.024,
+        lhZ - R[2] * 0.055 - F[2] * 0.082,
+        0.08,
+        0.048,
+        0.135,
+        [0.11, 0.13, 0.2],
+        0.15,
+        lhRot
+      );
+      return;
+    }
+
     const v = rt.activeVessel;
     if (!v || (v.type !== 'bowl' && v.type !== 'box')) return;
     const a = rt.assembly || {};

@@ -1,16 +1,16 @@
-import { GAME_CONFIG } from './config.js?v=63';
-import { gameState, createShiftRuntimeState } from './state.js?v=63';
-import { audio } from './audio.js?v=63';
+import { GAME_CONFIG } from './config.js?v=64';
+import { gameState, createShiftRuntimeState } from './state.js?v=64';
+import { audio } from './audio.js?v=64';
 import {
   buildCustomerPortraitSVG,
   buildCourierDroneSVG,
   generateAppleTouchIcon
-} from './renderer.js?v=63';
-import { FirstPersonWebGLScene } from './webgl3d.js?v=63';
-import { CustomerAndDeliverySystem } from './customers.js?v=63';
-import { KitchenSystem } from './kitchen.js?v=63';
-import { EconomySystem } from './economy.js?v=63';
-import { TutorialSystem } from './tutorial.js?v=63';
+} from './renderer.js?v=64';
+import { FirstPersonWebGLScene } from './webgl3d.js?v=64';
+import { CustomerAndDeliverySystem } from './customers.js?v=64';
+import { KitchenSystem } from './kitchen.js?v=64';
+import { EconomySystem } from './economy.js?v=64';
+import { TutorialSystem } from './tutorial.js?v=64';
 
 class CyberRamenApp {
   constructor() {
@@ -266,7 +266,7 @@ class CyberRamenApp {
 
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker
-        .register('./sw.js?v=63', { updateViaCache: 'none' })
+        .register('./sw.js?v=64', { updateViaCache: 'none' })
         .then((reg) => reg.update())
         .catch(() => {});
     }
@@ -398,7 +398,9 @@ class CyberRamenApp {
   startVesselPickupSequence(type) {
     const res = this.kitchenSystem.setVesselType(type);
     if (!res) return;
-    if (res === 'poured_to_box' || res === 'poured_to_bowl') {
+    if (res === 'returned_bowl' || res === 'returned_box') {
+      this.scene3D.triggerRightStackReturnAnim(type);
+    } else if (res === 'poured_to_box' || res === 'poured_to_bowl') {
       this.scene3D.triggerDirectHandPourAnim(
         res === 'poured_to_box' ? 'bowl' : 'box',
         type,
