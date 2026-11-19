@@ -1,4 +1,4 @@
-import { GAME_CONFIG } from './config.js?v=49';
+import { GAME_CONFIG } from './config.js?v=50';
 
 const BASE_SAVE_KEY = 'CR_NIGHT_YATAI_SAVE_V1';
 
@@ -76,6 +76,7 @@ export function createShiftRuntimeState() {
     cameraFocus: 'worktable', // 'customer' (верхний ракурс на гостя и полки) | 'worktable' (крупный план стола и лотков)
     customerPanSide: 0, // -1: взгляд влево на левую полку, 0: по центру на гостя, +1: взгляд вправо на правую полку
     customerTalking: false,
+    firstCustomerSeen: false,
     shiftElapsed: 0,
     shiftActive: true,
     pacifierCooldown: 0,

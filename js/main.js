@@ -1,16 +1,16 @@
-import { GAME_CONFIG } from './config.js?v=49';
-import { gameState, createShiftRuntimeState } from './state.js?v=49';
-import { audio } from './audio.js?v=49';
+import { GAME_CONFIG } from './config.js?v=50';
+import { gameState, createShiftRuntimeState } from './state.js?v=50';
+import { audio } from './audio.js?v=50';
 import {
   buildCustomerPortraitSVG,
   buildCourierDroneSVG,
   generateAppleTouchIcon
-} from './renderer.js?v=49';
-import { FirstPersonWebGLScene } from './webgl3d.js?v=49';
-import { CustomerAndDeliverySystem } from './customers.js?v=49';
-import { KitchenSystem } from './kitchen.js?v=49';
-import { EconomySystem } from './economy.js?v=49';
-import { TutorialSystem } from './tutorial.js?v=49';
+} from './renderer.js?v=50';
+import { FirstPersonWebGLScene } from './webgl3d.js?v=50';
+import { CustomerAndDeliverySystem } from './customers.js?v=50';
+import { KitchenSystem } from './kitchen.js?v=50';
+import { EconomySystem } from './economy.js?v=50';
+import { TutorialSystem } from './tutorial.js?v=50';
 
 class CyberRamenApp {
   constructor() {
@@ -220,7 +220,7 @@ class CyberRamenApp {
 
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker
-        .register('./sw.js?v=49', { updateViaCache: 'none' })
+        .register('./sw.js?v=50', { updateViaCache: 'none' })
         .then((reg) => reg.update())
         .catch(() => {});
     }
@@ -266,7 +266,8 @@ class CyberRamenApp {
       audio.ensureContext();
       // Если первый гость уже подошёл до первого клика, озвучиваем его голосовой заказ при разблокировке звука
       if (gameState.runtime.currentCustomer && gameState.runtime.cameraFocus === 'customer') {
-        this.customerSystem.announceCurrentCustomerOrder();
+        const isFirst = (gameState.runtime.dailyStats?.servedCount || 0) === 0;
+        this.customerSystem.announceCurrentCustomerOrder(isFirst);
       }
       window.removeEventListener('pointerdown', unlockAudio);
     };

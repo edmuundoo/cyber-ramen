@@ -1,6 +1,6 @@
-import { GAME_CONFIG } from './config.js?v=49';
-import { gameState } from './state.js?v=49';
-import { audio } from './audio.js?v=49';
+import { GAME_CONFIG } from './config.js?v=50';
+import { gameState } from './state.js?v=50';
+import { audio } from './audio.js?v=50';
 
 export class CustomerAndDeliverySystem {
   constructor(onToast, onCustomerChanged, onDeliveryChanged) {
@@ -164,31 +164,45 @@ export class CustomerAndDeliverySystem {
     rt.nextCustomer = this.createCustomerOrderAndArchetype(rt.currentCustomer.id);
     rt.nextCustomer.stepInProgress = 0.0;
 
-    // 1. Когда подходит человек — камера направляется прямо на него!
-    rt.activeSector = 1;
-    rt.cameraFocus = 'customer';
-    rt.customerPanSide = 0;
+    // 1. Камера автоматически поднимается на гостя ТОЛЬКО когда подходит самый первый клиент в начале смены!
+    // Все остальные клиенты подходят к стойке без дёргания камеры — мы видим их и слышим голосовой заказ.
+    const isFirstCustomerOfShift = !rt.firstCustomerSeen;
+    rt.firstCustomerSeen = true;
+
+    if (isFirstCustomerOfShift) {
+      rt.activeSector = 1;
+      rt.cameraFocus = 'customer';
+      rt.customerPanSide = 0;
+    }
 
     this.onCustomerChanged();
 
-    // 2. Посетитель озвучивает заказ голосом, а после речи камера переключается на крупный план тарелки и лотков!
-    this.announceCurrentCustomerOrder();
+    // 2. Посетитель озвучивает заказ голосом (авто-перевод камеры только для первого клиента смены)
+    this.announceCurrentCustomerOrder(isFirstCustomerOfShift);
   }
 
-  announceCurrentCustomerOrder() {
+  announceCurrentCustomerOrder(focusCamera = false) {
     const rt = gameState.runtime;
     const cust = rt.currentCustomer;
     if (!cust) return;
 
-    rt.activeSector = 1;
-    rt.cameraFocus = 'customer';
-    rt.customerPanSide = 0;
+    if (focusCamera) {
+      rt.activeSector = 1;
+      rt.cameraFocus = 'customer';
+      rt.customerPanSide = 0;
+    }
     this.onCustomerChanged();
 
     audio.speakCustomerOrder(cust.order.voiceText, cust.id, () => {
-      // 3. Дальше камера плавно переключается на крупный план пространства с тарелкой и контейнерами ингредиентов!
-      if (gameState.runtime.currentCustomer === cust) {
-        gameState.runtime.cameraFocus = 'worktable';
+      // 3. Автоматически опускаем камеру на стол после речи только у первого клиента в начале смены
+      if (focusCamera && gameState.runtime.currentCustomer === cust) {
+        if (
+          gameState.runtime.activeSector === 1 &&
+          gameState.runtime.cameraFocus === 'customer' &&
+          (gameState.runtime.customerPanSide || 0) === 0
+        ) {
+          gameState.runtime.cameraFocus = 'worktable';
+        }
         this.onCustomerChanged();
       }
     });
