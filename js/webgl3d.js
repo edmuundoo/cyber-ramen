@@ -1,5 +1,5 @@
-import { GAME_CONFIG } from './config.js?v=47';
-import { gameState } from './state.js?v=47';
+import { GAME_CONFIG } from './config.js?v=48';
+import { gameState } from './state.js?v=48';
 import {
   createAlleyBackdropTexture,
   createBuildingFacadeTexture,
@@ -8,7 +8,7 @@ import {
   createKanjiSignTextures,
   createPedestrianTextures,
   AnimeCustomerTextureRenderer
-} from './art3d.js?v=47';
+} from './art3d.js?v=48';
 
 /**
  * Полноэкранный WebGL 3D движок от первого лица с процедурной высокодетализированной
@@ -2021,7 +2021,10 @@ export class FirstPersonWebGLScene {
     this.drawMesh('cylinder', -0.42, 0.56, 0.02, 0.21, 0.34, 0.21, [0.22, 0.26, 0.32], 0.06, null, 0.78);
     this.drawMesh('torus', -0.42, 0.73, 0.02, 0.218, 0.022, 0.218, trashRimCol, trashGlow, null, 0.9);
     this.drawMesh('cylinder', -0.42, 0.725, 0.02, 0.19, 0.015, 0.19, [0.06, 0.07, 0.1], 0.02, null, 0.2);
-    this.registerHitbox('trash_bin', -0.42, 0.72, 0.02, 74);
+    const isCenterWorktable = rt.activeSector === 1 && rt.cameraFocus === 'worktable';
+    if (isCenterWorktable) {
+      this.registerHitbox('trash_bin', -0.42, 0.72, 0.02, 74);
+    }
 
     // Анимация выбрасывания посуды из левой руки в мусорку при тапе на бак
     if (this.trashTossAnim.active && this.trashTossAnim.vessel) {
@@ -2057,7 +2060,9 @@ export class FirstPersonWebGLScene {
         this.drawFilledVessel3D(sx, slotY + 0.002, slotZ, slotVessel, 0.76);
       }
 
-      this.registerHitbox(`table_slot_${i}`, sx, slotY + 0.06, slotZ, 68);
+      if (isCenterWorktable) {
+        this.registerHitbox(`table_slot_${i}`, sx, slotY + 0.06, slotZ, 68);
+      }
     }
 
     // 1Б. АНИМАЦИЯ ПОСТАНОВКИ ПОСУДЫ НА СЛОТ СТОЛА ИЛИ ПЕРЕЛИВАНИЯ МЕЖДУ ПОСУДОЙ В РУКЕ И НА СТОЛЕ
@@ -2315,7 +2320,7 @@ export class FirstPersonWebGLScene {
         this.drawBox(tp.x, by + 0.036, tp.z, tw - 0.04, 0.01, td - 0.04, [1.0, 0.18, 0.3], blink);
       }
 
-      if (isUnlocked) {
+      if (isUnlocked && isCenterWorktable) {
         this.registerHitbox(`topping_${tp.id}`, tp.x, by + 0.06, tp.z, 64);
       }
     }
@@ -2344,7 +2349,9 @@ export class FirstPersonWebGLScene {
     // Машущая лапка удачи
     const pawWave = Math.sin(this.time * 6) * 0.48;
     this.drawMesh('cylinder', catX + 0.054, catBaseY + 0.125, catZ + 0.035, 0.028, 0.085, 0.028, [1.0, 0.95, 0.82], catGlow, [pawWave, 0, 0]);
-    this.registerHitbox('pacifier_cat', catX, catBaseY + 0.13, catZ, 52);
+    if (rt.activeSector === 1 && (rt.cameraFocus === 'worktable' || (rt.customerPanSide || 0) === 0)) {
+      this.registerHitbox('pacifier_cat', catX, catBaseY + 0.13, catZ, 52);
+    }
 
     // 4. ПИРАМИДА ИЗ ГРЯЗНЫХ МИСОК НА ПРАВОЙ ВЕРХНЕЙ ПОЛКЕ ПРИЛАВКА:
     // - Первый ряд (3 нижние миски) стоят ПЛОСКО на полке (rx = 0, rz = 0), но НЕ в одну линию и на разном расстоянии друг от друга
@@ -2383,7 +2390,13 @@ export class FirstPersonWebGLScene {
         slot.rot
       );
     }
-    if (rightList.length > 0) {
+    if (
+      rightList.length > 0 &&
+      rt.activeSector === 1 &&
+      rt.cameraFocus === 'customer' &&
+      (rt.customerPanSide || 0) === 1
+    ) {
+      // Хитбокс сбора грязных мисок активен ТОЛЬКО когда камера направлена на правую верхнюю полку!
       this.registerHitbox('dirty_bowl_right', shelfCenterX, 1.15, shelfCenterZ, 108);
     }
 
@@ -2557,7 +2570,9 @@ export class FirstPersonWebGLScene {
           }
         }
 
-        this.registerHitbox(`basket_${i}`, bx, 1.05, bz, 72);
+        if (rt.activeSector === 0) {
+          this.registerHitbox(`basket_${i}`, bx, 1.05, bz, 72);
+        }
       } else {
         // Неактивное гнездо закрыто стальной заглушкой
         this.drawMesh('cylinder', bx, 1.01, bz, 0.21, 0.015, 0.21, [0.32, 0.36, 0.44], 0.05, null, 0.8);
@@ -2698,7 +2713,9 @@ export class FirstPersonWebGLScene {
           this.drawMesh('cylinder', px + 0.088, 1.175, pz, 0.018, 0.165, 0.018, [0.88, 0.92, 0.96], 0.28, [0, 0, -0.55], 0.95);
         }
 
-        this.registerHitbox(`broth_${bId}`, px, 1.06, pz, 76);
+        if (rt.activeSector === 0) {
+          this.registerHitbox(`broth_${bId}`, px, 1.06, pz, 76);
+        }
       } else {
         // Если бульон ещё не открыт апгрейдом — кастрюля накрыта стальной крышкой с ручкой (как дальняя кастрюля на скриншоте!)
         this.drawMesh('cylinder', px, 1.112, pz, 0.268, 0.016, 0.268, [0.46, 0.52, 0.6], 0.1, null, 0.88);
@@ -3243,8 +3260,10 @@ export class FirstPersonWebGLScene {
       }
     }
 
-    // Регистрируем крупный хитбокс раковины (1 тап = помыть 1 грязную миску!)
-    this.registerHitbox('sink_wash', sinkX, sinkY + 0.08, sinkZ, 108);
+    // Регистрируем крупный хитбокс раковины ТОЛЬКО когда камера находится в Секторе -1 (Мойка)!
+    if (rt.activeSector === -1) {
+      this.registerHitbox('sink_wash', sinkX, sinkY + 0.08, sinkZ, 108);
+    }
   }
 
   // =========================================================================
@@ -3253,43 +3272,37 @@ export class FirstPersonWebGLScene {
   // =========================================================================
   drawRightFridgeAndSealer3D() {
     const rt = gameState.runtime;
+    const isRightSector = rt.activeSector === 2;
     const needVesselPulse = !rt.activeVessel.type ? 0.35 + 0.25 * Math.sin(this.time * 5.0) : 0.16;
 
-    // 1. ДИСПЕНСЕР КЕРАМИЧЕСКИХ МИСОК «ДОНБУРИ» + СТАКАН С ПАЛОЧКАМИ СЛЕВА ОТ ХОЛОДИЛЬНИКА У ПРАВОЙ СТЕНКИ (x = 0.84, z = -0.22)
+    // 1. ДИСПЕНСЕР КЕРАМИЧЕСКИХ МИСОК «ДОНБУРИ» (ВСЕ 10 ЧИСТЫХ МИСОК В СТОПКЕ: 10 -> 9 -> 8 -> ... -> 0)
     const bowlX = 0.84;
     const bowlZ = -0.22;
     this.drawBox(bowlX, 0.904, bowlZ, 0.24, 0.024, 0.23, [0.26, 0.16, 0.12], 0.08, null, 0.55);
     this.drawBox(bowlX, 0.917, bowlZ, 0.21, 0.006, 0.2, [0.16, 0.18, 0.22], 0.05, null, 0.3);
     this.drawBox(bowlX - 0.112, 0.914, bowlZ, 0.01, 0.008, 0.21, [1.0, 0.22, 0.54], needVesselPulse);
 
-    // 4 угловых бамбуковых столбика-держателя стопки мисок
+    // 4 высоких бамбуковых столбика-держателя на 10 мисок
     for (const [dx, dz] of [[-0.098, -0.095], [0.098, -0.095], [-0.098, 0.095], [0.098, 0.095]]) {
-      this.drawMesh('cylinder', bowlX + dx, 0.965, bowlZ + dz, 0.014, 0.1, 0.014, [0.58, 0.38, 0.2], 0.08, null, 0.5);
+      this.drawMesh('cylinder', bowlX + dx, 1.02, bowlZ + dz, 0.014, 0.21, 0.014, [0.58, 0.38, 0.2], 0.08, null, 0.5);
     }
 
-    // 4. Отображаем реальное количество оставшихся чистых мисок из 10 (rt.cleanBowls)!
-    // Если чистых мисок 0 — стопка пуста, а индикатор мигает красным, напоминая помыть посуду в мойке слева!
-    const cleanCount = rt.cleanBowls ?? 10;
-    const grabbingBowl = this.rightGrabAnim.active && this.rightGrabAnim.type === 'bowl';
-    const visibleBowls =
-      cleanCount <= 0
-        ? 0
-        : Math.max(1, Math.min(5, Math.ceil((cleanCount / 10) * 5)));
-    const bowlStackCount = grabbingBowl ? Math.max(0, visibleBowls - 1) : visibleBowls;
+    // Отрисовываем точное количество оставшихся чистых мисок (от 10 до 0: взял одну -> стало 9, потом 8, 7 и т.д.)!
+    const cleanCount = Math.max(0, Math.min(10, rt.cleanBowls ?? 10));
 
     if (cleanCount <= 0) {
       const emptyPulse = 0.5 + 0.45 * Math.sin(this.time * 9.0);
       this.drawBox(bowlX, 0.922, bowlZ, 0.19, 0.008, 0.18, [1.0, 0.18, 0.32], emptyPulse);
     }
 
-    for (let m = 0; m < bowlStackCount; m++) {
-      const my = 0.918 + m * 0.032;
-      const ms = 0.195 + m * 0.004;
-      this.drawMesh('bowl_lathe', bowlX, my, bowlZ, ms, 0.078, ms, [0.16, 0.1, 0.24], 0.12, null, 0.82, 3);
-      this.drawMesh('torus', bowlX, my + 0.068, bowlZ, ms * 0.98, 0.012, ms * 0.98, [0.86, 0.22, 0.32], 0.22, null, 0.88);
+    for (let m = 0; m < cleanCount; m++) {
+      const my = 0.918 + m * 0.02;
+      const ms = 0.192 + m * 0.0018;
+      this.drawMesh('bowl_lathe', bowlX, my, bowlZ, ms, 0.072, ms, [0.16, 0.1, 0.24], 0.12, null, 0.82, 3);
+      this.drawMesh('torus', bowlX, my + 0.063, bowlZ, ms * 0.98, 0.011, ms * 0.98, [0.86, 0.22, 0.32], 0.22, null, 0.88);
     }
 
-    // Подставка-стакан с бамбуковыми палочками «Варибаси» рядом с мисками (в стороне от обеих неоновых линий!)
+    // Подставка-стакан с бамбуковыми палочками «Варибаси» рядом с мисками
     const cupX = 0.68;
     const cupZ = -0.11;
     this.drawMesh('cylinder', cupX, 0.948, cupZ, 0.062, 0.095, 0.062, [0.22, 0.15, 0.12], 0.08, null, 0.6);
@@ -3300,7 +3313,9 @@ export class FirstPersonWebGLScene {
       this.drawBox(cupX + (c - 2) * 0.008, 1.005, cupZ + (c % 2) * 0.006, 0.01, 0.035, 0.007, [0.95, 0.94, 0.9], 0.18, [ang * 0.5, 0, ang]);
     }
 
-    this.registerHitbox('vessel_bowl', bowlX, 0.99, bowlZ, 78);
+    if (isRightSector) {
+      this.registerHitbox('vessel_bowl', bowlX, 1.01, bowlZ, 82);
+    }
 
     // 2. ДИСПЕНСЕР ОТКРЫТЫХ КАРТОННЫХ КОРОБОЧЕК ДЛЯ ВОКА ВДОЛЬ ПРАВОЙ СТЕНКИ (x = 0.84, z = -0.50)
     const boxX = 0.84;
@@ -3320,7 +3335,9 @@ export class FirstPersonWebGLScene {
       this.draw3DWokBox(boxX, by, boxZ, 0.56 + k * 0.02, false);
     }
 
-    this.registerHitbox('vessel_box', boxX, 1.0, boxZ, 78);
+    if (isRightSector) {
+      this.registerHitbox('vessel_box', boxX, 1.0, boxZ, 78);
+    }
 
     // 3. КУРЬЕРСКИЙ ДРОН CYBER-EATS В ЛЕВОМ ВЕРХНЕМ УГЛУ (x = 0.72, y = 1.44, z = -0.46)
     // Парит наверху слева над столешницей, не перекрывая стопки мисок и коробок!
@@ -3400,7 +3417,9 @@ export class FirstPersonWebGLScene {
       this.drawBox(droneX + ax, droneY + 0.028, droneZ + az, 0.095, 0.008, 0.02, rCol, 0.92, [0, rotorSpin, 0]);
     }
 
-    this.registerHitbox('courier_drone', droneX, droneY - 0.03, droneZ, 94);
+    if (isRightSector) {
+      this.registerHitbox('courier_drone', droneX, droneY - 0.03, droneZ, 94);
+    }
 
     // 5. ПРОФЕССИОНАЛЬНЫЙ БАРНЫЙ КРИО-ХОЛОДИЛЬНИК СО СТЕКЛЯННОЙ ВИТРИНОЙ (x = 0.89, z = +0.23)
     // Корпус из матовой нержавейки, верхний компрессорный отсек с решёткой радиатора и цифровым дисплеем «-4°C»,
@@ -3445,7 +3464,9 @@ export class FirstPersonWebGLScene {
     this.drawBox(0.732, 1.15, 0.23, 0.006, 0.5, 0.32, [0.0, 0.82, 1.0], 0.32, null, 0.98);
     this.drawMesh('cylinder', 0.705, 1.15, 0.085, 0.016, 0.24, 0.016, [0.85, 0.9, 0.96], 0.3, null, 0.98);
 
-    this.registerHitbox('cryo_fridge', 0.86, 1.15, 0.23, 84);
+    if (isRightSector) {
+      this.registerHitbox('cryo_fridge', 0.86, 1.15, 0.23, 84);
+    }
   }
 
   // Индивидуальные пропорции и рост каждого из 4 персонажей:
@@ -3529,7 +3550,9 @@ export class FirstPersonWebGLScene {
         0.92
       );
 
-      this.registerHitbox('customer_serve', cx, cy + 0.05, cz, 95);
+      if (rt.activeSector === 1 && rt.cameraFocus === 'customer') {
+        this.registerHitbox('customer_serve', cx, cy + 0.05, cz, 95);
+      }
     }
 
     if (gameState.persistent.inDebtCollector) {
@@ -3569,9 +3592,10 @@ export class FirstPersonWebGLScene {
       // 2) p >= 0.28: левая рука захватывает миску/коробку со стопки и плавно переносит её по дуге к себе!
       const isBox = v.type === 'box';
       const stackX = 0.84;
-      const stackY = isBox ? 0.998 : 1.014;
+      const topBowlIdx = Math.max(0, Math.min(9, rt.cleanBowls ?? 0));
+      const stackY = isBox ? 0.998 : 0.918 + topBowlIdx * 0.02;
       const stackZ = isBox ? -0.5 : -0.22;
-      const stackScale = isBox ? 0.6 : 0.49;
+      const stackScale = isBox ? 0.6 : 0.48;
 
       const p = Math.min(1, this.rightGrabAnim.timer / this.rightGrabAnim.duration);
       if (p < 0.28) {
