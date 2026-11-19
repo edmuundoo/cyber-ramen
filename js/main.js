@@ -1,16 +1,16 @@
-import { GAME_CONFIG } from './config.js?v=73';
-import { gameState, createShiftRuntimeState } from './state.js?v=73';
-import { audio } from './audio.js?v=73';
+import { GAME_CONFIG } from './config.js?v=74';
+import { gameState, createShiftRuntimeState } from './state.js?v=74';
+import { audio } from './audio.js?v=74';
 import {
   buildCustomerPortraitSVG,
   buildCourierDroneSVG,
   generateAppleTouchIcon
-} from './renderer.js?v=73';
-import { FirstPersonWebGLScene } from './webgl3d.js?v=73';
-import { CustomerAndDeliverySystem } from './customers.js?v=73';
-import { KitchenSystem } from './kitchen.js?v=73';
-import { EconomySystem } from './economy.js?v=73';
-import { TutorialSystem } from './tutorial.js?v=73';
+} from './renderer.js?v=74';
+import { FirstPersonWebGLScene } from './webgl3d.js?v=74';
+import { CustomerAndDeliverySystem } from './customers.js?v=74';
+import { KitchenSystem } from './kitchen.js?v=74';
+import { EconomySystem } from './economy.js?v=74';
+import { TutorialSystem } from './tutorial.js?v=74';
 
 class CyberRamenApp {
   constructor() {
@@ -251,8 +251,8 @@ class CyberRamenApp {
       const res = this.kitchenSystem.addDrinkToAssembly(drinkId);
       if (res) {
         this.scene3D.triggerDrinkPlaceAnim(res.drinkId, res.intoBag);
-        // Через короткую паузу (пока рука берёт банку с полки) закрываем холодильник и переводим взгляд на стол,
-        // чтобы показать анимацию выставления банки на поднос или убирания внутрь полого пакета!
+        // Ждём ~460мс, пока правая рука дотянется до банки, возьмёт её и чуть опустит к себе,
+        // и ровно в этот момент закрываем холодильник и поворачиваем камеру на стол — рука едет вместе с нами и ставит банку!
         setTimeout(() => {
           if (gameState.runtime.fridgeOpen && gameState.runtime.activeSector === 2) {
             gameState.runtime.fridgeOpen = false;
@@ -260,7 +260,7 @@ class CyberRamenApp {
             gameState.runtime.cameraFocus = 'worktable';
             this.switchSector(1);
           }
-        }, 260);
+        }, 460);
       }
       return;
     }
@@ -296,7 +296,7 @@ class CyberRamenApp {
 
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker
-        .register('./sw.js?v=73', { updateViaCache: 'none' })
+        .register('./sw.js?v=74', { updateViaCache: 'none' })
         .then((reg) => reg.update())
         .catch(() => {});
     }

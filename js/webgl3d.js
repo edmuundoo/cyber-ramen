@@ -1,5 +1,5 @@
-import { GAME_CONFIG } from './config.js?v=73';
-import { gameState } from './state.js?v=73';
+import { GAME_CONFIG } from './config.js?v=74';
+import { gameState } from './state.js?v=74';
 import {
   createAlleyBackdropTexture,
   createBuildingFacadeTexture,
@@ -8,7 +8,7 @@ import {
   createKanjiSignTextures,
   createPedestrianTextures,
   AnimeCustomerTextureRenderer
-} from './art3d.js?v=73';
+} from './art3d.js?v=74';
 
 /**
  * Полноэкранный WebGL 3D движок от первого лица с процедурной высокодетализированной
@@ -143,7 +143,7 @@ export class FirstPersonWebGLScene {
       drinkId: 'cola',
       intoBag: false,
       timer: 0,
-      duration: 0.88
+      duration: 1.28
     };
     this.fridgeDoorOpenT = 0; // 0 = дверца закрыта, 1 = дверца распахнута на 110°
     this.fridgeDoorHandAnim = { active: false, action: 'open', timer: 0, duration: 0.56 };
@@ -413,7 +413,7 @@ export class FirstPersonWebGLScene {
     this.drinkPlaceAnim.drinkId = drinkId;
     this.drinkPlaceAnim.intoBag = Boolean(intoBag);
     this.drinkPlaceAnim.timer = 0;
-    this.drinkPlaceAnim.duration = 0.88;
+    this.drinkPlaceAnim.duration = 1.28;
   }
 
   triggerAssemblyVesselAnim(res = {}) {
@@ -1614,6 +1614,7 @@ export class FirstPersonWebGLScene {
     this.drawCustomerAndCourier3D();
     this.drawParticles3D(dt);
     this.drawHeldVesselInLeftHand3D();
+    this.drawDrinkPlaceAnim3D();
     this.drawCarriedAssemblyToCustomer3D();
     this.drawFirstPersonHands3D(dt);
 
@@ -2797,7 +2798,10 @@ export class FirstPersonWebGLScene {
       this.assemblyVesselAnim.action === 'place' &&
       this.assemblyVesselAnim.intoBag;
     if (showStaticBag) {
-      const drinkFlyingIntoBag = this.drinkPlaceAnim.active && this.drinkPlaceAnim.intoBag;
+      const drinkNotLandedYet =
+        this.drinkPlaceAnim.active &&
+        this.drinkPlaceAnim.intoBag &&
+        this.drinkPlaceAnim.timer / this.drinkPlaceAnim.duration < 0.88;
       this.draw3DTakeoutBag(
         asmX,
         bagBaseY,
@@ -2807,7 +2811,7 @@ export class FirstPersonWebGLScene {
         Boolean(a.hasChopsticks && !this.chopsticksPlaceAnim.active),
         false,
         null,
-        drinkFlyingIntoBag ? null : a.drink
+        drinkNotLandedYet ? null : a.drink
       );
     }
 
@@ -2889,37 +2893,16 @@ export class FirstPersonWebGLScene {
       if (a.vessel && !(this.assemblyVesselAnim.active && this.assemblyVesselAnim.action === 'place')) {
         this.drawFilledVessel3D(vesselOnTrayX, vesselOnTrayY, asmZ, a.vessel, 0.76);
       }
-      if (a.drink && !this.drinkPlaceAnim.active) {
+      const drinkNotLandedOnTray =
+        this.drinkPlaceAnim.active &&
+        !this.drinkPlaceAnim.intoBag &&
+        this.drinkPlaceAnim.timer / this.drinkPlaceAnim.duration < 0.88;
+      if (a.drink && !drinkNotLandedOnTray) {
         this.draw3DDrinkCan(asmX + 0.1, asmY + 0.016, asmZ - 0.05, a.drink, 1.12);
       }
       if (a.hasChopsticks && !this.chopsticksPlaceAnim.active) {
         this.draw3DChopsticksPack(asmX + 0.22, asmY + 0.016, asmZ, 1.02);
       }
-    }
-
-    // Анимация выставления жестяной банки напитка из Крио-Холодильника на поднос или убирания внутрь полого пакета!
-    if (this.drinkPlaceAnim.active && this.drinkPlaceAnim.timer / this.drinkPlaceAnim.duration >= 0.34) {
-      const pAll = Math.min(1, this.drinkPlaceAnim.timer / this.drinkPlaceAnim.duration);
-      const t = Math.min(1, (pAll - 0.34) / 0.66);
-      const s = t * t * (3 - 2 * t);
-      const intoBag = Boolean(this.drinkPlaceAnim.intoBag);
-      const startX = 0.56;
-      const startY = 1.26;
-      const startZ = -0.06;
-      const targetX = intoBag ? asmX + 0.095 : asmX + 0.1;
-      const targetY = intoBag ? bagBaseY + 0.016 : asmY + 0.016;
-      const targetZ = intoBag ? asmZ + 0.01 : asmZ - 0.05;
-      const arcH = intoBag ? 0.28 : 0.12;
-      const dx = startX + (targetX - startX) * s;
-      const dy = startY + (targetY - startY) * s + Math.sin(t * Math.PI) * arcH;
-      const dz = startZ + (targetZ - startZ) * s;
-      this.draw3DDrinkCan(dx, dy, dz, this.drinkPlaceAnim.drinkId, 1.12, [0, 0, (1 - s) * 0.24]);
-      // Правая кибер-перчатка аккуратно ставит банку на поднос или опускает сверху внутрь пакета!
-      const gX = dx + 0.065;
-      const gY = dy + 0.07;
-      const gZ = dz + 0.05;
-      this.drawBox(gX, gY, gZ, 0.068, 0.036, 0.12, [0.16, 0.14, 0.24], 0.22, [0.14, 0.28, -0.18]);
-      this.drawBox(gX, gY + 0.018, gZ, 0.072, 0.011, 0.038, [0.0, 0.96, 0.83], 0.92, [0.14, 0.28, -0.18]);
     }
 
     // Анимация постановки посуды из левой руки на поднос (ближе к левому краю!) или внутрь полого пакета (с запечатыванием коробки!)
@@ -4489,8 +4472,8 @@ export class FirstPersonWebGLScene {
     // 3В. ВЕРХНЯЯ ПОЛКА (y = 1.365): ЖЕСТЯНЫЕ БАНКИ НАПИТКОВ 3-Х ВИДОВ В 3 РЯДА (ПО 3 БАНКИ В ГЛУБИНУ!)
     const drinkRows = ['cola', 'matcha', 'ramune'];
     const drinkDepthXs = [0.79, 0.88, 0.97];
-    const takingDrinkPhase =
-      this.drinkPlaceAnim.active && this.drinkPlaceAnim.timer / this.drinkPlaceAnim.duration < 0.36;
+    const frontCanGrabbed =
+      this.drinkPlaceAnim.active && this.drinkPlaceAnim.timer / this.drinkPlaceAnim.duration >= 0.24;
     for (let rIdx = 0; rIdx < drinkRows.length; rIdx++) {
       const dId = drinkRows[rIdx];
       const dz = colZs[rIdx];
@@ -4498,8 +4481,8 @@ export class FirstPersonWebGLScene {
       // Тонкий цветной ценник-маркер ряда на передней планке верхней полки
       this.drawBox(fFrontX + 0.02, shelfTopY, dz, 0.005, 0.012, 0.1, dCfg?.bodyCol || [0.9, 0.2, 0.2], 0.72);
       for (let dIdx = 0; dIdx < drinkDepthXs.length; dIdx++) {
-        // Если правая рука прямо сейчас вынимает переднюю банку этого ряда — скрываем её со своего места на полке!
-        if (dIdx === 0 && takingDrinkPhase && this.drinkPlaceAnim.drinkId === dId) continue;
+        // До p = 0.24 банка стоит на полке, пока правая рука тянется к ней; как только рука схватила — банка едет в руке!
+        if (dIdx === 0 && frontCanGrabbed && this.drinkPlaceAnim.drinkId === dId) continue;
         this.draw3DDrinkCan(drinkDepthXs[dIdx], shelfTopY + 0.007, dz, dId, 1.0);
       }
       if (isFridgeInteract) {
@@ -4619,22 +4602,6 @@ export class FirstPersonWebGLScene {
       }
       this.drawBox(gx - 0.04, gy + 0.02, gz + 0.02, 0.11, 0.038, 0.068, [0.16, 0.14, 0.24], 0.24, [0.1, 0.2, -0.15]);
       this.drawBox(gx - 0.04, gy + 0.04, gz + 0.02, 0.038, 0.011, 0.072, [0.0, 0.96, 0.83], 0.94, [0.1, 0.2, -0.15]);
-    }
-
-    if (takingDrinkPhase) {
-      const pAll = Math.min(1, this.drinkPlaceAnim.timer / this.drinkPlaceAnim.duration);
-      const t = Math.min(1, pAll / 0.36);
-      const s = t * t * (3 - 2 * t);
-      const rIdx = Math.max(0, drinkRows.indexOf(this.drinkPlaceAnim.drinkId));
-      const startZ = colZs[rIdx] ?? fZ;
-      const startX = drinkDepthXs[0];
-      const startY = shelfTopY + 0.007;
-      const dx = startX + (0.48 - startX) * s;
-      const dy = startY + (1.28 - startY) * s + Math.sin(t * Math.PI) * 0.04;
-      const dz = startZ + (-0.08 - startZ) * s;
-      this.draw3DDrinkCan(dx, dy, dz, this.drinkPlaceAnim.drinkId, 1.02);
-      this.drawBox(dx - 0.055, dy + 0.055, dz + 0.03, 0.115, 0.038, 0.068, [0.16, 0.14, 0.24], 0.24, [0.1, 0.2, -0.12]);
-      this.drawBox(dx - 0.055, dy + 0.075, dz + 0.03, 0.038, 0.011, 0.072, [0.0, 0.96, 0.83], 0.94, [0.1, 0.2, -0.12]);
     }
 
     // 3Ж. ОТКРЫВАЮЩАЯСЯ ПРОЗРАЧНАЯ СТЕКЛЯННАЯ ДВЕРЦА НА ПЕТЛЯХ СПРАВА (pivot: x = 0.72, z = 0.51)
@@ -5514,6 +5481,171 @@ export class FirstPersonWebGLScene {
       this.drawBox(rhX - R[0] * 0.032, rhY - 0.01, rhZ - R[2] * 0.032, 0.028, 0.024, 0.05, [0.2, 0.18, 0.3], 0.25, rhRot);
       this.drawBox(rhX + sx * 0.085, rhY + sy * 0.085, rhZ + sz * 0.085, 0.076, 0.046, 0.125, [0.11, 0.13, 0.2], 0.16, rhRot);
     }
+  }
+
+  // =========================================================================
+  // НЕПРЕРЫВНАЯ 5-ФАЗНАЯ АНИМАЦИЯ ВЗЯТИЯ БАНКИ ИЗ ХОЛОДИЛЬНИКА И ВЫСТАВЛЕНИЯ НА ПОДНОС / В ПАКЕТ:
+  // 1) p < 0.24: правая рука вылетает ОТ НАС прямо к банке на верхней полке холодильника;
+  // 2) 0.24..0.46: рука хватает банку, вынимает её с полки и чуть-чуть опускает к себе;
+  // 3) 0.46..0.64: камера поворачивается от холодильника на стол, а правая рука с банкой едет вместе с нами!
+  // 4) 0.64..0.88: рука по мягкой дуге идёт на стол и аккуратно ставит банку на поднос или внутрь полого пакета;
+  // 5) 0.88..1.00: банка уже стоит на месте, а пустая правая рука плавно убирается обратно вниз.
+  // =========================================================================
+  drawDrinkPlaceAnim3D() {
+    if (!this.drinkPlaceAnim.active) return;
+
+    const rt = gameState.runtime;
+    const a = rt.assembly || {};
+    const p = Math.min(1, this.drinkPlaceAnim.timer / this.drinkPlaceAnim.duration);
+    const { F, R, U } = this.getCameraBasis();
+    const yawAngle = Math.atan2(-F[0], -F[2]);
+
+    const drinkRows = ['cola', 'matcha', 'ramune'];
+    const colZs = [0.115, 0.27, 0.425];
+    const rIdx = Math.max(0, drinkRows.indexOf(this.drinkPlaceAnim.drinkId));
+    const shelfPos = [0.79, 1.372, colZs[rIdx] ?? 0.27];
+
+    const asmY = 0.902;
+    const asmZ = -0.24;
+    const bagBaseY = a.hasTray ? asmY + 0.016 : asmY;
+    const intoBag = Boolean(this.drinkPlaceAnim.intoBag);
+    const targetPos = intoBag
+      ? [0.095, bagBaseY + 0.016, asmZ + 0.01]
+      : [0.1, asmY + 0.016, asmZ - 0.05];
+
+    // Точка выхода правой руки от тела героя (правый нижний край обзора) и точка переноса в руке при повороте камеры
+    const rightOrigin = [
+      this.camPos[0] + F[0] * 0.42 + R[0] * 0.17 - U[0] * 0.25,
+      this.camPos[1] + F[1] * 0.42 + R[1] * 0.17 - U[1] * 0.25,
+      this.camPos[2] + F[2] * 0.42 + R[2] * 0.17 - U[2] * 0.25
+    ];
+    const rightCarry = [
+      this.camPos[0] + F[0] * 0.44 + R[0] * 0.11 - U[0] * 0.15,
+      this.camPos[1] + F[1] * 0.44 + R[1] * 0.11 - U[1] * 0.15,
+      this.camPos[2] + F[2] * 0.44 + R[2] * 0.11 - U[2] * 0.15
+    ];
+
+    let canX, canY, canZ;
+    let handX, handY, handZ;
+    let showCan = false;
+    let canScale = 1.0;
+    let canTilt = 0;
+
+    if (p < 0.24) {
+      // Фаза 1: пустая правая рука вылетает ОТ НАС к банке на верхней полке
+      const t = p / 0.24;
+      const s = t * t * (3 - 2 * t);
+      handX = rightOrigin[0] + (shelfPos[0] - rightOrigin[0]) * s;
+      handY = rightOrigin[1] + (shelfPos[1] + 0.05 - rightOrigin[1]) * s + Math.sin(t * Math.PI) * 0.03;
+      handZ = rightOrigin[2] + (shelfPos[2] - rightOrigin[2]) * s;
+      showCan = false;
+    } else if (p < 0.46) {
+      // Фаза 2: взяла банку с полки и чуть-чуть опустила к себе
+      const t = (p - 0.24) / 0.22;
+      const s = t * t * (3 - 2 * t);
+      canX = shelfPos[0] + (rightCarry[0] - shelfPos[0]) * s;
+      canY = shelfPos[1] + (rightCarry[1] - shelfPos[1]) * s + Math.sin(t * Math.PI) * 0.025;
+      canZ = shelfPos[2] + (rightCarry[2] - shelfPos[2]) * s;
+      handX = canX;
+      handY = canY + 0.05;
+      handZ = canZ;
+      canScale = 1.0 - 0.12 * s;
+      canTilt = 0.08 * s;
+      showCan = true;
+    } else if (p < 0.64) {
+      // Фаза 3: камера поворачивается от холодильника на стол, рука держит банку и едет вместе с нами!
+      const t = (p - 0.46) / 0.18;
+      const bob = Math.sin(t * Math.PI) * 0.012;
+      canX = rightCarry[0];
+      canY = rightCarry[1] - bob;
+      canZ = rightCarry[2];
+      handX = canX;
+      handY = canY + 0.05;
+      handZ = canZ;
+      canScale = 0.88 + 0.06 * t;
+      canTilt = 0.08 * (1 - t * 0.4);
+      showCan = true;
+    } else if (p < 0.88) {
+      // Фаза 4: рука идёт от нас на стол и аккуратно ставит банку на поднос или сверху опускает внутрь полого пакета!
+      const t = (p - 0.64) / 0.24;
+      if (intoBag) {
+        const hoverY = targetPos[1] + 0.25;
+        if (t < 0.62) {
+          const u = t / 0.62;
+          const s = u * u * (3 - 2 * u);
+          canX = rightCarry[0] + (targetPos[0] - rightCarry[0]) * s;
+          canY = rightCarry[1] + (hoverY - rightCarry[1]) * s + Math.sin(u * Math.PI) * 0.05;
+          canZ = rightCarry[2] + (targetPos[2] - rightCarry[2]) * s;
+        } else {
+          const u = (t - 0.62) / 0.38;
+          const s = u * u * (3 - 2 * u);
+          canX = targetPos[0];
+          canY = hoverY + (targetPos[1] - hoverY) * s;
+          canZ = targetPos[2];
+        }
+        handX = canX;
+        handY = canY + 0.082;
+        handZ = canZ;
+      } else {
+        const s = t * t * (3 - 2 * t);
+        canX = rightCarry[0] + (targetPos[0] - rightCarry[0]) * s;
+        canY = rightCarry[1] + (targetPos[1] - rightCarry[1]) * s + Math.sin(t * Math.PI) * 0.085;
+        canZ = rightCarry[2] + (targetPos[2] - rightCarry[2]) * s;
+        handX = canX;
+        handY = canY + 0.052;
+        handZ = canZ;
+      }
+      canScale = 0.94 + 0.18 * (t * t * (3 - 2 * t)); // Плавно достигает точного размера 1.12 на подносе / в пакете!
+      canTilt = 0.05 * (1 - t);
+      showCan = true;
+    } else {
+      // Фаза 5: банка уже стоит на подносе/в пакете, пустая правая рука бесшовно вынимается и убирается обратно к нам!
+      const t = (p - 0.88) / 0.12;
+      const s = t * t * (3 - 2 * t);
+      const releaseY = intoBag ? targetPos[1] + 0.082 : targetPos[1] + 0.052;
+      const liftOut = intoBag ? Math.sin(t * Math.PI) * 0.16 : Math.sin(t * Math.PI) * 0.04;
+      handX = targetPos[0] + (rightOrigin[0] - targetPos[0]) * s;
+      handY = releaseY + (rightOrigin[1] - releaseY) * s + liftOut;
+      handZ = targetPos[2] + (rightOrigin[2] - targetPos[2]) * s;
+      showCan = false;
+    }
+
+    if (showCan) {
+      this.draw3DDrinkCan(canX, canY, canZ, this.drinkPlaceAnim.drinkId, canScale, [0, 0, canTilt]);
+    }
+
+    // Детализированная правая кибер-перчатка героя (ладонь + индикатор + большой палец + предплечье к правому плечу!)
+    const rhX = handX + R[0] * 0.048 - F[0] * 0.036;
+    const rhY = handY - 0.008;
+    const rhZ = handZ + R[2] * 0.048 - F[2] * 0.036;
+    const rhRot = [0.06, yawAngle + 0.28, -0.14];
+
+    this.drawBox(rhX, rhY, rhZ, 0.066, 0.034, 0.12, [0.16, 0.14, 0.24], 0.22, rhRot);
+    this.drawBox(rhX, rhY + 0.018, rhZ, 0.07, 0.011, 0.038, [0.0, 0.96, 0.83], 0.92, rhRot);
+    // Большой палец снаружи банки
+    this.drawBox(
+      handX + R[0] * 0.056 - F[0] * 0.006,
+      handY + 0.018,
+      handZ + R[2] * 0.056 - F[2] * 0.006,
+      0.022,
+      0.022,
+      0.044,
+      [0.2, 0.18, 0.3],
+      0.25,
+      [0.08, yawAngle + 0.12, -0.22]
+    );
+    // Предплечье правой руки, уходящее вниз-вправо к плечу героя
+    this.drawBox(
+      rhX + R[0] * 0.052 - F[0] * 0.078,
+      rhY - 0.026,
+      rhZ + R[2] * 0.052 - F[2] * 0.078,
+      0.076,
+      0.046,
+      0.135,
+      [0.11, 0.13, 0.2],
+      0.15,
+      rhRot
+    );
   }
 
   // =========================================================================
