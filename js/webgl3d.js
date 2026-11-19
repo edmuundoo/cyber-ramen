@@ -1,5 +1,5 @@
-import { GAME_CONFIG } from './config.js?v=45';
-import { gameState } from './state.js?v=45';
+import { GAME_CONFIG } from './config.js?v=46';
+import { gameState } from './state.js?v=46';
 import {
   createAlleyBackdropTexture,
   createBuildingFacadeTexture,
@@ -8,7 +8,7 @@ import {
   createKanjiSignTextures,
   createPedestrianTextures,
   AnimeCustomerTextureRenderer
-} from './art3d.js?v=45';
+} from './art3d.js?v=46';
 
 /**
  * Полноэкранный WebGL 3D движок от первого лица с процедурной высокодетализированной
@@ -857,37 +857,6 @@ export class FirstPersonWebGLScene {
       lastX = e.clientX;
       lastY = e.clientY;
       const dx = lastX - downX;
-      const dy = lastY - downY;
-
-      // В центральном секторе вертикальный свайп переключает взгляд между столом и покупателем!
-      if (
-        gameState.runtime.activeSector === 1 &&
-        Math.abs(dy) > 18 &&
-        Math.abs(dy) > Math.abs(dx) * 1.05
-      ) {
-        if (this._startedOnCustomer) {
-          // Свайп обратно на стол, когда камера была на покупателе (работает для вертикального свайпа в любую сторону)
-          gestureLookedUp = false;
-          this.headPeeking = false;
-          if (this.headReturnTimer) {
-            clearTimeout(this.headReturnTimer);
-            this.headReturnTimer = null;
-          }
-          gameState.runtime.cameraFocus = 'worktable';
-          this.dragPanX = Math.max(-0.28, Math.min(0.28, -dx * 0.0018));
-          return;
-        }
-        gestureLookedUp = true;
-        this.headPeeking = true;
-        if (this.headReturnTimer) {
-          clearTimeout(this.headReturnTimer);
-          this.headReturnTimer = null;
-        }
-        gameState.runtime.cameraFocus = 'customer';
-        this.dragPanX = Math.max(-0.28, Math.min(0.28, -dx * 0.0018));
-        return;
-      }
-
       this.dragPanX = Math.max(-0.28, Math.min(0.28, -dx * 0.0022));
     });
 
@@ -902,54 +871,49 @@ export class FirstPersonWebGLScene {
       const dy = endY - downY;
       const dist = Math.hypot(dx, dy);
 
-      // Если камера уже была на покупателе и игрок свайпнул вертикально — возвращаем камеру назад на рабочий стол
-      if (
-        this._startedOnCustomer &&
-        gameState.runtime.activeSector === 1 &&
-        dist > 18 &&
-        Math.abs(dy) > Math.abs(dx) * 1.05
-      ) {
-        gestureLookedUp = false;
+      // 1. ГОРИЗОНТАЛЬНЫЙ СВАЙП (переключение секторов или поворот на верхнем плане с переходом к плите/холодильнику)
+      if (dist > 24 && Math.abs(dx) > Math.abs(dy) * 1.08) {
+        if (this.callbacks.onSwipeSector) {
+          this.callbacks.onSwipeSector(dx < 0 ? 1 : -1);
+        }
+        return;
+      }
+
+      // 2. ВЕРТИКАЛЬНЫЙ СВАЙП:
+      // - Если камера на верхнем плане (cameraFocus === 'customer') -> возвращаемся на стол внизу;
+      // - Если камера на центральном столе (Сектор 1) -> поднимаемся на покупателя по центру (customerPanSide = 0);
+      // - Если камера у холодильника справа (Сектор 2) -> поднимаемся сразу на правую верхнюю полку с грязной посудой (customerPanSide = +1)!
+      // - Если камера у варочной плиты слева (Сектор 0) -> поднимаемся сразу на левую верхнюю полочку (customerPanSide = -1)!
+      if (dist > 22 && Math.abs(dy) > Math.abs(dx) * 1.05) {
         this.headPeeking = false;
         if (this.headReturnTimer) {
           clearTimeout(this.headReturnTimer);
           this.headReturnTimer = null;
         }
-        gameState.runtime.cameraFocus = 'worktable';
-        gameState.runtime.customerPanSide = 0;
-        return;
-      }
 
-      // Если игрок свайпнул вертикально со стола наверх на покупателя —
-      // камера остаётся наверху (НЕ опускается сама вниз, даже если руки пустые!),
-      // чтобы можно было покрутиться влево/вправо и собрать грязные миски с полок прилавка!
-      if (
-        gestureLookedUp ||
-        (!this._startedOnCustomer &&
-          gameState.runtime.activeSector === 1 &&
-          dist > 24 &&
-          Math.abs(dy) > Math.abs(dx) * 1.05)
-      ) {
-        gameState.runtime.cameraFocus = 'customer';
-        this.headPeeking = false;
-        if (this.headReturnTimer) {
-          clearTimeout(this.headReturnTimer);
-          this.headReturnTimer = null;
-        }
-        return;
-      }
-
-      if (dist > 26) {
-        if (Math.abs(dx) > Math.abs(dy) * 1.1) {
-          if (this.callbacks.onSwipeSector) {
-            this.callbacks.onSwipeSector(dx < 0 ? 1 : -1);
-          }
+        if (gameState.runtime.activeSector === 1 && this._startedOnCustomer) {
+          gameState.runtime.cameraFocus = 'worktable';
+          gameState.runtime.customerPanSide = 0;
           return;
         }
-        if (dy > 28 && gameState.runtime.activeSector === 2) {
-          if (this.callbacks.onSwipeDownPress) {
-            this.callbacks.onSwipeDownPress();
-          }
+
+        if (gameState.runtime.activeSector === 2) {
+          gameState.runtime.activeSector = 1;
+          gameState.runtime.cameraFocus = 'customer';
+          gameState.runtime.customerPanSide = 1;
+          return;
+        }
+
+        if (gameState.runtime.activeSector === 0) {
+          gameState.runtime.activeSector = 1;
+          gameState.runtime.cameraFocus = 'customer';
+          gameState.runtime.customerPanSide = -1;
+          return;
+        }
+
+        if (gameState.runtime.activeSector === 1) {
+          gameState.runtime.cameraFocus = 'customer';
+          gameState.runtime.customerPanSide = 0;
           return;
         }
       }
@@ -2382,64 +2346,99 @@ export class FirstPersonWebGLScene {
     this.drawMesh('cylinder', catX + 0.054, catBaseY + 0.125, catZ + 0.035, 0.028, 0.085, 0.028, [1.0, 0.95, 0.82], catGlow, [pawWave, 0, 0]);
     this.registerHitbox('pacifier_cat', catX, catBaseY + 0.13, catZ, 52);
 
-    // 4. ГРЯЗНЫЕ МИСКИ НА ЛЕВОЙ И ПРАВОЙ ВЕРХНИХ ПОЛОЧКАХ ПРИЛАВКА (ОСТАВЛЕННЫЕ ПОКУПАТЕЛЯМИ ПОСЛЕ ЕДЫ)
-    // Тап по грязной миске забирает 1 миску с полки и отправляет её в мойку (Сектор -1 левее плиты)!
-    const leftList = rt.dirtyShelfLeft || [];
-    for (let i = 0; i < leftList.length; i++) {
-      const col = i % 2;
-      const stack = Math.floor(i / 2);
-      const bx = -0.54 - col * 0.24;
-      const by = 1.078 + stack * 0.036;
-      const bz = -1.04 + (col % 2) * 0.015;
-      this.drawDirtyBowl3D(bx, by, bz, leftList[i].broth, 0.5);
-    }
-    if (leftList.length > 0) {
-      this.registerHitbox('dirty_bowl_left', -0.64, 1.13, -1.04, 96);
-    }
+    // 4. ПИРАМИДА ИЗ ГРЯЗНЫХ МИСОК ПОД НАКЛОНОМ НА ПРАВОЙ ВЕРХНЕЙ ПОЛКЕ ПРИЛАВКА (ОСТАВЛЕННЫЕ ПОКУПАТЕЛЯМИ ПОСЛЕ ЕДЫ)
+    // Миски складываются не ровной стопкой, а хаотично друг на друга под наклоном, образуя живописную пирамиду!
+    const pyramidSlots = [
+      // Нижний ярус пирамиды (3 миски в основании)
+      { dx: -0.15, dy: 0.0, dz: 0.012, rot: [0.05, 0.25, -0.06] },
+      { dx: 0.02, dy: 0.002, dz: -0.015, rot: [-0.04, -0.4, 0.08] },
+      { dx: 0.17, dy: 0.0, dz: 0.01, rot: [0.06, 0.6, 0.05] },
+      // Второй ярус (лежат под заметным наклоном поверх нижних мисок)
+      { dx: -0.07, dy: 0.056, dz: -0.008, rot: [0.22, -0.5, 0.28] },
+      { dx: 0.09, dy: 0.058, dz: 0.014, rot: [-0.2, 0.45, -0.26] },
+      { dx: 0.01, dy: 0.088, dz: 0.022, rot: [0.26, 0.8, -0.18] },
+      // Третий ярус пирамиды (ещё выше и кривее)
+      { dx: -0.04, dy: 0.125, dz: -0.012, rot: [-0.25, -0.7, 0.32] },
+      { dx: 0.06, dy: 0.132, dz: 0.01, rot: [0.24, 0.35, -0.3] },
+      // Верхушка пирамиды из 9–10 мисок
+      { dx: 0.01, dy: 0.176, dz: -0.005, rot: [0.28, -0.3, 0.24] },
+      { dx: -0.01, dy: 0.218, dz: 0.008, rot: [-0.22, 0.65, -0.32] }
+    ];
 
     const rightList = rt.dirtyShelfRight || [];
+    const shelfCenterX = 0.66;
+    const shelfBaseY = 1.078;
+    const shelfCenterZ = -1.04;
     for (let i = 0; i < rightList.length; i++) {
-      const col = i % 2;
-      const stack = Math.floor(i / 2);
-      const bx = 0.54 + col * 0.24;
-      const by = 1.078 + stack * 0.036;
-      const bz = -1.04 + (col % 2) * 0.015;
-      this.drawDirtyBowl3D(bx, by, bz, rightList[i].broth, 0.5);
+      const slot = pyramidSlots[i % pyramidSlots.length];
+      const extraTier = Math.floor(i / pyramidSlots.length) * 0.045;
+      this.drawDirtyBowl3D(
+        shelfCenterX + slot.dx,
+        shelfBaseY + slot.dy + extraTier,
+        shelfCenterZ + slot.dz,
+        rightList[i].broth,
+        0.48,
+        slot.rot
+      );
     }
     if (rightList.length > 0) {
-      this.registerHitbox('dirty_bowl_right', 0.64, 1.13, -1.04, 96);
+      this.registerHitbox('dirty_bowl_right', shelfCenterX, 1.15, shelfCenterZ, 108);
     }
 
-    // Анимация руки, забирающей грязную миску с левой или правой полки в мойку
+    // Анимация руки, забирающей верхнюю грязную миску с пирамиды в мойку
     if (this.collectDirtyAnim.active && this.collectDirtyAnim.bowl) {
       const p = Math.min(1, this.collectDirtyAnim.timer / this.collectDirtyAnim.duration);
       const s = p * p * (3 - 2 * p);
-      const startX = this.collectDirtyAnim.side === 'right' ? 0.62 : -0.62;
+      const startX = shelfCenterX;
       const targetX = -0.88;
       const bx = startX + (targetX - startX) * s;
-      const by = 1.09 + Math.sin(p * Math.PI) * 0.1 - s * 0.14;
+      const by = 1.14 + Math.sin(p * Math.PI) * 0.1 - s * 0.16;
       const bz = -1.04 + s * 0.55;
-      this.drawDirtyBowl3D(bx, by, bz, this.collectDirtyAnim.bowl.broth, 0.5 * (1 - p * 0.25));
+      this.drawDirtyBowl3D(
+        bx,
+        by,
+        bz,
+        this.collectDirtyAnim.bowl.broth,
+        0.48 * (1 - p * 0.25),
+        [0.2 * (1 - p), 0.4 * p, -0.25 * (1 - p)]
+      );
       this.drawBox(bx + 0.06, by + 0.03, bz + 0.08, 0.07, 0.044, 0.13, [0.16, 0.14, 0.24], 0.22, [0.2, 0.2, 0]);
       this.drawBox(bx + 0.06, by + 0.055, bz + 0.08, 0.074, 0.012, 0.04, [0.0, 0.96, 0.83], 0.92, [0.2, 0.2, 0]);
     }
   }
 
-  // 3D-модель грязной миски после еды (с остатками бульона на дне, прилипшим колечком лука и палочками поперёк ободка!)
-  drawDirtyBowl3D(x, y, z, brothId = 'tonkotsu', s = 0.5) {
-    this.drawMesh('bowl_lathe', x, y, z, 0.42 * s, 0.165 * s, 0.42 * s, [0.15, 0.1, 0.23], 0.08, null, 0.7, 3);
+  // 3D-модель грязной миски после еды (с поддержкой наклона rot для пирамиды из грязной посуды!)
+  drawDirtyBowl3D(x, y, z, brothId = 'tonkotsu', s = 0.5, rot = null) {
+    const rx = rot ? rot[0] : 0;
+    const ry = rot ? rot[1] : 0;
+    const rz = rot ? rot[2] : 0;
+    this.drawMesh('bowl_lathe', x, y, z, 0.42 * s, 0.165 * s, 0.42 * s, [0.15, 0.1, 0.23], 0.08, [rx, ry, rz], 0.7, 3);
     const bMap = {
       tonkotsu: [0.76, 0.58, 0.34],
       chili_broth: [0.78, 0.18, 0.14],
       miso_mushroom: [0.52, 0.16, 0.74]
     };
     const bCol = bMap[brothId] || bMap.tonkotsu;
-    // Остатки бульона и капли на самом дне миски
-    this.drawMesh('cylinder', x, y + 0.042 * s, z, 0.24 * s, 0.015 * s, 0.24 * s, bCol, 0.25, null, 0.85, 4);
-    this.draw3DScallionRing(x + 0.04 * s, y + 0.055 * s, z - 0.02 * s, 0.65 * s, [0.2, 0.5, 0]);
-    // Использованные бамбуковые палочки «Варибаси», положенные поперёк ободка пустой миски
-    this.drawBox(x, y + 0.168 * s, z - 0.018 * s, 0.44 * s, 0.012 * s, 0.012 * s, [0.85, 0.72, 0.5], 0.1, [0, 0.22, 0]);
-    this.drawBox(x, y + 0.168 * s, z + 0.018 * s, 0.44 * s, 0.012 * s, 0.012 * s, [0.85, 0.72, 0.5], 0.1, [0, 0.12, 0]);
+    // Остатки бульона и капли на дне наклонённой миски
+    this.drawMesh(
+      'cylinder',
+      x - Math.sin(rz) * 0.04 * s,
+      y + 0.042 * s,
+      z + Math.sin(rx) * 0.04 * s,
+      0.23 * s,
+      0.015 * s,
+      0.23 * s,
+      bCol,
+      0.25,
+      [rx, ry, rz],
+      0.85,
+      4
+    );
+    this.draw3DScallionRing(x + 0.035 * s, y + 0.055 * s, z - 0.02 * s, 0.65 * s, [rx + 0.2, ry + 0.5, rz]);
+    // Использованные бамбуковые палочки «Варибаси», торчащие под углом из грязной миски
+    const stickY = y + 0.155 * s;
+    this.drawBox(x, stickY, z - 0.016 * s, 0.44 * s, 0.012 * s, 0.012 * s, [0.85, 0.72, 0.5], 0.1, [rx, ry + 0.24, rz]);
+    this.drawBox(x, stickY, z + 0.016 * s, 0.44 * s, 0.012 * s, 0.012 * s, [0.85, 0.72, 0.5], 0.1, [rx, ry + 0.08, rz]);
   }
 
   // =========================================================================
@@ -3159,15 +3158,27 @@ export class FirstPersonWebGLScene {
       this.drawBox(sinkX + r * 0.055, sinkY + 0.045, sinkZ + 0.33, 0.008, 0.045, 0.14, [0.68, 0.75, 0.84], 0.15, null, 0.92);
     }
 
-    // 5. СТОПКА ГРЯЗНЫХ МИСОК ВНУТРИ РАКОВИНЫ (rt.dirtyInSink)
-    const visibleDirty = Math.min(6, dirtyList.length);
+    // 5. ПИРАМИДА ИЗ ГРЯЗНЫХ МИСОК ПОД НАКЛОНОМ ВНУТРИ РАКОВИНЫ (rt.dirtyInSink)
+    const sinkPyramid = [
+      { dx: -0.05, dy: 0.026, dz: -0.09, rot: [0.12, 0.3, -0.14] },
+      { dx: 0.07, dy: 0.028, dz: 0.06, rot: [-0.14, -0.4, 0.16] },
+      { dx: -0.04, dy: 0.03, dz: 0.1, rot: [0.1, 0.6, 0.12] },
+      { dx: 0.02, dy: 0.072, dz: -0.02, rot: [0.24, -0.5, 0.28] },
+      { dx: -0.01, dy: 0.076, dz: 0.05, rot: [-0.22, 0.45, -0.26] },
+      { dx: 0.01, dy: 0.122, dz: 0.01, rot: [0.26, 0.75, -0.24] }
+    ];
+    const visibleDirty = Math.min(10, dirtyList.length);
     for (let i = 0; i < visibleDirty; i++) {
-      const col = i % 2;
-      const layer = Math.floor(i / 2);
-      const dx = sinkX - 0.05 + col * 0.11;
-      const dy = sinkY + 0.028 + layer * 0.036;
-      const dz = sinkZ - 0.06 + col * 0.12;
-      this.drawDirtyBowl3D(dx, dy, dz, dirtyList[i].broth, 0.48);
+      const sp = sinkPyramid[i % sinkPyramid.length];
+      const extraY = Math.floor(i / sinkPyramid.length) * 0.04;
+      this.drawDirtyBowl3D(
+        sinkX + sp.dx,
+        sinkY + sp.dy + extraY,
+        sinkZ + sp.dz,
+        dirtyList[i].broth,
+        0.46,
+        sp.rot
+      );
     }
 
     // 6. АНИМАЦИЯ МЫТЬЯ МИСКИ ПОД СТРУЁЙ ВОДЫ С ГУБКОЙ И ШАПКОЙ МЫЛЬНОЙ ПЕНЫ!

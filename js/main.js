@@ -1,16 +1,16 @@
-import { GAME_CONFIG } from './config.js?v=45';
-import { gameState, createShiftRuntimeState } from './state.js?v=45';
-import { audio } from './audio.js?v=45';
+import { GAME_CONFIG } from './config.js?v=46';
+import { gameState, createShiftRuntimeState } from './state.js?v=46';
+import { audio } from './audio.js?v=46';
 import {
   buildCustomerPortraitSVG,
   buildCourierDroneSVG,
   generateAppleTouchIcon
-} from './renderer.js?v=45';
-import { FirstPersonWebGLScene } from './webgl3d.js?v=45';
-import { CustomerAndDeliverySystem } from './customers.js?v=45';
-import { KitchenSystem } from './kitchen.js?v=45';
-import { EconomySystem } from './economy.js?v=45';
-import { TutorialSystem } from './tutorial.js?v=45';
+} from './renderer.js?v=46';
+import { FirstPersonWebGLScene } from './webgl3d.js?v=46';
+import { CustomerAndDeliverySystem } from './customers.js?v=46';
+import { KitchenSystem } from './kitchen.js?v=46';
+import { EconomySystem } from './economy.js?v=46';
+import { TutorialSystem } from './tutorial.js?v=46';
 
 class CyberRamenApp {
   constructor() {
@@ -220,7 +220,7 @@ class CyberRamenApp {
 
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker
-        .register('./sw.js?v=45', { updateViaCache: 'none' })
+        .register('./sw.js?v=46', { updateViaCache: 'none' })
         .then((reg) => reg.update())
         .catch(() => {});
     }
@@ -356,10 +356,24 @@ class CyberRamenApp {
 
   handleHorizontalSwipe(dir) {
     const rt = gameState.runtime;
-    // Когда камера поднята наверх на персонажа (cameraFocus === 'customer'),
-    // свайпы влево и вправо поворачивают взгляд чуть влево (на левую полку) и чуть вправо (на правую полку)!
+    // Когда камера поднята наверх (cameraFocus === 'customer'):
+    // - свайпы влево/вправо поворачивают взгляд между левой полкой (-1), гостем (0) и правой полкой с грязной посудой (+1);
+    // - если мы уже смотрим на правую кучу с посудой (+1) и свайпаем вправо (+1) -> опускаемся к холодильнику (Сектор 2)!
+    // - если мы уже смотрим на левую полку (-1) и свайпаем влево (-1) -> опускаемся к плите (Сектор 0)!
     if (rt.activeSector === 1 && rt.cameraFocus === 'customer') {
       const curSide = rt.customerPanSide || 0;
+      if (curSide === 1 && dir === 1) {
+        rt.customerPanSide = 0;
+        rt.cameraFocus = 'worktable';
+        this.switchSector(2);
+        return;
+      }
+      if (curSide === -1 && dir === -1) {
+        rt.customerPanSide = 0;
+        rt.cameraFocus = 'worktable';
+        this.switchSector(0);
+        return;
+      }
       const nextSide = Math.max(-1, Math.min(1, curSide + dir));
       if (nextSide !== curSide) {
         rt.customerPanSide = nextSide;

@@ -1,6 +1,6 @@
-import { GAME_CONFIG } from './config.js?v=45';
-import { gameState } from './state.js?v=45';
-import { audio } from './audio.js?v=45';
+import { GAME_CONFIG } from './config.js?v=46';
+import { gameState } from './state.js?v=46';
+import { audio } from './audio.js?v=46';
 
 export class KitchenSystem {
   constructor(callbacks) {
@@ -96,7 +96,7 @@ export class KitchenSystem {
       }
     }
 
-    // 4. Таймеры гостей, которые едят из керамических мисок и затем оставляют грязную миску на левой или правой полке прилавка!
+    // 4. Таймеры гостей, которые едят из керамических мисок и затем оставляют грязную миску на ПРАВОЙ полке прилавка!
     if (Array.isArray(rt.eatingTimers) && rt.eatingTimers.length > 0) {
       for (let i = rt.eatingTimers.length - 1; i >= 0; i--) {
         const item = rt.eatingTimers[i];
@@ -107,15 +107,10 @@ export class KitchenSystem {
             broth: item.broth || 'tonkotsu',
             placedAt: performance.now()
           };
-          if (item.side === 'right') {
-            rt.dirtyShelfRight.push(dirtyBowl);
-          } else {
-            rt.dirtyShelfLeft.push(dirtyBowl);
-          }
+          rt.dirtyShelfRight.push(dirtyBowl);
           audio.playTapPop();
-          const sideLabel = item.side === 'right' ? 'правой' : 'левой';
           this.onToast(
-            `🍽️ Гость доел и оставил грязную миску на ${sideLabel} полке прилавка!`,
+            '🍽️ Гость доел и оставил грязную миску на правой полке прилавка!',
             '#ffaa00'
           );
         }
@@ -670,13 +665,11 @@ export class KitchenSystem {
       leftBadReviewFromTable ? '#ffaa00' : evalRes.isPerfect ? '#10f56c' : '#00f5d4'
     );
 
-    // Если отдали заказ в керамической миске — через 8–10 секунд гость доест и оставит грязную миску на левой или правой полке прилавка!
+    // Если отдали заказ в керамической миске — через 8–10 секунд гость доест и оставит грязную миску на правой полке прилавка!
     if (rt.activeVessel.type === 'bowl') {
-      const side = rt.nextDirtyShelfSide || 'left';
-      rt.nextDirtyShelfSide = side === 'left' ? 'right' : 'left';
       rt.eatingTimers.push({
         remainingSec: 7.5 + Math.random() * 2.5,
-        side,
+        side: 'right',
         broth: rt.activeVessel.broth || 'tonkotsu'
       });
     }
