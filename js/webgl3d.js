@@ -1,5 +1,5 @@
-import { GAME_CONFIG } from './config.js?v=50';
-import { gameState } from './state.js?v=50';
+import { GAME_CONFIG } from './config.js?v=51';
+import { gameState } from './state.js?v=51';
 import {
   createAlleyBackdropTexture,
   createBuildingFacadeTexture,
@@ -8,7 +8,7 @@ import {
   createKanjiSignTextures,
   createPedestrianTextures,
   AnimeCustomerTextureRenderer
-} from './art3d.js?v=50';
+} from './art3d.js?v=51';
 
 /**
  * Полноэкранный WebGL 3D движок от первого лица с процедурной высокодетализированной
@@ -1933,8 +1933,7 @@ export class FirstPersonWebGLScene {
     this.drawBox(0, 0.54, -1.06, 2.32, 0.98, 0.09, [0.15, 0.18, 0.24], 0.05, null, 0.5);
     this.drawBox(0, 1.045, -1.06, 2.34, 0.048, 0.13, counterCol, 0.08, null, 0.68);
     this.drawBox(0, 1.068, -1.0, 2.24, 0.015, 0.02, trimCol, trimEmissive);
-    // Деревянные подставки-полочки на левом (x = -0.68) и правом (x = +0.68) крыле верхнего бортика прилавка
-    this.drawBox(-0.68, 1.072, -1.04, 0.58, 0.016, 0.24, [0.32, 0.2, 0.14], 0.08, null, 0.55);
+    // Деревянная подставка-столешница на правом (x = +0.68) крыле верхнего бортика прилавка под грязные миски
     this.drawBox(0.68, 1.072, -1.04, 0.58, 0.016, 0.24, [0.32, 0.2, 0.14], 0.08, null, 0.55);
 
     // ЛЕВАЯ СТОЛЕШНИЦА ВАРОЧНОГО ЦЕХА И МОЙКИ ПОСУДЫ (удлинена вдоль +Z под раковину левее плиты!)
