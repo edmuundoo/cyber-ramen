@@ -1,5 +1,5 @@
-import { GAME_CONFIG } from './config.js?v=67';
-import { gameState } from './state.js?v=67';
+import { GAME_CONFIG } from './config.js?v=68';
+import { gameState } from './state.js?v=68';
 import {
   createAlleyBackdropTexture,
   createBuildingFacadeTexture,
@@ -8,7 +8,7 @@ import {
   createKanjiSignTextures,
   createPedestrianTextures,
   AnimeCustomerTextureRenderer
-} from './art3d.js?v=67';
+} from './art3d.js?v=68';
 
 /**
  * Полноэкранный WebGL 3D движок от первого лица с процедурной высокодетализированной
@@ -2377,64 +2377,163 @@ export class FirstPersonWebGLScene {
     this.drawBox(x + 0.004 * s, y + 0.008 * s, z - 0.115 * s, 0.006 * s, 0.006 * s, 0.035 * s, [0.88, 0.74, 0.48], 0.12, rot, 0.3);
   }
 
-  draw3DTakeoutBag(x, y, z, s = 1.0, hasFood = false, hasChopsticks = false, isCarried = false, rot = null) {
-    const kraftCol = [0.76, 0.58, 0.38];     // Плотный крафтовый бумажный пакет
-    const kraftDark = [0.62, 0.46, 0.29];    // Складки по бокам крафт-пакета
-    const redBrand = [0.9, 0.16, 0.25];      // Фирменная красная полоса CYBER RAMEN
-    const cyanStamp = [0.0, 0.92, 0.82];     // Неоновый штамп раменной
-    const bw = 0.23 * s;
-    const bh = 0.23 * s;
-    const bd = 0.16 * s;
+  draw3DTakeoutBag(x, y, z, s = 1.0, foodItem = false, hasChopsticks = false, isCarried = false, rot = null) {
+    const kraftOuter = [0.77, 0.58, 0.37];   // Плотный тёплый японский крафт снаружи
+    const kraftFold = [0.64, 0.47, 0.29];    // Боковые складки-фальцы, кромки и усиления ручек
+    const kraftInner = [0.47, 0.34, 0.21];   // Притемнённая внутренняя стенка пакета
+    const kraftBottom = [0.33, 0.23, 0.14];  // Глубокое тёмное внутреннее дно
+    const ropeColA = [0.56, 0.39, 0.23];     // Витой бумажный жгут ручки (тон 1)
+    const ropeColB = [0.46, 0.31, 0.18];     // Витой бумажный жгут ручки (тон 2)
+    const redBrand = [0.9, 0.16, 0.25];      // Фирменная карминовая графика CYBER RAMEN
+    const creamLabel = [0.95, 0.92, 0.85];   // Кремовый акцент штампа
+    const cyanStamp = [0.0, 0.92, 0.82];     // Неоновый бирюзовый штамп раменной
+
+    // Просторный широкий пакет (чуть меньше подноса 0.60 x 0.38 — свободно вмещает запечатанную вок-коробку, палочки и напиток!)
+    const bw = 0.44 * s;
+    const bh = 0.26 * s;
+    const bd = 0.27 * s;
+    const wt = 0.01 * s; // Толщина картонных стенок (внутри настоящее пустое 3D-пространство!)
 
     const ry = rot ? rot[1] || 0 : 0;
     const cy = Math.cos(ry);
     const sry = Math.sin(ry);
-    const isSideFacing = Math.abs(ry) > 0.7;
     const wp = (lx, lz) => [x + lx * cy + lz * sry, z - lx * sry + lz * cy];
 
-    // Основной объём стоячего крафтового пакета
-    this.drawBox(x, y + bh * 0.5, z, bw, bh, bd, kraftCol, 0.1, rot, 0.22);
-    // Боковые складки-фальцы пакета
-    const [flx, flz] = wp(-bw * 0.502, 0);
-    const [frx, frz] = wp(bw * 0.502, 0);
-    this.drawBox(flx, y + bh * 0.5, flz, 0.008 * s, bh * 0.95, bd * 0.72, kraftDark, 0.06, rot, 0.2);
-    this.drawBox(frx, y + bh * 0.5, frz, 0.008 * s, bh * 0.95, bd * 0.72, kraftDark, 0.06, rot, 0.2);
-    // Фирменный принт на передней и задней стенках пакета
-    const [fpx, fpz] = wp(0, bd * 0.505);
-    const [bpx, bpz] = wp(0, -bd * 0.505);
-    this.drawBox(fpx, y + bh * 0.55, fpz, bw * 0.82, 0.036 * s, 0.006 * s, redBrand, 0.38, rot, 0.4);
-    this.drawBox(fpx, y + bh * 0.36, fpz, bw * 0.46, 0.014 * s, 0.006 * s, cyanStamp, 0.78, rot, 0.5);
-    this.drawBox(bpx, y + bh * 0.55, bpz, bw * 0.82, 0.036 * s, 0.006 * s, redBrand, 0.38, rot, 0.4);
+    // Вспомогательная функция для гладких 3D-сегментов витых ручек
+    const drawSeg = (ax, ay, az, bx, by, bz, w, col, emissive = 0.08, spec = 0.26) => {
+      const vx = bx - ax;
+      const vy = by - ay;
+      const vz = bz - az;
+      const len = Math.hypot(vx, vy, vz) || 0.001;
+      const ux = vx / len;
+      const uy = vy / len;
+      const uz = vz / len;
+      const rySeg = Math.asin(Math.max(-0.995, Math.min(0.995, ux)));
+      const rxSeg = Math.atan2(-uy, uz);
+      this.drawBox((ax + bx) * 0.5, (ay + by) * 0.5, (az + bz) * 0.5, w, w, len * 1.14, col, emissive, [rxSeg, rySeg, 0], spec);
+    };
 
-    if (isCarried) {
-      // Закрытый сложенный верх пакета, когда несём его клиенту
-      this.drawBox(x, y + bh + 0.012 * s, z, bw * 0.96, 0.026 * s, bd * 0.48, kraftDark, 0.12, rot, 0.25);
-    } else {
-      // Открытая горловина пакета (внутри виден край вок-коробочки, если заказ уже положен внутрь!)
-      this.drawBox(x, y + bh + 0.002 * s, z, bw * 0.88, 0.006 * s, bd * 0.82, [0.16, 0.11, 0.08], 0.04, rot, 0.15);
-      if (hasFood) {
-        this.drawBox(x, y + bh * 0.94, z, bw * 0.62, 0.045 * s, bd * 0.62, [0.95, 0.91, 0.84], 0.16, rot, 0.35);
-        this.drawBox(x, y + bh * 0.98, z, bw * 0.58, 0.015 * s, bd * 0.58, redBrand, 0.35, rot, 0.4);
+    // 1. ДНО ПАКЕТА (внешнее + притемнённая внутренняя картонка-вкладыш, создающая реальную глубину)
+    this.drawBox(x, y + 0.006 * s, z, bw, 0.012 * s, bd, kraftFold, 0.06, rot, 0.2);
+    this.drawBox(x, y + 0.013 * s, z, bw - wt * 2.1, 0.004 * s, bd - wt * 2.1, kraftBottom, 0.02, rot, 0.12);
+
+    // 2. ПЕРЕДНЯЯ И ЗАДНЯЯ СТЕНКИ ПОЛОГО ПАКЕТА + ВНУТРЕННИЙ ЗАТЕНЁННЫЙ СЛОЙ + УТОЛЩЁННЫЙ ПОДГИБ КРОМКИ СВЕРХУ
+    for (const side of [1, -1]) {
+      const wallZ = side * (bd * 0.5 - wt * 0.5);
+      const innerZ = side * (bd * 0.5 - wt * 1.05);
+      const [wx, wz] = wp(0, wallZ);
+      const [ix, iz] = wp(0, innerZ);
+
+      // Внешняя крафтовая стенка
+      this.drawBox(wx, y + bh * 0.5, wz, bw, bh, wt, kraftOuter, 0.1, rot, 0.24);
+      // Внутренняя притемнённая сторона стенки (хорошо читается при взгляде сверху внутрь!)
+      this.drawBox(ix, y + bh * 0.5, iz, bw - wt * 1.8, bh - 0.016 * s, 0.003 * s, kraftInner, 0.03, rot, 0.12);
+      // Аккуратный утолщённый верхний подгиб кромки пакета (манжета)
+      this.drawBox(wx, y + bh - 0.008 * s, wz, bw + 0.004 * s, 0.016 * s, wt + 0.005 * s, kraftFold, 0.08, rot, 0.22);
+      // Внутренняя картонка-усиление (патч), к которой приклеена витая ручка!
+      const [px, pz] = wp(0, side * (bd * 0.5 - wt * 1.25));
+      this.drawBox(px, y + bh - 0.03 * s, pz, 0.21 * s, 0.04 * s, 0.004 * s, kraftFold, 0.05, rot, 0.18);
+
+      // Фирменная графика CYBER RAMEN на наружной стороне передней и задней стенок
+      const printZ = side * (bd * 0.5 + 0.003 * s);
+      const [prx, prz] = wp(0, printZ);
+      // Широкая алая полоса-оби
+      this.drawBox(prx, y + bh * 0.54, prz, bw * 0.86, 0.044 * s, 0.004 * s, redBrand, 0.36, rot, 0.38);
+      // Японская квадратная печать-штамп слева от центра и бирюзовая кибер-линия снизу
+      const [stx, stz] = wp(-bw * 0.24, printZ + side * 0.0022 * s);
+      const [st2x, st2z] = wp(-bw * 0.24, printZ + side * 0.0036 * s);
+      this.drawBox(stx, y + bh * 0.54, stz, 0.048 * s, 0.048 * s, 0.003 * s, creamLabel, 0.24, rot, 0.35);
+      this.drawBox(st2x, y + bh * 0.54, st2z, 0.028 * s, 0.028 * s, 0.003 * s, redBrand, 0.45, rot, 0.4);
+      // Светящийся неоновый штамп раменной под красной лентой
+      const [cyx, cyz] = wp(bw * 0.06, printZ + side * 0.001 * s);
+      this.drawBox(cyx, y + bh * 0.35, cyz, bw * 0.52, 0.014 * s, 0.003 * s, cyanStamp, 0.78, rot, 0.52);
+      // Тонкий нижний сгиб дна снаружи
+      this.drawBox(prx, y + 0.034 * s, prz, bw * 0.94, 0.006 * s, 0.003 * s, kraftFold, 0.04, rot, 0.18);
+    }
+
+    // 3. ЛЕВАЯ И ПРАВАЯ БОКОВЫЕ СТЕНКИ С ОБЪЁМНОЙ СКЛАДКОЙ-ФАЛЬЦЕМ (GUSSET)
+    for (const side of [-1, 1]) {
+      const outerX = side * (bw * 0.5 - wt * 0.5);
+      const innerX = side * (bw * 0.5 - wt * 1.05);
+      const creaseX = side * (bw * 0.5 - 0.014 * s);
+
+      // Передняя и задняя половинки боковой стенки (между ними утопленный вертикальный фальц-складка!)
+      for (const zHalf of [-1, 1]) {
+        const [bx, bz] = wp(outerX, zHalf * bd * 0.245);
+        this.drawBox(bx, y + bh * 0.5, bz, wt, bh, bd * 0.47, kraftFold, 0.08, rot, 0.22);
+      }
+      // Утопленная вертикальная линия сгиба-гармошки по центру боковины
+      const [cx, cz] = wp(creaseX, 0);
+      this.drawBox(cx, y + bh * 0.5, cz, 0.014 * s, bh - 0.008 * s, 0.022 * s, kraftInner, 0.04, rot, 0.15);
+      // Внутренний притемнённый слой боковины
+      const [ix, iz] = wp(innerX, 0);
+      this.drawBox(ix, y + bh * 0.5, iz, 0.003 * s, bh - 0.016 * s, bd - wt * 1.8, kraftInner, 0.03, rot, 0.12);
+      // Верхний край боковины и 2 угловых вертикальных ребра (герметичные углы без просветов)
+      const [tx, tz] = wp(outerX, 0);
+      this.drawBox(tx, y + bh - 0.008 * s, tz, wt + 0.004 * s, 0.016 * s, bd, kraftFold, 0.08, rot, 0.22);
+      for (const zCorner of [-1, 1]) {
+        const [kx, kz] = wp(side * (bw * 0.5 - 0.004 * s), zCorner * (bd * 0.5 - 0.004 * s));
+        this.drawBox(kx, y + bh * 0.5, kz, 0.012 * s, bh, 0.012 * s, kraftFold, 0.06, rot, 0.2);
       }
     }
 
-    // Две скрученные бумажные ручки сверху пакета
-    const [h1x, h1z] = wp(0, bd * 0.3);
-    const [h2x, h2z] = wp(0, -bd * 0.3);
-    if (isSideFacing) {
-      this.drawMesh('torus', h1x, y + bh + 0.032 * s, h1z, 0.065 * s, 0.01 * s, 0.085 * s, kraftDark, 0.1, [0, 0, Math.PI * 0.5], 0.25);
-      this.drawMesh('torus', h2x, y + bh + 0.032 * s, h2z, 0.065 * s, 0.01 * s, 0.085 * s, kraftDark, 0.1, [0, 0, Math.PI * 0.5], 0.25);
-    } else {
-      this.drawMesh('torus', h1x, y + bh + 0.032 * s, h1z, 0.085 * s, 0.01 * s, 0.065 * s, kraftDark, 0.1, [Math.PI * 0.5, 0, 0], 0.25);
-      this.drawMesh('torus', h2x, y + bh + 0.032 * s, h2z, 0.085 * s, 0.01 * s, 0.065 * s, kraftDark, 0.1, [Math.PI * 0.5, 0, 0], 0.25);
+    // 4. ПРЕДМЕТЫ ВНУТРИ ПОЛОГО ПАКЕТА (ОТЧЁТЛИВО ВИДНЫ СВЕРХУ В ПРОСТРАНСТВЕ ПАКЕТА!)
+    const hasFood = Boolean(foodItem);
+    if (hasFood) {
+      // Настоящая запечатанная 3D вок-коробочка (со сложенными клапанами, неоновой пломбой и стальной дужкой)
+      // стоит на дне пакета чуть левее центра — справа остаётся место под палочки и будущий напиток!
+      const [boxWx, boxWz] = wp(-0.075 * s, -0.01 * s);
+      this.draw3DWokBox(boxWx, y + 0.016 * s, boxWz, 0.78 * s, true);
     }
 
-    // Если в пакет положены палочки — их бумажный чехол аккуратно выглядывает из верхнего уголка!
     if (hasChopsticks) {
-      const [c1x, c1z] = wp(bw * 0.28, 0);
-      const [c2x, c2z] = wp(bw * 0.3, 0);
-      this.drawBox(c1x, y + bh + 0.03 * s, c1z, 0.022 * s, 0.11 * s, 0.01 * s, [0.95, 0.93, 0.88], 0.24, [0, ry, -0.22], 0.35);
-      this.drawBox(c2x, y + bh + 0.055 * s, c2z, 0.024 * s, 0.03 * s, 0.012 * s, redBrand, 0.45, [0, ry, -0.22], 0.45);
+      // Японские палочки «Варибаси» в бумажном чехле стоят ВНУТРИ пакета справа, опираясь на внутреннюю стенку
+      // и аккуратно выглядывая верхним красным кончиком из горловины!
+      const [ch1x, ch1z] = wp(bw * 0.3, -0.01 * s);
+      const [ch2x, ch2z] = wp(bw * 0.34, -0.01 * s);
+      drawSeg(ch1x, y + 0.025 * s, ch1z, ch2x, y + bh + 0.065 * s, ch2z, 0.022 * s, [0.95, 0.93, 0.88], 0.22, 0.35);
+      // Красная фирменная манжета на чехле палочек
+      const mx1 = ch1x + (ch2x - ch1x) * 0.68;
+      const my1 = (y + 0.025 * s) + (bh + 0.04 * s) * 0.68;
+      const mz1 = ch1z + (ch2z - ch1z) * 0.68;
+      const mx2 = ch1x + (ch2x - ch1x) * 0.88;
+      const my2 = (y + 0.025 * s) + (bh + 0.04 * s) * 0.88;
+      const mz2 = ch1z + (ch2z - ch1z) * 0.88;
+      drawSeg(mx1, my1, mz1, mx2, my2, mz2, 0.0245 * s, redBrand, 0.44, 0.42);
+      // Кончики бамбуковых палочек сверху чехла
+      const tx2 = ch1x + (ch2x - ch1x) * 1.1;
+      const ty2 = (y + 0.025 * s) + (bh + 0.04 * s) * 1.1;
+      const tz2 = ch1z + (ch2z - ch1z) * 1.1;
+      drawSeg(ch2x, y + bh + 0.065 * s, ch2z, tx2, ty2, tz2, 0.011 * s, [0.88, 0.74, 0.48], 0.14, 0.3);
+    }
+
+    // 5. УЛУЧШЕННЫЕ ПЛАВНЫЕ 3D-РУЧКИ ИЗ ВИТОГО КРАФТОВОГО ШНУРА (8-СЕГМЕНТНЫЕ АРКИ С КРЕПЛЕНИЕМ ИЗНУТРИ!)
+    const segs = 8;
+    const halfSpan = 0.092 * s;
+    const archH = isCarried ? 0.125 * s : 0.112 * s;
+    const anchorY = y + bh - 0.024 * s;
+    const ropeW = 0.011 * s;
+
+    for (const side of [1, -1]) {
+      const baseLz = side * (bd * 0.5 - wt * 1.15);
+      let prevPt = null;
+      for (let i = 0; i <= segs; i++) {
+        const u = i / segs;
+        const ang = Math.PI * (1 - u); // от PI (левая ножка) до 0 (правая ножка)
+        const sinA = Math.sin(ang);
+        const lx = Math.cos(ang) * halfSpan;
+        const ly = anchorY + Math.pow(sinA, 0.72) * archH;
+        // Когда пакет стоит — ручки мягко отклоняются чуть наружу, открывая полный вид внутрь пакета;
+        // когда несём клиенту — обе ручки сходятся к центру прямо в перчатку героя!
+        const lz = isCarried
+          ? baseLz * (1 - Math.pow(sinA, 0.82))
+          : baseLz + side * (sinA * 0.018 * s);
+        const [wx, wz] = wp(lx, lz);
+        if (prevPt) {
+          drawSeg(prevPt[0], prevPt[1], prevPt[2], wx, ly, wz, ropeW, i % 2 === 0 ? ropeColA : ropeColB, 0.08, 0.25);
+        }
+        prevPt = [wx, ly, wz];
+      }
     }
   }
 
@@ -2470,14 +2569,13 @@ export class FirstPersonWebGLScene {
     const bagPulse = !a.hasBag ? 0.55 + 0.35 * Math.sin(this.time * 5.5 + 1.0) : 0.2;
     this.drawBox(bagX - 0.26, bagY - 0.002, bagZ, 0.012, 0.01, 0.48, [0.06, 0.96, 0.48], bagPulse);
 
-    // Стоячие крафт-пакеты в открытой полке под холодильником (лицевой стороной к игроку!)
+    // Стоячие просторные крафт-пакеты в открытой полке под холодильником (лицевой стороной к игроку, без пересечений!)
     const bagRot = [0, -Math.PI * 0.5, 0];
-    this.draw3DTakeoutBag(bagX + 0.03, bagY, bagZ - 0.13, 0.94, false, false, false, bagRot);
-    this.draw3DTakeoutBag(bagX + 0.02, bagY, bagZ + 0.13, 0.94, false, false, false, bagRot);
-    this.draw3DTakeoutBag(bagX - 0.09, bagY, bagZ + 0.01, 0.96, false, false, false, bagRot);
+    this.draw3DTakeoutBag(bagX - 0.12, bagY, bagZ - 0.04, 0.8, false, false, false, bagRot);
+    this.draw3DTakeoutBag(bagX + 0.1, bagY, bagZ + 0.07, 0.8, false, false, false, bagRot);
 
     if (isUnderCounter && underSide === 1) {
-      this.registerHitbox('under_bag_stack', bagX, bagY + 0.12, bagZ, 124);
+      this.registerHitbox('under_bag_stack', bagX - 0.04, bagY + 0.14, bagZ, 128);
     }
   }
 
@@ -2551,19 +2649,23 @@ export class FirstPersonWebGLScene {
     // Если пакет стоит на столе/подносе (и мы не проигрываем анимацию упаковки и не держим его перед клиентом)
     const bagBaseY = a.hasTray ? asmY + 0.016 : asmY;
     const showStaticBag = a.hasBag && !this.bagPackAnim.active && !isCarryingOrder;
+    const vesselFlyingIntoBag =
+      this.assemblyVesselAnim.active &&
+      this.assemblyVesselAnim.action === 'place' &&
+      this.assemblyVesselAnim.intoBag;
     if (showStaticBag) {
       this.draw3DTakeoutBag(
         asmX,
         bagBaseY,
         asmZ,
-        0.96,
-        Boolean(a.vessel),
-        Boolean(a.hasChopsticks),
+        1.0,
+        vesselFlyingIntoBag ? null : a.vessel,
+        Boolean(a.hasChopsticks && !this.chopsticksPlaceAnim.active),
         false
       );
     }
 
-    // Анимация появления пакета из-под холодильника И ПЕРЕКЛАДЫВАНИЯ КОРОБКИ С ПОДНОСА В ПАКЕТ!
+    // Анимация появления пакета из-под холодильника И ПЕРЕКЛАДЫВАНИЯ КОРОБКИ С ПОДНОСА В ПОЛЫЙ ПАКЕТ!
     if (this.bagPackAnim.active) {
       const p = Math.min(1, this.bagPackAnim.timer / this.bagPackAnim.duration);
       if (!this.bagPackAnim.hadItems) {
@@ -2571,44 +2673,54 @@ export class FirstPersonWebGLScene {
         const bx = 0.36 + (asmX - 0.36) * s;
         const by = 0.64 + (bagBaseY - 0.64) * s + Math.sin(p * Math.PI) * 0.12;
         const bz = 0.08 + (asmZ - 0.08) * s;
-        this.draw3DTakeoutBag(bx, by, bz, 0.96, false, false, false);
-        this.drawBox(bx + 0.12, by + 0.14, bz + 0.04, 0.068, 0.036, 0.12, [0.16, 0.14, 0.24], 0.22, [0.15, 0.25, -0.15]);
+        this.draw3DTakeoutBag(bx, by, bz, 1.0, false, false, false);
+        this.drawBox(bx + 0.16, by + 0.24, bz + 0.04, 0.068, 0.036, 0.12, [0.16, 0.14, 0.24], 0.22, [0.15, 0.25, -0.15]);
       } else {
         if (p < 0.34) {
           const t = p / 0.34;
           const s = t * t * (3 - 2 * t);
           if (this.bagPackAnim.prevVessel) {
-            this.drawFilledVessel3D(asmX - 0.13, asmY + 0.016, asmZ, this.bagPackAnim.prevVessel, 0.72);
+            this.drawFilledVessel3D(asmX - 0.13, asmY + 0.016, asmZ, this.bagPackAnim.prevVessel, 0.74);
           }
           if (this.bagPackAnim.prevChopsticks) {
             this.draw3DChopsticksPack(asmX + 0.19, asmY + 0.016, asmZ, 0.98);
           }
-          const bx = 0.36 + (asmX + 0.14 - 0.36) * s;
+          const bx = 0.42 + (asmX + 0.16 - 0.42) * s;
           const by = 0.64 + (bagBaseY - 0.64) * s + Math.sin(t * Math.PI) * 0.1;
           const bz = 0.06 + (asmZ - 0.06) * s;
-          this.draw3DTakeoutBag(bx, by, bz, 0.94, false, false, false);
+          this.draw3DTakeoutBag(bx, by, bz, 0.98, false, false, false);
         } else if (p < 0.76) {
           const t = (p - 0.34) / 0.42;
           const s = t * t * (3 - 2 * t);
-          const bagPosX = asmX + 0.14;
-          this.draw3DTakeoutBag(bagPosX, bagBaseY, asmZ, 0.94, t > 0.75, t > 0.8 && this.bagPackAnim.prevChopsticks, false);
-          if (this.bagPackAnim.prevVessel && t < 0.85) {
-            const vx = (asmX - 0.13) + (bagPosX - (asmX - 0.13)) * s;
-            const vy = (asmY + 0.016) + (bagBaseY + 0.16 - (asmY + 0.016)) * s + Math.sin(t * Math.PI) * 0.12 - (t > 0.65 ? (t - 0.65) * 0.45 : 0);
-            const vsc = 0.72 * (1 - Math.max(0, t - 0.55) * 0.9);
-            this.drawFilledVessel3D(vx, vy, asmZ, this.bagPackAnim.prevVessel, Math.max(0.35, vsc));
-            this.drawBox(vx - 0.08, vy + 0.02, asmZ + 0.06, 0.068, 0.036, 0.12, [0.16, 0.14, 0.24], 0.22, [0.15, -0.25, 0.15]);
+          const bagPosX = asmX + 0.16;
+          this.draw3DTakeoutBag(
+            bagPosX,
+            bagBaseY,
+            asmZ,
+            0.98,
+            t > 0.8 ? this.bagPackAnim.prevVessel : false,
+            t > 0.82 && this.bagPackAnim.prevChopsticks,
+            false
+          );
+          if (this.bagPackAnim.prevVessel && t <= 0.8) {
+            const targetInBagX = bagPosX - 0.074;
+            const targetInBagY = bagBaseY + 0.016;
+            const vx = (asmX - 0.13) + (targetInBagX - (asmX - 0.13)) * s;
+            const vy = (asmY + 0.016) + (targetInBagY - (asmY + 0.016)) * s + Math.sin(t * Math.PI) * 0.3;
+            const sealP = Math.min(1, Math.max(0, (t - 0.12) / 0.48));
+            this.drawFilledVessel3D(vx, vy, asmZ - 0.01 * s, this.bagPackAnim.prevVessel, 0.75, sealP);
+            this.drawBox(vx - 0.08, vy + 0.06, asmZ + 0.06, 0.068, 0.036, 0.12, [0.16, 0.14, 0.24], 0.22, [0.15, -0.25, 0.15]);
           }
-          if (this.bagPackAnim.prevChopsticks && t < 0.85) {
-            const cx = (asmX + 0.19) + (bagPosX + 0.04 - (asmX + 0.19)) * s;
-            const cy = (asmY + 0.016) + (bagBaseY + 0.22 - (asmY + 0.016)) * s + Math.sin(t * Math.PI) * 0.08;
-            this.draw3DChopsticksPack(cx, cy, asmZ, 0.94, [0, 0, -0.4 * s]);
+          if (this.bagPackAnim.prevChopsticks && t <= 0.82) {
+            const cx = (asmX + 0.19) + (bagPosX + 0.13 - (asmX + 0.19)) * s;
+            const cy = (asmY + 0.016) + (bagBaseY + 0.24 - (asmY + 0.016)) * s + Math.sin(t * Math.PI) * 0.12;
+            this.draw3DChopsticksPack(cx, cy, asmZ, 0.96, [0, 0, -0.4 * s]);
           }
         } else {
           const t = (p - 0.76) / 0.24;
           const s = t * t * (3 - 2 * t);
-          const bx = (asmX + 0.14) + (asmX - (asmX + 0.14)) * s;
-          this.draw3DTakeoutBag(bx, bagBaseY, asmZ, 0.96, Boolean(a.vessel), Boolean(a.hasChopsticks), false);
+          const bx = (asmX + 0.16) + (asmX - (asmX + 0.16)) * s;
+          this.draw3DTakeoutBag(bx, bagBaseY, asmZ, 1.0, a.vessel, Boolean(a.hasChopsticks), false);
         }
       }
     }
@@ -2625,31 +2737,35 @@ export class FirstPersonWebGLScene {
       }
     }
 
-    // Анимация постановки посуды из левой руки на поднос (ближе к левому краю!) или внутрь пакета
+    // Анимация постановки посуды из левой руки на поднос (ближе к левому краю!) или внутрь полого пакета (с запечатыванием коробки!)
     if (this.assemblyVesselAnim.active && this.assemblyVesselAnim.vessel && this.assemblyVesselAnim.action === 'place') {
       const p = Math.min(1, this.assemblyVesselAnim.timer / this.assemblyVesselAnim.duration);
       const s = p * p * (3 - 2 * p);
       const handPos = this.getLeftHandWorldPos();
-      const targetX = this.assemblyVesselAnim.intoBag ? asmX : asmX - 0.13;
-      const targetY = this.assemblyVesselAnim.intoBag ? bagBaseY + 0.16 : asmY + 0.017;
+      const intoBag = Boolean(this.assemblyVesselAnim.intoBag);
+      const targetX = intoBag ? asmX - 0.075 : asmX - 0.13;
+      const targetY = intoBag ? bagBaseY + 0.016 : asmY + 0.017;
+      const targetZ = intoBag ? asmZ - 0.01 : asmZ;
+      const arcH = intoBag ? 0.28 : 0.08;
       const vx = handPos[0] + (targetX - handPos[0]) * s;
-      const vy = handPos[1] + (targetY - handPos[1]) * s + Math.sin(p * Math.PI) * 0.08;
-      const vz = handPos[2] + (asmZ - handPos[2]) * s;
-      const vsc = this.assemblyVesselAnim.intoBag ? 0.64 * (1 - s * 0.35) : 0.64 + 0.12 * s;
-      this.drawFilledVessel3D(vx, vy, vz, this.assemblyVesselAnim.vessel, vsc);
+      const vy = handPos[1] + (targetY - handPos[1]) * s + Math.sin(p * Math.PI) * arcH;
+      const vz = handPos[2] + (targetZ - handPos[2]) * s;
+      const vsc = intoBag ? 0.64 + 0.14 * s : 0.64 + 0.12 * s;
+      const sealP = intoBag ? Math.min(1, Math.max(0, (p - 0.22) / 0.55)) : 0;
+      this.drawFilledVessel3D(vx, vy, vz, this.assemblyVesselAnim.vessel, vsc, sealP);
     }
 
-    // Анимация переноса палочек Варибаси из зоны мисок и коробок (x=0.60, z=-0.36) на поднос или в пакет!
+    // Анимация переноса палочек Варибаси из зоны мисок и коробок (x=0.60, z=-0.36) на поднос или внутрь полого пакета!
     if (this.chopsticksPlaceAnim.active) {
       const p = Math.min(1, this.chopsticksPlaceAnim.timer / this.chopsticksPlaceAnim.duration);
       const s = p * p * (3 - 2 * p);
       const startX = 0.6;
       const startY = 1.03;
       const startZ = -0.36;
-      const targetX = a.hasBag ? asmX + 0.04 : asmX + 0.19;
+      const targetX = a.hasBag ? asmX + 0.135 : asmX + 0.19;
       const targetY = a.hasBag ? bagBaseY + 0.22 : asmY + 0.017;
       const cx = startX + (targetX - startX) * s;
-      const cy = startY + (targetY - startY) * s + Math.sin(p * Math.PI) * 0.1;
+      const cy = startY + (targetY - startY) * s + Math.sin(p * Math.PI) * 0.14;
       const cz = startZ + (asmZ - startZ) * s;
       this.draw3DChopsticksPack(cx, cy, cz, 1.0, [0, 0, (1 - s) * 0.6]);
       this.drawBox(cx + 0.05, cy + 0.03, cz + 0.05, 0.066, 0.034, 0.11, [0.16, 0.14, 0.24], 0.22, [0.15, 0.25, -0.15]);
@@ -4746,8 +4862,8 @@ export class FirstPersonWebGLScene {
     } else if (this.assemblyVesselAnim.active && this.assemblyVesselAnim.action === 'pickup') {
       const p = Math.min(1, this.assemblyVesselAnim.timer / this.assemblyVesselAnim.duration);
       const s = p * p * (3 - 2 * p);
-      const startX = this.assemblyVesselAnim.intoBag ? 0.0 : -0.13;
-      const startY = this.assemblyVesselAnim.intoBag ? 1.06 : 0.92;
+      const startX = this.assemblyVesselAnim.intoBag ? -0.075 : -0.13;
+      const startY = this.assemblyVesselAnim.intoBag ? 1.04 : 0.92;
       const startZ = -0.24;
       hx = startX + (basePos[0] - startX) * s;
       hy = startY + (basePos[1] - startY) * s + Math.sin(p * Math.PI) * 0.065;
@@ -5034,23 +5150,25 @@ export class FirstPersonWebGLScene {
     const showingBag = this.servePushAnim.active ? this.servePushAnim.servedBag : Boolean(a.hasBag);
 
     if (showingBag) {
-      // Поднимаемся к клиенту с наполненным крафтовым ПАКЕТОМ (поднос при этом остаётся чистым на столе!)
+      // Поднимаемся к клиенту с наполненным просторным крафтовым ПАКЕТОМ (поднос остаётся чистым на столе!)
+      const bs = 0.78 * fadeScale;
+      const bagYPos = cy - 0.13 * fadeScale;
       this.draw3DTakeoutBag(
         cx,
-        cy - 0.05,
+        bagYPos,
         cz,
-        0.86 * fadeScale,
-        true,
+        bs,
+        a.vessel || this.servePushAnim.active,
         Boolean(a.hasChopsticks),
         true
       );
-      // Правая кибер-перчатка держит пакет за ручки сверху!
-      const rhX = cx + R[0] * 0.03;
-      const rhY = cy + 0.16 * fadeScale;
-      const rhZ = cz + R[2] * 0.03;
-      const rhRot = [0.14, yawAngle + 0.15, -0.1];
-      this.drawBox(rhX, rhY, rhZ, 0.068, 0.036, 0.115, [0.16, 0.14, 0.24], 0.24, rhRot);
-      this.drawBox(rhX, rhY + 0.02, rhZ, 0.072, 0.011, 0.038, [0.0, 0.96, 0.83], 0.94, rhRot);
+      // Правая кибер-перчатка крепко держит обе сведённые витые ручки сверху пакета!
+      const rhX = cx + R[0] * 0.02;
+      const rhY = bagYPos + 0.362 * bs;
+      const rhZ = cz + R[2] * 0.02;
+      const rhRot = [0.12, yawAngle + 0.14, -0.08];
+      this.drawBox(rhX, rhY, rhZ, 0.072, 0.036, 0.115, [0.16, 0.14, 0.24], 0.24, rhRot);
+      this.drawBox(rhX, rhY + 0.02, rhZ, 0.076, 0.011, 0.038, [0.0, 0.96, 0.83], 0.94, rhRot);
     } else {
       // Поднимаемся к клиенту с собранным ПОДНОСОМ (блюдо ближе к левому краю, палочки справа)
       const ts = 0.82 * fadeScale;
