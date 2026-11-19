@@ -1,0 +1,138 @@
+@layer components {
+  /* =========================================================
+     ПОЛНОЭКРАННОЕ 3D-ПРОСТРАНСТВО ОТ ПЕРВОГО ЛИЦА
+     ========================================================= */
+  .fp-3d-viewport {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    touch-action: none;
+    background: #06030c;
+  }
+
+  .street-canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+    z-index: 1;
+    touch-action: none;
+  }
+
+  .sauce-gesture-canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 8;
+    pointer-events: none;
+    touch-action: none;
+  }
+
+  .sauce-gesture-canvas.is-active {
+    pointer-events: auto;
+    cursor: crosshair;
+  }
+
+  /* =========================================================
+     ДИЕГЕТИЧЕСКИЕ 3D-ГОЛОГРАФИЧЕСКИЕ МЕТКИ В МИРОВЫХ КООРДИНАТАХ
+     (Все клики проходят сквозь них прямо в 3D WebGL Raycaster!)
+     ========================================================= */
+  .holo-labels-layer {
+    position: absolute;
+    inset: 0;
+    z-index: 4;
+    pointer-events: none;
+    overflow: hidden;
+  }
+
+  .holo-tag {
+    position: absolute;
+    left: 0;
+    top: 0;
+    transform: translate3d(var(--hx, -999px), var(--hy, -999px), 0) translate(-50%, -50%);
+    padding: 2px 6px;
+    border-radius: 6px;
+    background: rgba(8, 5, 18, 0.78);
+    backdrop-filter: blur(3px);
+    border: 1px solid var(--ht-color, rgba(0, 245, 212, 0.55));
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.75), 0 0 8px var(--ht-glow, rgba(0, 245, 212, 0.2));
+    color: #fff;
+    font-size: 0.62rem;
+    font-weight: 800;
+    white-space: nowrap;
+    text-align: center;
+    line-height: 1.15;
+    pointer-events: none;
+    transition: border-color 0.15s ease;
+  }
+
+  .holo-tag small {
+    display: block;
+    font-size: 0.52rem;
+    font-weight: 700;
+    color: var(--ht-sub, #00f5d4);
+  }
+
+  .holo-tag.is-alert {
+    border-color: #10f56c;
+    background: rgba(6, 36, 18, 0.9);
+    box-shadow: 0 0 14px rgba(16, 245, 108, 0.65);
+    animation: badgePop 0.45s infinite alternate ease-in-out;
+  }
+
+  .holo-tag.is-danger {
+    border-color: #ff385c;
+    background: rgba(45, 6, 16, 0.9);
+    box-shadow: 0 0 14px rgba(255, 56, 92, 0.65);
+  }
+
+  /* =========================================================
+     НИЖНИЙ 360°-КОМПАС НАПРАВЛЕНИЯ ВЗГЛЯДА ПОВАРА
+     ========================================================= */
+  .fp-compass-bar {
+    display: none !important;
+  }
+
+  .compass-zone {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    padding: 5px 6px;
+    border-radius: 99px;
+    font-size: 0.64rem;
+    font-weight: 800;
+    color: var(--text-muted);
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .compass-zone.is-active {
+    background: rgba(0, 245, 212, 0.18);
+    border: 1px solid var(--neon-cyan);
+    color: #fff;
+    box-shadow: 0 0 12px rgba(0, 245, 212, 0.25);
+  }
+
+  .compass-arrow {
+    color: var(--yatai-accent);
+  }
+
+  .sector-badge {
+    padding: 1px 5px;
+    border-radius: 99px;
+    font-size: 0.54rem;
+    font-weight: 900;
+    background: var(--badge-bg, var(--neon-green));
+    color: #07050c;
+    animation: badgePop 0.6s infinite alternate ease-in-out;
+  }
+
+  @keyframes badgePop {
+    from { transform: scale(0.95); }
+    to { transform: scale(1.07); }
+  }
+}

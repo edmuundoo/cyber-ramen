@@ -1,0 +1,19 @@
+{
+  "name": "CYBER RAMEN: Night Yatai",
+  "short_name": "CyberRamen",
+  "description": "Симулятор уличного повара-продавца в ночном киберпанк-мегаполисе от первого лица.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#080510",
+  "theme_color": "#080510",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

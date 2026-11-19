@@ -1,0 +1,925 @@
+@layer reset, base, theme, components, utilities;
+
+@layer reset {
+  html, body, div, span, section, header, nav, main, footer,
+  h1, h2, h3, p, ul, ol, li, strong, button, dialog, form, canvas, svg {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  button {
+    font: inherit;
+    color: inherit;
+    background: none;
+    border: none;
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+@layer theme {
+  :root {
+    color-scheme: dark;
+    --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, sans-serif;
+    --font-mono: "SF Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+    /* Базовая неоновая палитра */
+    --bg-deep: #07050c;
+    --bg-panel: #130e1e;
+    --bg-panel-elevated: #1c142b;
+    --neon-cyan: #00f5d4;
+    --neon-pink: #ff2a85;
+    --neon-amber: #ffaa00;
+    --neon-green: #10f56c;
+    --neon-red: #ff385c;
+    --neon-purple: #9d4edd;
+    --text-main: #f5f0ff;
+    --text-muted: #9e93b8;
+
+    /* Safe Area отступы для iPhone */
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-left: env(safe-area-inset-left, 0px);
+    --safe-right: env(safe-area-inset-right, 0px);
+
+    /* Переменные эволюции тележки (по умолчанию Tier 1: Ветхая деревянная повозка) */
+    --yatai-frame-bg: linear-gradient(180deg, #3a2314 0%, #24150c 100%);
+    --yatai-counter-bg: linear-gradient(180deg, #2b1a10 0%, #170e09 100%);
+    --yatai-border-color: #6b442a;
+    --yatai-glow-shadow: 0 0 12px rgba(255, 166, 43, 0.25);
+    --yatai-accent: #ffaa33;
+    --noren-bg: #5c1922;
+    --noren-border: #d48b3b;
+    --lantern-color: #ff9922;
+  }
+
+  /* Tier 2: Неоновый рынок (Воронёная сталь и пурпурный/циановый неон) */
+  html[data-yatai-tier="2"] {
+    --yatai-frame-bg: linear-gradient(180deg, #1b1530 0%, #0f0b1d 100%);
+    --yatai-counter-bg: linear-gradient(180deg, #191329 0%, #0d0a18 100%);
+    --yatai-border-color: #ff2a85;
+    --yatai-glow-shadow: 0 0 18px rgba(255, 42, 133, 0.45);
+    --yatai-accent: #ff2a85;
+    --noren-bg: #240c3d;
+    --noren-border: #00f5d4;
+    --lantern-color: #ff2a85;
+  }
+
+  /* Tier 3: Деловой квартал корпораций (Хромированный кибер-фудтрак с голограммами) */
+  html[data-yatai-tier="3"] {
+    --yatai-frame-bg: linear-gradient(180deg, #102536 0%, #07121c 100%);
+    --yatai-counter-bg: linear-gradient(180deg, #0d1f2d 0%, #060e17 100%);
+    --yatai-border-color: #00f5d4;
+    --yatai-glow-shadow: 0 0 24px rgba(0, 245, 212, 0.55);
+    --yatai-accent: #00f5d4;
+    --noren-bg: #052936;
+    --noren-border: #00f5d4;
+    --lantern-color: #00f5d4;
+  }
+}
+
+@layer base {
+  html, body {
+    width: 100dvw;
+    height: 100dvh;
+    overflow: hidden;
+    overscroll-behavior: none;
+    background-color: var(--bg-deep);
+    color: var(--text-main);
+    font-family: var(--font-ui);
+    line-height: 1.35;
+    touch-action: manipulation;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+
+  /* Центровка в рамке 9:16 на широких экранах и 100% на iPhone */
+  body {
+    display: flex;
+    justify-content: center;
+    align-items: stretch;
+    background: radial-gradient(circle at 50% 20%, #1d1033 0%, #050308 100%);
+  }
+
+  .app-shell {
+    position: relative;
+    width: 100dvw;
+    max-width: 100%;
+    height: 100dvh;
+    display: grid;
+    grid-template-rows: auto 1fr;
+    background: var(--bg-deep);
+    overflow: hidden;
+    isolation: isolate;
+  }
+
+  /* На десктопах с мышью центрируем пропорционально высоте экрана, а на любых смартфонах и планшетах — на 100% экрана девайса */
+  @media (min-width: 680px) and (hover: hover) and (pointer: fine) {
+    .app-shell {
+      width: min(100dvw, calc(100dvh * 0.62));
+      max-width: 580px;
+      box-shadow: 0 0 50px rgba(0, 0, 0, 0.9);
+      border-inline: 1px solid rgba(255, 255, 255, 0.08);
+    }
+  }
+}
+
+@layer components {
+  /* =========================================================
+     ПЕРИФЕРИЙНЫЕ МАЯЧКИ СЛЕПЫХ ЗОН (360° УВЕДОМЛЕНИЯ)
+     ========================================================= */
+  .edge-alert {
+    position: fixed;
+    top: 38dvh;
+    bottom: calc(12dvh + var(--safe-bottom));
+    width: 10px;
+    z-index: 40;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.25s ease;
+    display: flex;
+    align-items: center;
+  }
+
+  .edge-alert-left {
+    left: 0;
+    background: linear-gradient(90deg, var(--alert-color, var(--neon-green)), transparent);
+    box-shadow: 4px 0 18px var(--alert-color, var(--neon-green));
+  }
+
+  .edge-alert-right {
+    right: 0;
+    justify-content: flex-end;
+    background: linear-gradient(270deg, var(--alert-color, var(--neon-cyan)), transparent);
+    box-shadow: -4px 0 18px var(--alert-color, var(--neon-cyan));
+  }
+
+  .edge-alert.is-visible {
+    opacity: 1;
+    animation: edgePulse 0.75s infinite alternate ease-in-out;
+  }
+
+  .edge-alert-label {
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    font-size: 0.65rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    padding: 0.35rem 0.15rem;
+    border-radius: 4px;
+    background: rgba(8, 5, 16, 0.9);
+    color: var(--alert-color, var(--neon-green));
+    border: 1px solid var(--alert-color, var(--neon-green));
+    margin-inline: 2px;
+  }
+
+  @keyframes edgePulse {
+    from { filter: brightness(0.85); }
+    to { filter: brightness(1.35); }
+  }
+
+  /* =========================================================
+     ВЕРХНИЙ HUD (АДАПТИВНЫЙ ПОД ЛЮБУЮ ШИРИНУ ЭКРАНА ДЕВАЙСА)
+     ========================================================= */
+  .top-hud {
+    padding-top: calc(var(--safe-top) + 0.32rem);
+    padding-bottom: 0.32rem;
+    padding-left: calc(var(--safe-left) + clamp(0.35rem, 2vw, 0.65rem));
+    padding-right: calc(var(--safe-right) + clamp(0.35rem, 2vw, 0.65rem));
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: clamp(0.2rem, 1.2vw, 0.45rem);
+    background: linear-gradient(180deg, rgba(10, 6, 18, 0.96), rgba(18, 12, 30, 0.88));
+    border-bottom: 1px solid var(--yatai-border-color);
+    z-index: 25;
+  }
+
+  .hud-group {
+    display: flex;
+    align-items: center;
+    gap: clamp(0.18rem, 1vw, 0.35rem);
+    min-width: 0;
+  }
+
+  .hud-pill {
+    display: flex;
+    align-items: center;
+    gap: clamp(0.18rem, 0.8vw, 0.3rem);
+    padding: clamp(0.18rem, 0.7vw, 0.25rem) clamp(0.34rem, 1.4vw, 0.52rem);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    font-size: clamp(0.66rem, 2.2vw, 0.78rem);
+    white-space: nowrap;
+  }
+
+  .hud-day {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0;
+    padding-block: 0.14rem;
+  }
+
+  .hud-label {
+    font-size: clamp(0.5rem, 1.6vw, 0.58rem);
+    color: var(--yatai-accent);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+  }
+
+  .hud-clock {
+    position: relative;
+    overflow: hidden;
+    font-family: var(--font-mono);
+    min-inline-size: clamp(3.5rem, 12vw, 4.2rem);
+    justify-content: center;
+  }
+
+  .clock-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--neon-green);
+    box-shadow: 0 0 6px var(--neon-green);
+  }
+
+  .shift-progress-track {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  .shift-progress-bar {
+    height: 100%;
+    width: var(--shift-pct, 0%);
+    background: var(--neon-cyan);
+    transition: width 0.25s linear;
+  }
+
+  .hud-credits {
+    font-family: var(--font-mono);
+    color: var(--neon-green);
+    border-color: rgba(16, 245, 108, 0.35);
+    font-size: 0.82rem;
+  }
+
+  .hud-credits.is-debt {
+    color: var(--neon-red);
+    border-color: var(--neon-red);
+    background: rgba(255, 56, 92, 0.15);
+  }
+
+  .hud-rating {
+    color: var(--neon-amber);
+    font-family: var(--font-mono);
+  }
+
+  .hud-icon-btn {
+    min-inline-size: 30px;
+    min-block-size: 30px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.07);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.85rem;
+    font-weight: 700;
+  }
+
+  .hud-icon-btn:hover:not(:disabled),
+  .hud-icon-btn:active:not(:disabled) {
+    border-color: var(--neon-cyan);
+    background: rgba(0, 245, 212, 0.14);
+  }
+
+  /* =========================================================
+     ОКНО ВЫДАЧИ ЯТАЯ (ВЕРХНЯЯ СЦЕНА С УЛИЦЕЙ И КЛИЕНТОМ)
+     ========================================================= */
+  .yatai-window-stage {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+    border-bottom: 2px solid rgba(0, 245, 212, 0.35);
+    z-index: 2;
+  }
+
+  .street-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 93dvh;
+    display: block;
+    z-index: 1;
+  }
+
+  /* Верхний карниз ятая с занавеской норэн и фонариками */
+  .yatai-roof-trim {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 28px;
+    z-index: 6;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding-inline: 10px;
+    pointer-events: none;
+  }
+
+  .noren-curtain {
+    background: var(--noren-bg);
+    border: 1px solid var(--noren-border);
+    border-top: none;
+    border-radius: 0 0 8px 8px;
+    padding: 2px 12px 4px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.65);
+  }
+
+  .noren-kanji {
+    font-size: 0.78rem;
+    font-weight: 800;
+    color: #fff;
+    text-shadow: 0 0 8px var(--yatai-accent);
+  }
+
+  .noren-sub {
+    font-size: 0.55rem;
+    letter-spacing: 0.1em;
+    color: var(--neon-cyan);
+    font-weight: 700;
+  }
+
+  .hanging-lantern {
+    width: 16px;
+    height: 22px;
+    border-radius: 7px;
+    background: radial-gradient(circle, #fff 5%, var(--lantern-color) 70%);
+    box-shadow: 0 0 14px var(--lantern-color);
+    animation: lanternSway 3.5s ease-in-out infinite alternate;
+    transform-origin: top center;
+  }
+
+  @keyframes lanternSway {
+    from { transform: rotate(-4deg); }
+    to { transform: rotate(4deg); }
+  }
+
+  /* Присутствие коллектора при долге */
+  .collector-presence {
+    position: absolute;
+    top: 30px;
+    left: 8px;
+    z-index: 8;
+    background: rgba(35, 4, 14, 0.92);
+    border: 1px solid var(--neon-red);
+    border-radius: 8px;
+    padding: 4px 8px;
+    box-shadow: 0 0 14px rgba(255, 56, 92, 0.5);
+  }
+
+  .collector-badge {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .collector-eye {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--neon-red);
+    box-shadow: 0 0 8px var(--neon-red);
+    animation: edgePulse 0.45s infinite alternate;
+  }
+
+  .collector-text {
+    display: flex;
+    flex-direction: column;
+    font-size: 0.6rem;
+  }
+
+  .collector-text strong {
+    color: var(--neon-red);
+  }
+
+  /* Курьер у окна */
+  .courier-window-unit {
+    position: absolute;
+    top: 112px;
+    right: 8px;
+    z-index: 7;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(6, 26, 36, 0.92);
+    border: 1px solid var(--neon-cyan);
+    border-radius: 10px;
+    padding: 4px 8px;
+    box-shadow: 0 0 15px rgba(0, 245, 212, 0.4);
+    animation: floatDrone 2s ease-in-out infinite alternate;
+    pointer-events: none;
+  }
+
+  @keyframes floatDrone {
+    from { transform: translateY(0); }
+    to { transform: translateY(-4px); }
+  }
+
+  .courier-avatar {
+    width: 28px;
+    height: 28px;
+  }
+
+  .courier-tag {
+    display: flex;
+    flex-direction: column;
+    font-size: 0.62rem;
+  }
+
+  .courier-tag strong {
+    color: var(--neon-cyan);
+  }
+
+  /* Сцена посетителя и облачко заказа поверх 3D WebGL вида от 1-го лица */
+  .customer-stage,
+  .customer-portrait-wrap,
+  .order-bubble {
+    display: none !important;
+  }
+
+  .customer-svg-container {
+    width: 56px;
+    height: 62px;
+    filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.8));
+    transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .customer-name-tag {
+    position: absolute;
+    bottom: -6px;
+    background: rgba(12, 8, 22, 0.95);
+    border: 1px solid var(--yatai-border-color);
+    border-radius: 5px;
+    padding: 0 5px;
+    font-size: 0.52rem;
+    font-weight: 700;
+    color: var(--text-main);
+    white-space: nowrap;
+  }
+
+  .order-bubble {
+    flex: 1;
+    background: rgba(12, 8, 24, 0.84);
+    backdrop-filter: blur(4px);
+    border: 1.5px solid var(--neon-cyan);
+    border-radius: 12px;
+    padding: 6px 8px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.65), 0 0 12px rgba(0, 245, 212, 0.2);
+    pointer-events: none;
+    max-height: 100%;
+    overflow: hidden;
+  }
+
+  .order-bubble.is-riddle {
+    border-color: var(--neon-pink);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.75), 0 0 14px rgba(255, 42, 133, 0.3);
+  }
+
+  .order-bubble-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px;
+    margin-bottom: 3px;
+    font-size: 0.65rem;
+  }
+
+  .order-customer-type {
+    font-weight: 800;
+    color: var(--neon-cyan);
+    letter-spacing: 0.03em;
+  }
+
+  .order-riddle-badge {
+    background: var(--neon-pink);
+    color: #fff;
+    font-weight: 800;
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 0.58rem;
+  }
+
+  .order-price-preview {
+    font-family: var(--font-mono);
+    font-weight: 800;
+    color: var(--neon-green);
+  }
+
+  .order-dialogue-text {
+    font-size: 0.76rem;
+    line-height: 1.25;
+    color: #fff;
+    margin-bottom: 5px;
+  }
+
+  .order-visual-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+    margin-bottom: 5px;
+  }
+
+  .order-chip {
+    font-size: 0.62rem;
+    padding: 1px 5px;
+    border-radius: 5px;
+    background: rgba(255, 255, 255, 0.09);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    color: #e8dff5;
+  }
+
+  .order-chip.is-mystery {
+    border-color: var(--neon-pink);
+    color: #ffb3d1;
+  }
+
+  .patience-bar-wrap {
+    width: 100%;
+    height: 6px;
+    border-radius: 99px;
+    background: rgba(255, 255, 255, 0.12);
+    overflow: hidden;
+  }
+
+  .patience-bar-fill {
+    height: 100%;
+    width: var(--patience-pct, 100%);
+    background: hsl(var(--patience-hue, 145) 90% 50%);
+    transition: width 0.15s linear, background-color 0.2s linear;
+  }
+
+  /* Баннер обучения Первого дня (над нижним компасом, не блокирует свайпы) */
+  .tutorial-banner {
+    display: none !important;
+  }
+
+  .tutorial-step-badge {
+    background: var(--neon-amber);
+    color: #090510;
+    font-size: 0.6rem;
+    font-weight: 900;
+    padding: 2px 6px;
+    border-radius: 5px;
+    white-space: nowrap;
+  }
+
+  .tutorial-text {
+    font-size: 0.72rem;
+    flex: 1;
+    color: #fff;
+  }
+
+  .tutorial-skip-btn {
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    text-decoration: underline;
+    padding: 2px 4px;
+    pointer-events: auto;
+  }
+
+  /* Тосты обратной связи */
+  .feedback-toast-layer {
+    position: absolute;
+    top: 32px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    pointer-events: none;
+    width: 90%;
+  }
+
+  .feedback-toast {
+    padding: 4px 10px;
+    border-radius: 99px;
+    font-size: 0.74rem;
+    font-weight: 800;
+    background: rgba(10, 6, 20, 0.92);
+    border: 1.5px solid var(--toast-color, var(--neon-cyan));
+    color: var(--toast-color, var(--neon-cyan));
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.7);
+    animation: toastRise 1.6s ease forwards;
+  }
+
+  @keyframes toastRise {
+    0% { opacity: 0; transform: translateY(10px) scale(0.92); }
+    18% { opacity: 1; transform: translateY(0) scale(1); }
+    80% { opacity: 1; transform: translateY(-4px); }
+    100% { opacity: 0; transform: translateY(-12px); }
+  }
+
+  /* =========================================================
+     МОДАЛЬНЫЕ ОКНА (<dialog>)
+     ========================================================= */
+  .cyber-dialog {
+    margin: auto;
+    width: min(94dvw, 430px);
+    max-height: 88dvh;
+    background: #120c22;
+    color: var(--text-main);
+    border: 2px solid var(--neon-cyan);
+    border-radius: 16px;
+    box-shadow: 0 0 36px rgba(0, 245, 212, 0.35);
+    overflow: hidden;
+  }
+
+  .cyber-dialog::backdrop {
+    background: rgba(4, 2, 10, 0.82);
+    backdrop-filter: blur(5px);
+  }
+
+  .dialog-inner {
+    display: flex;
+    flex-direction: column;
+    max-height: 86dvh;
+    padding: 14px;
+    gap: 10px;
+  }
+
+  .dialog-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+    padding-bottom: 8px;
+  }
+
+  .dialog-eyebrow {
+    font-size: 0.62rem;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    color: var(--neon-pink);
+    display: block;
+  }
+
+  .dialog-header h2 {
+    font-size: 1.05rem;
+    letter-spacing: 0.02em;
+  }
+
+  .dialog-balance-box {
+    text-align: right;
+    background: rgba(16, 245, 108, 0.1);
+    border: 1px solid rgba(16, 245, 108, 0.4);
+    padding: 4px 10px;
+    border-radius: 8px;
+  }
+
+  .dialog-balance-box span {
+    display: block;
+    font-size: 0.56rem;
+    color: var(--text-muted);
+  }
+
+  .dialog-balance-box strong {
+    font-family: var(--font-mono);
+    font-size: 0.95rem;
+    color: var(--neon-green);
+  }
+
+  .dialog-close-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.08);
+    font-weight: 800;
+  }
+
+  .terminal-tabs {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+  }
+
+  .term-tab {
+    padding: 7px 4px;
+    border-radius: 8px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    text-align: center;
+  }
+
+  .term-tab.is-active {
+    background: rgba(0, 245, 212, 0.16);
+    border-color: var(--neon-cyan);
+    color: var(--neon-cyan);
+  }
+
+  .term-tab-panel {
+    overflow-y: auto;
+    max-height: 52dvh;
+    padding-right: 2px;
+  }
+
+  .pnl-breakdown-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .pnl-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 10px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.04);
+    font-size: 0.8rem;
+  }
+
+  .pnl-row.is-total {
+    background: rgba(0, 245, 212, 0.12);
+    border: 1px solid var(--neon-cyan);
+    font-weight: 800;
+    font-size: 0.9rem;
+    margin-top: 4px;
+  }
+
+  .pnl-val-pos {
+    color: var(--neon-green);
+    font-family: var(--font-mono);
+    font-weight: 700;
+  }
+
+  .pnl-val-neg {
+    color: var(--neon-red);
+    font-family: var(--font-mono);
+    font-weight: 700;
+  }
+
+  .debt-warning-banner {
+    margin-top: 8px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: rgba(255, 56, 92, 0.16);
+    border: 1px solid var(--neon-red);
+    font-size: 0.74rem;
+  }
+
+  .debt-warning-banner strong {
+    color: var(--neon-red);
+    display: block;
+    margin-bottom: 2px;
+  }
+
+  /* Карточки апгрейдов и кредитов */
+  .upgrades-list-container,
+  .bank-loans-container {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .upgrade-card,
+  .loan-card {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 10px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+  }
+
+  .upgrade-card.is-owned {
+    border-color: rgba(16, 245, 108, 0.4);
+    background: rgba(16, 245, 108, 0.06);
+  }
+
+  .upgrade-info h4 {
+    font-size: 0.82rem;
+    margin-bottom: 2px;
+    color: #fff;
+  }
+
+  .upgrade-info p {
+    font-size: 0.68rem;
+    color: var(--text-muted);
+  }
+
+  .upgrade-buy-btn {
+    padding: 6px 10px;
+    border-radius: 8px;
+    background: var(--neon-cyan);
+    color: #07050c;
+    font-weight: 800;
+    font-size: 0.74rem;
+    white-space: nowrap;
+  }
+
+  .upgrade-buy-btn:disabled {
+    background: rgba(255, 255, 255, 0.12);
+    color: var(--text-muted);
+    cursor: not-allowed;
+  }
+
+  .primary-neon-btn {
+    width: 100%;
+    padding: 11px 14px;
+    border-radius: 10px;
+    background: linear-gradient(90deg, var(--neon-cyan), #00bbf9);
+    color: #06040b;
+    font-weight: 900;
+    font-size: 0.88rem;
+    letter-spacing: 0.04em;
+    text-align: center;
+    box-shadow: 0 0 18px rgba(0, 245, 212, 0.4);
+  }
+
+  .secondary-neon-btn {
+    padding: 7px 10px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.07);
+    border: 1px solid rgba(0, 245, 212, 0.35);
+    font-size: 0.74rem;
+    font-weight: 700;
+  }
+
+  .danger-neon-btn {
+    padding: 7px 10px;
+    border-radius: 8px;
+    background: rgba(255, 56, 92, 0.14);
+    border: 1px solid var(--neon-red);
+    color: var(--neon-red);
+    font-size: 0.74rem;
+    font-weight: 700;
+    margin-top: 6px;
+  }
+
+  .codex-content {
+    overflow-y: auto;
+    max-height: 64dvh;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    font-size: 0.78rem;
+  }
+
+  .codex-section h3 {
+    font-size: 0.84rem;
+    color: var(--neon-cyan);
+    margin-bottom: 6px;
+  }
+
+  .settings-btns-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+
+  .codex-riddle-list,
+  .pwa-steps-list {
+    padding-left: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .pwa-guide-body {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    font-size: 0.82rem;
+  }
+}
+
+@layer utilities {
+  .visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+  }
+}

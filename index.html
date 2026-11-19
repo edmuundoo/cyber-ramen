@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="ru" data-yatai-tier="1">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="CyberRamen">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#080510">
+  <title>CYBER RAMEN: Night Yatai 3D</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/svg+xml" href="icon.svg">
+  <link id="apple-touch-icon" rel="apple-touch-icon" href="icon.svg">
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="stylesheet" href="css/main.css?v=44">
+  <link rel="stylesheet" href="css/sectors.css?v=44">
+</head>
+<body>
+  <div id="app-shell" class="app-shell" data-active-sector="1">
+    <!-- Периферийные неоновые индикаторы краёв экрана (360° слепые зоны) -->
+    <div id="edge-alert-left" class="edge-alert edge-alert-left" aria-hidden="true">
+      <span id="edge-alert-left-label" class="edge-alert-label">ВАРКА</span>
+    </div>
+    <div id="edge-alert-right" class="edge-alert edge-alert-right" aria-hidden="true">
+      <span id="edge-alert-right-label" class="edge-alert-label">КУРЬЕР</span>
+    </div>
+
+    <!-- ВЕРХНИЙ HUD (с учетом Safe Area) -->
+    <header class="top-hud" role="banner">
+      <div class="hud-group hud-left">
+        <div class="hud-pill hud-day" title="Игровой день и район">
+          <span class="hud-label" id="hud-district-name">ТРУЩОБЫ</span>
+          <strong id="hud-day-num">ДЕНЬ 1</strong>
+        </div>
+        <div class="hud-pill hud-clock" title="Время ночной смены">
+          <span class="clock-dot" id="clock-dot"></span>
+          <strong id="hud-time">21:00</strong>
+          <div class="shift-progress-track">
+            <div id="shift-progress-bar" class="shift-progress-bar"></div>
+          </div>
+        </div>
+      </div>
+
+      <h1 class="visually-hidden">CYBER RAMEN: Night Yatai 3D</h1>
+
+      <div class="hud-group hud-right">
+        <div class="hud-pill hud-credits" id="hud-credits-pill">
+          <span class="currency-symbol">¥</span>
+          <strong id="hud-money">150</strong>
+        </div>
+        <div class="hud-pill hud-rating" title="Рейтинг CyberEats">
+          <span class="star-icon">★</span>
+          <strong id="hud-rating">4.8</strong>
+        </div>
+        <button type="button" id="btn-repeat-voice" class="hud-icon-btn" title="Посмотреть на гостя и повторить заказ голосом" aria-label="Повторить заказ голосом">
+          <span>🗣️</span>
+        </button>
+        <button type="button" id="btn-codex" class="hud-icon-btn" title="Меню блюд и настройки" aria-label="Меню блюд и настройки">
+          <span>📋</span>
+        </button>
+        <button type="button" id="btn-audio" class="hud-icon-btn" aria-label="Переключить звук" data-muted="false">
+          <span id="audio-icon">🔊</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- ПОЛНОЭКРАННОЕ 3D-ПРОСТРАНСТВО ОТ ПЕРВОГО ЛИЦА (ВСЕ ВЗАИМОДЕЙСТВИЯ В 3D) -->
+    <main class="fp-3d-viewport" id="fp-3d-viewport" aria-label="3D интерьер раменной тележки от первого лица">
+      <!-- Основной полноэкранный WebGL 3D-холст -->
+      <canvas id="street-canvas" class="street-canvas"></canvas>
+
+      <!-- Прозрачный холст для жеста полива чили-соусом зигзагом прямо поверх 3D-миски -->
+      <canvas id="sauce-gesture-canvas" class="sauce-gesture-canvas" width="390" height="844"></canvas>
+
+      <!-- Динамические 3D-проекционные голографические метки над 3D-предметами -->
+      <div id="holo-labels-layer" class="holo-labels-layer" aria-hidden="true"></div>
+
+      <!-- Коллектор-киборг (появляется, если игрок в долгах) -->
+      <div id="collector-presence" class="collector-presence" hidden>
+        <div class="collector-badge">
+          <span class="collector-eye"></span>
+          <div class="collector-text">
+            <strong>КОЛЛЕКТОР «АРАСАКА»</strong>
+            <span>Удерживает 50% чаевых за долг</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Голограмма активного заказа курьера CyberEats -->
+      <div id="courier-window-unit" class="courier-window-unit" hidden>
+        <div class="courier-avatar" id="courier-avatar-svg"></div>
+        <div class="courier-tag">
+          <strong id="courier-window-title">⚡ CYBER-EATS</strong>
+          <span id="courier-window-timer">Ждёт заказ!</span>
+        </div>
+      </div>
+
+      <!-- 2D-плашки портрета и заказа убраны (всё взаимодействие в 3D) -->
+      <div id="customer-stage" class="customer-stage" hidden></div>
+
+      <!-- Всплывающие тосты обратной связи -->
+      <div id="feedback-toast-layer" class="feedback-toast-layer" aria-live="polite"></div>
+
+      <!-- Плашки обучения и кнопок перемещения отключены (управление полностью через свайпы) -->
+      <div id="tutorial-banner" class="tutorial-banner" hidden></div>
+      <div class="fp-compass-bar" hidden></div>
+    </main>
+  </div>
+
+  <!-- =================================================================
+       МОДАЛЬНОЕ ОКНО 1: ФИНАНСОВЫЙ ТЕРМИНАЛ ДНЯ, КИБЕР-БАНК И АПГРЕЙДЫ
+       ================================================================= -->
+  <dialog id="financial-modal" class="cyber-dialog financial-dialog" aria-labelledby="fin-modal-title">
+    <div class="dialog-inner">
+      <header class="dialog-header">
+        <div>
+          <span class="dialog-eyebrow" id="fin-day-subtitle">СМЕНА ЗАВЕРШЕНА</span>
+          <h2 id="fin-modal-title">ФИНАНСОВЫЙ ТЕРМИНАЛ</h2>
+        </div>
+        <div class="dialog-balance-box">
+          <span>БАЛАНС</span>
+          <strong id="fin-current-balance">¥150</strong>
+        </div>
+      </header>
+
+      <div class="terminal-tabs" role="tablist">
+        <button type="button" class="term-tab is-active" data-tab="pnl" role="tab" aria-selected="true">
+          📊 Итоги и Налоги
+        </button>
+        <button type="button" class="term-tab" data-tab="upgrades" role="tab" aria-selected="false">
+          🛠️ Апгрейды и Район
+        </button>
+        <button type="button" class="term-tab" data-tab="bank" role="tab" aria-selected="false">
+          🏦 Кибер-Банк
+        </button>
+      </div>
+
+      <div id="tab-panel-pnl" class="term-tab-panel is-active">
+        <div id="pnl-breakdown-list" class="pnl-breakdown-list"></div>
+        <div id="debt-warning-banner" class="debt-warning-banner" hidden>
+          <strong>⚠️ ВНИМАНИЕ: БАЛАНС В МИНУСЕ!</strong>
+          <p>Начислена пеня. На следующую смену придёт киборг-коллектор и будет удерживать 50% чаевых до погашения долга.</p>
+        </div>
+      </div>
+
+      <div id="tab-panel-upgrades" class="term-tab-panel" hidden>
+        <div id="upgrades-list-container" class="upgrades-list-container"></div>
+      </div>
+
+      <div id="tab-panel-bank" class="term-tab-panel" hidden>
+        <div id="bank-loans-container" class="bank-loans-container"></div>
+      </div>
+
+      <footer class="dialog-footer">
+        <button type="button" id="btn-start-next-day" class="primary-neon-btn">
+          ОТКРЫТЬ СЛЕДУЮЩУЮ СМЕНУ ▶
+        </button>
+      </footer>
+    </div>
+  </dialog>
+
+  <!-- =================================================================
+       МОДАЛЬНОЕ ОКНО 2: СПРАВОЧНИК ПОВАРА, ЗАГАДКИ И НАСТРОЙКИ
+       ================================================================= -->
+  <dialog id="codex-modal" class="cyber-dialog codex-dialog" closedby="any" aria-labelledby="codex-title">
+    <div class="dialog-inner">
+      <header class="dialog-header">
+        <div>
+          <span class="dialog-eyebrow">РЕЦЕПТУРА И НАСТРОЙКИ</span>
+          <h2 id="codex-title">📋 МЕНЮ БЛЮД ЯТАЯ</h2>
+        </div>
+        <form method="dialog">
+          <button type="submit" class="dialog-close-btn" aria-label="Закрыть">✕</button>
+        </form>
+      </header>
+
+      <div class="codex-content">
+        <section class="codex-section">
+          <h3>🍜 Фирменные позиции меню (+ гость может попросить экстра-топпинг)</h3>
+          <ul class="codex-riddle-list">
+            <li><strong>1. «Классический Тонкоцу»:</strong> Свиной бульон + Лапша + 🥩 Свинина Тяшу + 🧅 Зелёный лук</li>
+            <li><strong>2. «Токио Адзитама»:</strong> Свиной бульон + Лапша + 🥚 Маринованное яйцо + 🌿 Нори</li>
+            <li><strong>3. «Огненный Самурай»:</strong> Бульон (Острый или Свиной) + Лапша + 🥩 Свинина Тяшу + 🥚 Яйцо + 🌶️ Чили-соус</li>
+            <li><strong>4. «Изумрудный Дзен»:</strong> Бульон (Грибной или Свиной) + Лапша + 🌿 Нори + 🧅 Зелёный лук + 🥚 Яйцо</li>
+            <li><strong>5. «Императорский Темпура»:</strong> Свиной бульон + Лапша + 🦐 Креветка Темпура + 🌿 Нори + 🧅 Зелёный лук</li>
+          </ul>
+        </section>
+
+        <section class="codex-section">
+          <h3>🎛️ Настройки и Управление сменой</h3>
+          <div class="settings-btns-row">
+            <button type="button" id="btn-toggle-music" class="secondary-neon-btn">🎵 Lo-Fi Синт: ВКЛ</button>
+            <button type="button" id="btn-toggle-rain" class="secondary-neon-btn">🌧️ Шум дождя: ВКЛ</button>
+            <button type="button" id="btn-end-shift-early" class="secondary-neon-btn">⏭️ Завершить смену сейчас</button>
+            <button type="button" id="btn-show-pwa-guide" class="secondary-neon-btn">📱 Как установить на iPhone</button>
+          </div>
+        </section>
+
+        <section class="codex-section">
+          <h3>🕶️ Управление в 3D от первого лица</h3>
+          <ul class="codex-riddle-list">
+            <li><strong>Поворот головы (360°):</strong> свайп влево/вправо в любом месте экрана или касание краёв компаса внизу.</li>
+            <li><strong>Варка, Бульоны и Миски (Слева):</strong> тапните по 3D-стопке чистых мисок на левом столе, чтобы поставить 🍜 миску на центральный стол. Тап по 3D-корзине опускает и вынимает лапшу (в <strong>ЗЕЛЁНОЙ ЗОНЕ Al Dente</strong>). Тап по 3D-чану с половником наливает бульон.</li>
+            <li><strong>Сборка и Подача (Центр):</strong> сверху в 2 ряда стоят 6 контейнеров с ингредиентами, а по центру чуть ниже — ваша миска или коробка. Для 🌶️ Чили тапните бутылочку и проведите <strong>зигзагом по миске</strong>. Когда заказ отдан — стол пустой!</li>
+            <li><strong>Коробки доставки, Пресс и Холодильник (Справа):</strong> тапните по 3D-стопке коробок доставки на правом столе, чтобы поставить 📦 коробку на центральный стол. Соберите заказ, перенесите в 3D-пресс, <strong>свайпните вниз по прессу</strong> и тапните 3D-шлюз.</li>
+          </ul>
+        </section>
+
+        <section class="codex-section">
+          <h3>💾 Сохранение</h3>
+          <p class="codex-note">Прогресс автоматически сохраняется в память устройства после каждого действия и в конце смены.</p>
+          <button type="button" id="btn-reset-save" class="danger-neon-btn">Сбросить прогресс и начать заново</button>
+        </section>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- =================================================================
+       МОДАЛЬНОЕ ОКНО 3: ПОДСКАЗКА УСТАНОВКИ PWA НА IPHONE (Safari)
+       ================================================================= -->
+  <dialog id="pwa-modal" class="cyber-dialog pwa-dialog" closedby="any" aria-labelledby="pwa-title">
+    <div class="dialog-inner">
+      <header class="dialog-header">
+        <div>
+          <span class="dialog-eyebrow">IPHONE FULLSCREEN PWA</span>
+          <h2 id="pwa-title">УСТАНОВКА НА ЭКРАН «ДОМОЙ»</h2>
+        </div>
+        <form method="dialog">
+          <button type="submit" class="dialog-close-btn" aria-label="Закрыть">✕</button>
+        </form>
+      </header>
+      <div class="pwa-guide-body">
+        <p>Для полного погружения от первого лица без адресной строки Safari и с поддержкой офлайн-режима добавьте игру на главный экран iPhone:</p>
+        <ol class="pwa-steps-list">
+          <li>Нажмите кнопку <strong>«Поделиться»</strong> (иконка квадрата со стрелкой вверх 📤) в нижней панели Safari.</li>
+          <li>Прокрутите меню и выберите <strong>«На экран „Домой“»</strong> (Add to Home Screen ➕).</li>
+          <li>Запустите <strong>CyberRamen</strong> с рабочего стола как нативное приложение!</li>
+        </ol>
+        <form method="dialog" class="pwa-actions">
+          <button type="submit" class="primary-neon-btn">ПОНЯТНО, НАЧАТЬ СМЕНУ!</button>
+        </form>
+      </div>
+    </div>
+  </dialog>
+
+  <script type="module" src="js/main.js?v=44"></script>
+</body>
+</html>
