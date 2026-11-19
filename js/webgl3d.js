@@ -1,5 +1,5 @@
-import { GAME_CONFIG } from './config.js?v=74';
-import { gameState } from './state.js?v=74';
+import { GAME_CONFIG } from './config.js?v=75';
+import { gameState } from './state.js?v=75';
 import {
   createAlleyBackdropTexture,
   createBuildingFacadeTexture,
@@ -8,7 +8,7 @@ import {
   createKanjiSignTextures,
   createPedestrianTextures,
   AnimeCustomerTextureRenderer
-} from './art3d.js?v=74';
+} from './art3d.js?v=75';
 
 /**
  * Полноэкранный WebGL 3D движок от первого лица с процедурной высокодетализированной
@@ -118,7 +118,7 @@ export class FirstPersonWebGLScene {
       timer: 0,
       duration: 0.68
     };
-    this.trayPlaceAnim = { active: false, timer: 0, duration: 0.56 };
+    this.trayPlaceAnim = { active: false, timer: 0, duration: 0.56, rightHandOnly: false };
     this.bagPackAnim = {
       active: false,
       timer: 0,
@@ -378,9 +378,11 @@ export class FirstPersonWebGLScene {
   }
 
   triggerTrayPlaceAnim() {
+    const v = gameState.runtime.activeVessel;
     this.trayPlaceAnim.active = true;
     this.trayPlaceAnim.timer = 0;
-    this.trayPlaceAnim.duration = 0.56;
+    this.trayPlaceAnim.duration = 0.62;
+    this.trayPlaceAnim.rightHandOnly = Boolean(v && v.type);
   }
 
   triggerBagPackAnim(info = {}) {
@@ -2777,17 +2779,41 @@ export class FirstPersonWebGLScene {
       this.draw3DRamenTray(asmX, asmY, asmZ, 1.0);
     }
 
-    // Анимация выкладывания подноса из-под прилавка на столешницу
+    // Анимация выкладывания подноса из-под прилавка на столешницу:
+    // - Если левая рука занята тарелкой/коробкой -> герой достаёт и ставит поднос ОДНОЙ ПРАВОЙ РУКОЙ!
+    // - Если левая рука свободна -> достаёт поднос обеими руками по бокам.
     if (this.trayPlaceAnim.active) {
       const p = Math.min(1, this.trayPlaceAnim.timer / this.trayPlaceAnim.duration);
       const s = p * p * (3 - 2 * p);
-      const tx = 0.0;
+      const oneHand = Boolean(this.trayPlaceAnim.rightHandOnly || hasHeldVessel);
+      const tx = oneHand ? 0.14 * (1 - s) : 0.0;
       const ty = 0.62 + (asmY - 0.62) * s + Math.sin(p * Math.PI) * 0.12;
-      const tz = 0.04 + (asmZ - 0.04) * s;
-      this.draw3DRamenTray(tx, ty, tz, 0.92 + 0.08 * s, [0.22 * (1 - s), 0, 0]);
-      // Две перчатки по краям подноса, ставящие его на стол
-      this.drawBox(tx - 0.3, ty + 0.01, tz + 0.03, 0.068, 0.036, 0.12, [0.16, 0.14, 0.24], 0.22, [0.12, -0.2, 0.1]);
-      this.drawBox(tx + 0.3, ty + 0.01, tz + 0.03, 0.068, 0.036, 0.12, [0.16, 0.14, 0.24], 0.22, [0.12, 0.2, -0.1]);
+      const tz = 0.06 + (asmZ - 0.06) * s;
+      const trayRot = oneHand
+        ? [0.22 * (1 - s), -0.16 * (1 - s), 0.11 * (1 - s)]
+        : [0.22 * (1 - s), 0, 0];
+      this.draw3DRamenTray(tx, ty, tz, 0.92 + 0.08 * s, trayRot);
+
+      if (oneHand) {
+        // Только ПРАВАЯ кибер-перчатка достаёт поднос за правый бортик и плавно кладёт его на стол!
+        const rhX = tx + 0.27;
+        const rhY = ty + 0.012;
+        const rhZ = tz + 0.04;
+        const rhRot = [0.14, 0.22 - 0.06 * s, -0.14];
+        this.drawBox(rhX, rhY, rhZ, 0.072, 0.036, 0.125, [0.16, 0.14, 0.24], 0.22, rhRot);
+        this.drawBox(rhX, rhY + 0.019, rhZ, 0.076, 0.011, 0.04, [0.0, 0.96, 0.83], 0.92, rhRot);
+        this.drawBox(rhX + 0.05, rhY - 0.025, rhZ + 0.095, 0.078, 0.046, 0.13, [0.11, 0.13, 0.2], 0.15, rhRot);
+      } else {
+        // Обе кибер-перчатки по краям подноса, ставящие его на стол
+        for (const side of [-1, 1]) {
+          const hx = tx + 0.3 * side;
+          const hy = ty + 0.01;
+          const hz = tz + 0.03;
+          const hRot = [0.12, 0.2 * side, -0.1 * side];
+          this.drawBox(hx, hy, hz, 0.068, 0.036, 0.12, [0.16, 0.14, 0.24], 0.22, hRot);
+          this.drawBox(hx, hy + 0.019, hz, 0.072, 0.011, 0.038, [0.0, 0.96, 0.83], 0.92, hRot);
+        }
+      }
     }
 
     // Если пакет стоит на столе/подносе (и мы не проигрываем анимацию упаковки и не держим его перед клиентом)
