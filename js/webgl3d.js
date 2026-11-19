@@ -1,5 +1,5 @@
-import { GAME_CONFIG } from './config.js?v=66';
-import { gameState } from './state.js?v=66';
+import { GAME_CONFIG } from './config.js?v=67';
+import { gameState } from './state.js?v=67';
 import {
   createAlleyBackdropTexture,
   createBuildingFacadeTexture,
@@ -8,7 +8,7 @@ import {
   createKanjiSignTextures,
   createPedestrianTextures,
   AnimeCustomerTextureRenderer
-} from './art3d.js?v=66';
+} from './art3d.js?v=67';
 
 /**
  * Полноэкранный WebGL 3D движок от первого лица с процедурной высокодетализированной
@@ -1023,12 +1023,13 @@ export class FirstPersonWebGLScene {
         });
       };
 
-      // 0. ДИАГОНАЛЬНЫЙ СВАЙП В ЕДИНОМ СТИЛЕ «ПРИТЯГИВАЕМ К СЕБЕ» (как при перетягивании камеры на смартфоне):
+      // 0. ДИАГОНАЛЬНЫЙ СВАЙП В ЕДИНОМ СТИЛЕ «ПРИТЯГИВАЕМ К СЕБЕ» (только явная диагональ ~30°..66°,
+      // чтобы обычные свайпы влево/вправо с небольшим наклоном пальца не улетали случайно вверх в углы!):
       // - Со стола свайп в нижний левый угол (dx < 0, dy > 0) -> притягиваем к себе правый верхний угол (дрон, +1)!
       // - Со стола свайп в нижний правый угол (dx > 0, dy > 0) -> притягиваем к себе левый верхний угол (грязные миски, -1)!
       // - С верхнего ракурса свайп вверх по диагонали (dy < 0) -> притягиваем обратно к себе центральную столешницу!
       // - Из-под прилавка свайп вниз по диагонали (dy > 0) -> возвращаемся обратно на центральную столешницу!
-      const isDiagonalGesture = dist > 24 && absX > absY * 0.34 && absY > absX * 0.34;
+      const isDiagonalGesture = dist > 28 && absY > 18 && absY > absX * 0.58 && absX > absY * 0.44;
       if (isDiagonalGesture) {
         if (gameState.runtime.activeSector === 1 && this._startedUnderCounter && dy > 0) {
           clearHeadTimers();
@@ -1073,8 +1074,8 @@ export class FirstPersonWebGLScene {
         }
       }
 
-      // 1. ГОРИЗОНТАЛЬНЫЙ СВАЙП («притягиваем к себе»: палец влево dx < 0 -> поворот направо; палец вправо dx > 0 -> налево)
-      if (dist > 24 && absX > absY * 1.05) {
+      // 1. ГОРИЗОНТАЛЬНЫЙ СВАЙП («притягиваем к себе»: широкий комфортный коридор влево/вправо!)
+      if (dist > 22 && absX >= absY * 1.0) {
         if (this.callbacks.onSwipeSector) {
           this.callbacks.onSwipeSector(dx < 0 ? 1 : -1);
         }
@@ -1083,7 +1084,7 @@ export class FirstPersonWebGLScene {
 
       // 2. ВЕРТИКАЛЬНЫЙ СВАЙП («притягиваем к себе», 3 уровня по вертикали в Секторе 1!):
       // - Верх (гость) <-- палец ВНИЗ (dy > 0) -- Центр (стол) -- палец ВВЕРХ (dy < 0) --> Низ (под прилавком: подносы/пакеты)
-      if (dist > 22 && absY >= absX * 0.95) {
+      if (dist > 26 && absY > absX * 1.12) {
         clearHeadTimers();
 
         // Из-под прилавка (подносы/пакеты): свайп ВНИЗ (dy > 0) -> возвращаемся на столешницу!

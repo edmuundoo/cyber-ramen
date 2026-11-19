@@ -1,4 +1,4 @@
-import { gameState } from './state.js?v=66';
+import { gameState } from './state.js?v=67';
 
 class CyberAudioEngine {
   constructor() {
