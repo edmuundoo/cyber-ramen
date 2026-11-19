@@ -120,6 +120,46 @@ export const GAME_CONFIG = {
     }
   },
 
+  // Охлаждённые напитки в жестяных банках на верхней полке Крио-Холодильника (3 вида)
+  DRINKS: {
+    cola: {
+      id: 'cola',
+      name: 'Неон-Кола',
+      shortName: 'Кола',
+      voiceName: 'баночку Неон-Колы',
+      emoji: '🥫',
+      priceAdd: 35,
+      restockUnitCost: 9,
+      bodyCol: [0.88, 0.12, 0.18],
+      stripeCol: [0.96, 0.94, 0.9],
+      accentCol: [0.1, 0.1, 0.14]
+    },
+    matcha: {
+      id: 'matcha',
+      name: 'Матча-Спарк',
+      shortName: 'Матча',
+      voiceName: 'баночку Матча-Спарк',
+      emoji: '🍵',
+      priceAdd: 40,
+      restockUnitCost: 11,
+      bodyCol: [0.14, 0.68, 0.34],
+      stripeCol: [0.95, 0.84, 0.32],
+      accentCol: [0.06, 0.3, 0.16]
+    },
+    ramune: {
+      id: 'ramune',
+      name: 'Крио-Рамунэ',
+      shortName: 'Рамунэ',
+      voiceName: 'холодный Крио-Рамунэ',
+      emoji: '🧊',
+      priceAdd: 45,
+      restockUnitCost: 12,
+      bodyCol: [0.06, 0.72, 0.95],
+      stripeCol: [1.0, 0.24, 0.56],
+      accentCol: [0.92, 0.97, 1.0]
+    }
+  },
+
   // Фирменные позиции Меню Раменной (Готовка строго по меню + возможный экстра-топпинг)
   MENU_DISHES: [
     {

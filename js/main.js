@@ -1,16 +1,16 @@
-import { GAME_CONFIG } from './config.js?v=70';
-import { gameState, createShiftRuntimeState } from './state.js?v=70';
-import { audio } from './audio.js?v=70';
+import { GAME_CONFIG } from './config.js?v=71';
+import { gameState, createShiftRuntimeState } from './state.js?v=71';
+import { audio } from './audio.js?v=71';
 import {
   buildCustomerPortraitSVG,
   buildCourierDroneSVG,
   generateAppleTouchIcon
-} from './renderer.js?v=70';
-import { FirstPersonWebGLScene } from './webgl3d.js?v=70';
-import { CustomerAndDeliverySystem } from './customers.js?v=70';
-import { KitchenSystem } from './kitchen.js?v=70';
-import { EconomySystem } from './economy.js?v=70';
-import { TutorialSystem } from './tutorial.js?v=70';
+} from './renderer.js?v=71';
+import { FirstPersonWebGLScene } from './webgl3d.js?v=71';
+import { CustomerAndDeliverySystem } from './customers.js?v=71';
+import { KitchenSystem } from './kitchen.js?v=71';
+import { EconomySystem } from './economy.js?v=71';
+import { TutorialSystem } from './tutorial.js?v=71';
 
 class CyberRamenApp {
   constructor() {
@@ -229,8 +229,39 @@ class CyberRamenApp {
     }
 
     if (hitId === 'cryo_fridge') {
-      this.scene3D.triggerHandAction('fridge', [0.0, 0.75, 1.0]);
-      this.kitchenSystem.restockAllToppings();
+      if (!gameState.runtime.fridgeOpen) {
+        gameState.runtime.fridgeOpen = true;
+        this.scene3D.triggerFridgeDoorAnim('open');
+        audio.playTapPop();
+      }
+      return;
+    }
+
+    if (hitId.startsWith('fridge_top_')) {
+      const toppingId = hitId.slice('fridge_top_'.length);
+      const ok = this.kitchenSystem.restockSingleTopping(toppingId);
+      if (ok) {
+        this.scene3D.triggerFridgeRestockAnim(toppingId);
+      }
+      return;
+    }
+
+    if (hitId.startsWith('fridge_drink_')) {
+      const drinkId = hitId.slice('fridge_drink_'.length);
+      const res = this.kitchenSystem.addDrinkToAssembly(drinkId);
+      if (res) {
+        this.scene3D.triggerDrinkPlaceAnim(res.drinkId, res.intoBag);
+        // Через короткую паузу (пока рука берёт банку с полки) закрываем холодильник и переводим взгляд на стол,
+        // чтобы показать анимацию выставления банки на поднос или убирания внутрь полого пакета!
+        setTimeout(() => {
+          if (gameState.runtime.fridgeOpen && gameState.runtime.activeSector === 2) {
+            gameState.runtime.fridgeOpen = false;
+            this.scene3D.triggerFridgeDoorAnim('close');
+            gameState.runtime.cameraFocus = 'worktable';
+            this.switchSector(1);
+          }
+        }, 260);
+      }
       return;
     }
 
@@ -265,7 +296,7 @@ class CyberRamenApp {
 
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker
-        .register('./sw.js?v=70', { updateViaCache: 'none' })
+        .register('./sw.js?v=71', { updateViaCache: 'none' })
         .then((reg) => reg.update())
         .catch(() => {});
     }
@@ -413,6 +444,14 @@ class CyberRamenApp {
 
   handleHorizontalSwipe(dir) {
     const rt = gameState.runtime;
+    // Когда открыт Крио-Холодильник (Сектор 2): свайп закрывает дверцу и возвращает камеру на склад справа!
+    if (rt.activeSector === 2 && rt.fridgeOpen) {
+      rt.fridgeOpen = false;
+      this.scene3D.triggerFridgeDoorAnim('close');
+      audio.playTapPop();
+      return;
+    }
+
     // Когда камера опущена ПОД ПРИЛАВОК (cameraFocus === 'under_counter'):
     // - свайп влево (dir = +1, поворот направо) -> пакеты для заказов с собой (underCounterSide = 1);
     // - свайп вправо (dir = -1, поворот налево) -> подносы (underCounterSide = 0)!
@@ -474,6 +513,10 @@ class CyberRamenApp {
     gameState.runtime.customerPanSide = 0;
     gameState.runtime.underCounterSide = 0;
     gameState.runtime.carryingAssembly = false;
+    if (clamped !== 2 && gameState.runtime.fridgeOpen) {
+      gameState.runtime.fridgeOpen = false;
+      this.scene3D.triggerFridgeDoorAnim('close');
+    }
     if (gameState.runtime.cameraFocus === 'under_counter') {
       gameState.runtime.cameraFocus = 'worktable';
     }

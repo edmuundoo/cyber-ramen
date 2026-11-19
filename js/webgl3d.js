@@ -1,5 +1,5 @@
-import { GAME_CONFIG } from './config.js?v=70';
-import { gameState } from './state.js?v=70';
+import { GAME_CONFIG } from './config.js?v=71';
+import { gameState } from './state.js?v=71';
 import {
   createAlleyBackdropTexture,
   createBuildingFacadeTexture,
@@ -8,7 +8,7 @@ import {
   createKanjiSignTextures,
   createPedestrianTextures,
   AnimeCustomerTextureRenderer
-} from './art3d.js?v=70';
+} from './art3d.js?v=71';
 
 /**
  * Полноэкранный WebGL 3D движок от первого лица с процедурной высокодетализированной
@@ -126,7 +126,8 @@ export class FirstPersonWebGLScene {
       hadItems: false,
       onTray: false,
       prevVessel: null,
-      prevChopsticks: false
+      prevChopsticks: false,
+      prevDrink: null
     };
     this.assemblyVesselAnim = {
       active: false,
@@ -137,6 +138,16 @@ export class FirstPersonWebGLScene {
       intoBag: false
     };
     this.chopsticksPlaceAnim = { active: false, timer: 0, duration: 0.42 };
+    this.drinkPlaceAnim = {
+      active: false,
+      drinkId: 'cola',
+      intoBag: false,
+      timer: 0,
+      duration: 0.88
+    };
+    this.fridgeDoorOpenT = 0; // 0 = дверца закрыта, 1 = дверца распахнута на 110°
+    this.fridgeDoorHandAnim = { active: false, action: 'open', timer: 0, duration: 0.56 };
+    this.fridgeRestockAnim = { active: false, toppingId: 'egg', timer: 0, duration: 0.58 };
     this.servePushAnim = { active: false, timer: 0, duration: 0.46, servedBag: false };
     this.centerPlaceFromRight = 0;
     this.existingShiftProgress = 0;
@@ -380,6 +391,29 @@ export class FirstPersonWebGLScene {
     this.bagPackAnim.onTray = Boolean(info.onTray);
     this.bagPackAnim.prevVessel = info.prevVessel || null;
     this.bagPackAnim.prevChopsticks = Boolean(info.prevChopsticks);
+    this.bagPackAnim.prevDrink = info.prevDrink || null;
+  }
+
+  triggerFridgeDoorAnim(action = 'open') {
+    this.fridgeDoorHandAnim.active = true;
+    this.fridgeDoorHandAnim.action = action;
+    this.fridgeDoorHandAnim.timer = 0;
+    this.fridgeDoorHandAnim.duration = 0.56;
+  }
+
+  triggerFridgeRestockAnim(toppingId = 'egg') {
+    this.fridgeRestockAnim.active = true;
+    this.fridgeRestockAnim.toppingId = toppingId;
+    this.fridgeRestockAnim.timer = 0;
+    this.fridgeRestockAnim.duration = 0.58;
+  }
+
+  triggerDrinkPlaceAnim(drinkId = 'cola', intoBag = false) {
+    this.drinkPlaceAnim.active = true;
+    this.drinkPlaceAnim.drinkId = drinkId;
+    this.drinkPlaceAnim.intoBag = Boolean(intoBag);
+    this.drinkPlaceAnim.timer = 0;
+    this.drinkPlaceAnim.duration = 0.88;
   }
 
   triggerAssemblyVesselAnim(res = {}) {
@@ -514,6 +548,7 @@ export class FirstPersonWebGLScene {
       uniform float uEmissive;
       uniform float uSpecular;
       uniform float uPattern;
+      uniform float uAlpha;
       uniform float uUseTex;
       uniform sampler2D uTex;
       uniform float uTime;
@@ -528,14 +563,14 @@ export class FirstPersonWebGLScene {
         vec3 N = normalize(vNormal);
         vec3 V = normalize(uCamPos - vWorldPos);
         vec3 baseCol = uColor;
-        float alpha = 1.0;
+        float alpha = uAlpha;
 
         if (uUseTex > 0.5) {
           vec2 uv = vec2(vLocalPos.x + 0.5, 0.5 - vLocalPos.y);
           vec4 texCol = texture2D(uTex, uv);
           if (texCol.a < 0.08) discard;
           baseCol = texCol.rgb * uColor;
-          alpha = texCol.a;
+          alpha = texCol.a * uAlpha;
         } else if (uPattern > 0.5 && uPattern < 1.5) {
           // 1: Рулет свинины Тяшу (спираль мраморного жира + карамельная корочка по краю)
           float r = length(vLocalPos.xz) * 2.0;
@@ -577,6 +612,13 @@ export class FirstPersonWebGLScene {
           float wy = abs(sin(vLocalPos.y * 34.0));
           float wire = max(smoothstep(0.7, 0.95, wx), smoothstep(0.7, 0.95, wy));
           baseCol = mix(baseCol * 0.45, baseCol * 1.25, wire);
+        } else if (uPattern > 5.5 && uPattern < 6.5) {
+          // 6: Прозрачное стекло витрины крио-холодильника с диагональными бликами и ледяным кантом
+          float stripe1 = smoothstep(0.78, 0.95, sin((vLocalPos.z * 5.2 + vLocalPos.y * 4.0) * 3.14159));
+          float stripe2 = smoothstep(0.86, 0.98, sin((vLocalPos.z * 2.6 + vLocalPos.y * 2.1 - 0.55) * 3.14159));
+          float edge = smoothstep(0.41, 0.5, max(abs(vLocalPos.y), abs(vLocalPos.z)));
+          baseCol = mix(baseCol, vec3(0.84, 0.97, 1.0), clamp(stripe1 * 0.45 + stripe2 * 0.35 + edge * 0.5, 0.0, 1.0));
+          alpha = clamp(uAlpha + stripe1 * 0.13 + stripe2 * 0.09 + edge * 0.2, 0.0, 0.85);
         }
 
         vec3 Ldir = normalize(vec3(0.32, 0.9, 0.48));
@@ -676,7 +718,9 @@ export class FirstPersonWebGLScene {
     this.uEmissive = gl.getUniformLocation(prog, 'uEmissive');
     this.uSpecular = gl.getUniformLocation(prog, 'uSpecular');
     this.uPattern = gl.getUniformLocation(prog, 'uPattern');
+    this.uAlpha = gl.getUniformLocation(prog, 'uAlpha');
     this.uUseTex = gl.getUniformLocation(prog, 'uUseTex');
+    gl.uniform1f(this.uAlpha, 1.0);
     this.uTex = gl.getUniformLocation(prog, 'uTex');
     this.uTime = gl.getUniformLocation(prog, 'uTime');
     this.uCamPos = gl.getUniformLocation(prog, 'uCamPos');
@@ -1059,9 +1103,15 @@ export class FirstPersonWebGLScene {
           audio.playTapPop();
           return;
         }
-        // От холодильника справа (Сектор 2) тянем к себе вниз (dy > 0) -> правый верхний угол (+1)!
+        // От холодильника справа (Сектор 2) тянем к себе вниз (dy > 0) -> если открыт холодильник, закрываем его; иначе правый верхний угол (+1)!
         if (gameState.runtime.activeSector === 2 && dy > 0) {
           clearHeadTimers();
+          if (gameState.runtime.fridgeOpen) {
+            gameState.runtime.fridgeOpen = false;
+            this.triggerFridgeDoorAnim('close');
+            audio.playTapPop();
+            return;
+          }
           gameState.runtime.activeSector = 1;
           gameState.runtime.cameraFocus = 'customer';
           gameState.runtime.customerPanSide = 1;
@@ -1123,8 +1173,12 @@ export class FirstPersonWebGLScene {
           return;
         }
 
-        // От холодильника справа (Сектор 2): свайп ВВЕРХ (dy < 0) -> опускаемся ПОД ХОЛОДИЛЬНИК к пакетам!
+        // От холодильника справа (Сектор 2): свайп ВВЕРХ (dy < 0) -> закрываем холодильник (если открыт) и опускаемся ПОД ХОЛОДИЛЬНИК к пакетам!
         if (dy < 0 && gameState.runtime.activeSector === 2) {
+          if (gameState.runtime.fridgeOpen) {
+            gameState.runtime.fridgeOpen = false;
+            this.triggerFridgeDoorAnim('close');
+          }
           gameState.runtime.activeSector = 1;
           gameState.runtime.cameraFocus = 'under_counter';
           gameState.runtime.underCounterSide = 1;
@@ -1135,6 +1189,12 @@ export class FirstPersonWebGLScene {
         }
 
         if (dy > 0 && gameState.runtime.activeSector === 2) {
+          if (gameState.runtime.fridgeOpen) {
+            gameState.runtime.fridgeOpen = false;
+            this.triggerFridgeDoorAnim('close');
+            audio.playTapPop();
+            return;
+          }
           gameState.runtime.activeSector = 1;
           gameState.runtime.cameraFocus = 'customer';
           gameState.runtime.customerPanSide = 1;
@@ -1384,6 +1444,30 @@ export class FirstPersonWebGLScene {
         this.chopsticksPlaceAnim.active = false;
       }
     }
+    if (this.drinkPlaceAnim.active) {
+      this.drinkPlaceAnim.timer += dt;
+      if (this.drinkPlaceAnim.timer >= this.drinkPlaceAnim.duration) {
+        this.drinkPlaceAnim.active = false;
+      }
+    }
+    const targetDoorT = rt.fridgeOpen ? 1.0 : 0.0;
+    if (this.fridgeDoorOpenT < targetDoorT) {
+      this.fridgeDoorOpenT = Math.min(targetDoorT, this.fridgeDoorOpenT + dt * 2.5);
+    } else if (this.fridgeDoorOpenT > targetDoorT) {
+      this.fridgeDoorOpenT = Math.max(targetDoorT, this.fridgeDoorOpenT - dt * 2.8);
+    }
+    if (this.fridgeDoorHandAnim.active) {
+      this.fridgeDoorHandAnim.timer += dt;
+      if (this.fridgeDoorHandAnim.timer >= this.fridgeDoorHandAnim.duration) {
+        this.fridgeDoorHandAnim.active = false;
+      }
+    }
+    if (this.fridgeRestockAnim.active) {
+      this.fridgeRestockAnim.timer += dt;
+      if (this.fridgeRestockAnim.timer >= this.fridgeRestockAnim.duration) {
+        this.fridgeRestockAnim.active = false;
+      }
+    }
     if (this.servePushAnim.active) {
       this.servePushAnim.timer += dt;
       if (this.servePushAnim.timer >= this.servePushAnim.duration) {
@@ -1425,8 +1509,14 @@ export class FirstPersonWebGLScene {
       this.camPosTarget = [-0.04, 1.68, 0.46];
       this.lookAtTarget = [-0.86, 0.98 + this.dragPanY * 0.6, -0.16 + this.dragPanX];
     } else if (rt.activeSector === 2) {
-      this.camPosTarget = [0.05, 1.66, 0.45];
-      this.lookAtTarget = [0.88, 0.98 + this.dragPanY * 0.6, -0.1 - this.dragPanX];
+      if (rt.fridgeOpen) {
+        // Средний комфортный план внутрь открытого Крио-Холодильника (видно все 3 полки и удобно тапать!)
+        this.camPosTarget = [0.14, 1.31, 0.25];
+        this.lookAtTarget = [0.88, 1.24 + this.dragPanY * 0.25, 0.27 - this.dragPanX * 0.25];
+      } else {
+        this.camPosTarget = [0.05, 1.66, 0.45];
+        this.lookAtTarget = [0.88, 0.98 + this.dragPanY * 0.6, -0.1 - this.dragPanX];
+      }
     } else if (rt.cameraFocus === 'customer') {
       const panSide = rt.customerPanSide || 0;
       const dims = this.getCustomerDimensions(rt.currentCustomer);
@@ -2400,7 +2490,29 @@ export class FirstPersonWebGLScene {
     this.drawBox(x + 0.004 * s, y + 0.008 * s, z - 0.115 * s, 0.006 * s, 0.006 * s, 0.035 * s, [0.88, 0.74, 0.48], 0.12, rot, 0.3);
   }
 
-  draw3DTakeoutBag(x, y, z, s = 1.0, foodItem = false, hasChopsticks = false, isCarried = false, rot = null) {
+  draw3DDrinkCan(x, y, z, drinkId = 'cola', s = 1.0, rot = null) {
+    const cfg = GAME_CONFIG.DRINKS?.[drinkId] || GAME_CONFIG.DRINKS.cola;
+    const bodyCol = cfg.bodyCol || [0.88, 0.12, 0.18];
+    const stripeCol = cfg.stripeCol || [0.96, 0.94, 0.9];
+    const accentCol = cfg.accentCol || [0.1, 0.1, 0.14];
+    const aluCol = [0.78, 0.83, 0.9];
+
+    const r = 0.068 * s;
+    const h = 0.112 * s;
+    // Нижний суженный алюминиевый ободок дна
+    this.drawMesh('cylinder', x, y + 0.008 * s, z, r * 0.88, 0.014 * s, r * 0.88, aluCol, 0.12, rot, 0.92);
+    // Основной глянцевый корпус жестяной банки
+    this.drawMesh('cylinder', x, y + 0.014 * s + h * 0.44, z, r, h * 0.84, r, bodyCol, 0.24, rot, 0.88);
+    // Фирменная контрастная полоса и кибер-акцент по центру банки
+    this.drawMesh('cylinder', x, y + 0.014 * s + h * 0.48, z, r * 1.03, h * 0.22, r * 1.03, stripeCol, 0.45, rot, 0.85);
+    this.drawMesh('cylinder', x, y + 0.014 * s + h * 0.28, z, r * 1.02, h * 0.1, r * 1.02, accentCol, 0.28, rot, 0.78);
+    // Верхний суженный скос банки и алюминиевая крышка с колечком-ключиком (pull-tab)
+    this.drawMesh('cylinder', x, y + h * 0.96, z, r * 0.86, 0.016 * s, r * 0.86, aluCol, 0.2, rot, 0.95);
+    this.drawMesh('torus', x, y + h * 1.03, z, r * 0.84, 0.007 * s, r * 0.84, [0.86, 0.9, 0.96], 0.24, rot, 0.96);
+    this.drawBox(x + 0.006 * s, y + h * 1.045, z, 0.018 * s, 0.004 * s, 0.01 * s, [0.62, 0.68, 0.76], 0.18, rot, 0.95);
+  }
+
+  draw3DTakeoutBag(x, y, z, s = 1.0, foodItem = false, hasChopsticks = false, isCarried = false, rot = null, drinkId = null) {
     const kraftOuter = [0.77, 0.58, 0.37];   // Плотный тёплый японский крафт снаружи
     const kraftFold = [0.64, 0.47, 0.29];    // Боковые складки-фальцы, кромки и усиления ручек
     const kraftInner = [0.47, 0.34, 0.21];   // Притемнённая внутренняя стенка пакета
@@ -2504,16 +2616,22 @@ export class FirstPersonWebGLScene {
     const hasFood = Boolean(foodItem);
     if (hasFood) {
       // Настоящая запечатанная 3D вок-коробочка (со сложенными клапанами, неоновой пломбой и стальной дужкой)
-      // стоит на дне пакета чуть левее центра — справа остаётся место под палочки и будущий напиток!
+      // стоит на дне пакета чуть левее центра — справа остаётся место под напиток и палочки!
       const [boxWx, boxWz] = wp(-0.075 * s, -0.01 * s);
       this.draw3DWokBox(boxWx, y + 0.016 * s, boxWz, 0.78 * s, true);
     }
 
+    if (drinkId) {
+      // Охлаждённая жестяная банка напитка стоит прямо на дне полого пакета справа от коробки!
+      const [drx, drz] = wp(0.095 * s, 0.01 * s);
+      this.draw3DDrinkCan(drx, y + 0.016 * s, drz, drinkId, 1.12 * s, rot);
+    }
+
     if (hasChopsticks) {
-      // Японские палочки «Варибаси» в бумажном чехле стоят ВНУТРИ пакета справа, опираясь на внутреннюю стенку
+      // Японские палочки «Варибаси» в бумажном чехле стоят ВНУТРИ пакета у правого края, опираясь на стенку
       // и аккуратно выглядывая верхним красным кончиком из горловины!
-      const [ch1x, ch1z] = wp(bw * 0.3, -0.01 * s);
-      const [ch2x, ch2z] = wp(bw * 0.34, -0.01 * s);
+      const [ch1x, ch1z] = wp(bw * 0.34, -0.02 * s);
+      const [ch2x, ch2z] = wp(bw * 0.38, -0.02 * s);
       drawSeg(ch1x, y + 0.025 * s, ch1z, ch2x, y + bh + 0.065 * s, ch2z, 0.022 * s, [0.95, 0.93, 0.88], 0.22, 0.35);
       // Красная фирменная манжета на чехле палочек
       const mx1 = ch1x + (ch2x - ch1x) * 0.68;
@@ -2679,6 +2797,7 @@ export class FirstPersonWebGLScene {
       this.assemblyVesselAnim.action === 'place' &&
       this.assemblyVesselAnim.intoBag;
     if (showStaticBag) {
+      const drinkFlyingIntoBag = this.drinkPlaceAnim.active && this.drinkPlaceAnim.intoBag;
       this.draw3DTakeoutBag(
         asmX,
         bagBaseY,
@@ -2686,11 +2805,13 @@ export class FirstPersonWebGLScene {
         1.0,
         vesselFlyingIntoBag ? null : a.vessel,
         Boolean(a.hasChopsticks && !this.chopsticksPlaceAnim.active),
-        false
+        false,
+        null,
+        drinkFlyingIntoBag ? null : a.drink
       );
     }
 
-    // Анимация появления пакета из-под холодильника И ПЕРЕКЛАДЫВАНИЯ КОРОБКИ С ПОДНОСА В ПОЛЫЙ ПАКЕТ!
+    // Анимация появления пакета из-под холодильника И ПЕРЕКЛАДЫВАНИЯ КОРОБКИ, НАПИТКА И ПАЛОЧЕК С ПОДНОСА В ПОЛЫЙ ПАКЕТ!
     if (this.bagPackAnim.active) {
       const p = Math.min(1, this.bagPackAnim.timer / this.bagPackAnim.duration);
       if (!this.bagPackAnim.hadItems) {
@@ -2707,8 +2828,11 @@ export class FirstPersonWebGLScene {
           if (this.bagPackAnim.prevVessel) {
             this.drawFilledVessel3D(asmX - 0.13, asmY + 0.016, asmZ, this.bagPackAnim.prevVessel, 0.74);
           }
+          if (this.bagPackAnim.prevDrink) {
+            this.draw3DDrinkCan(asmX + 0.1, asmY + 0.016, asmZ - 0.05, this.bagPackAnim.prevDrink, 1.08);
+          }
           if (this.bagPackAnim.prevChopsticks) {
-            this.draw3DChopsticksPack(asmX + 0.19, asmY + 0.016, asmZ, 0.98);
+            this.draw3DChopsticksPack(asmX + 0.22, asmY + 0.016, asmZ, 0.98);
           }
           const bx = 0.42 + (asmX + 0.16 - 0.42) * s;
           const by = 0.64 + (bagBaseY - 0.64) * s + Math.sin(t * Math.PI) * 0.1;
@@ -2725,7 +2849,9 @@ export class FirstPersonWebGLScene {
             0.98,
             t > 0.8 ? this.bagPackAnim.prevVessel : false,
             t > 0.82 && this.bagPackAnim.prevChopsticks,
-            false
+            false,
+            null,
+            t > 0.8 ? this.bagPackAnim.prevDrink : null
           );
           if (this.bagPackAnim.prevVessel && t <= 0.8) {
             const targetInBagX = bagPosX - 0.074;
@@ -2736,8 +2862,14 @@ export class FirstPersonWebGLScene {
             this.drawFilledVessel3D(vx, vy, asmZ - 0.01 * s, this.bagPackAnim.prevVessel, 0.75, sealP);
             this.drawBox(vx - 0.08, vy + 0.06, asmZ + 0.06, 0.068, 0.036, 0.12, [0.16, 0.14, 0.24], 0.22, [0.15, -0.25, 0.15]);
           }
+          if (this.bagPackAnim.prevDrink && t <= 0.8) {
+            const dx = (asmX + 0.1) + (bagPosX + 0.092 - (asmX + 0.1)) * s;
+            const dy = (asmY + 0.016) + (bagBaseY + 0.016 - (asmY + 0.016)) * s + Math.sin(t * Math.PI) * 0.28;
+            const dz = (asmZ - 0.05) + (asmZ + 0.01 - (asmZ - 0.05)) * s;
+            this.draw3DDrinkCan(dx, dy, dz, this.bagPackAnim.prevDrink, 1.08);
+          }
           if (this.bagPackAnim.prevChopsticks && t <= 0.82) {
-            const cx = (asmX + 0.19) + (bagPosX + 0.13 - (asmX + 0.19)) * s;
+            const cx = (asmX + 0.22) + (bagPosX + 0.15 - (asmX + 0.22)) * s;
             const cy = (asmY + 0.016) + (bagBaseY + 0.24 - (asmY + 0.016)) * s + Math.sin(t * Math.PI) * 0.12;
             this.draw3DChopsticksPack(cx, cy, asmZ, 0.96, [0, 0, -0.4 * s]);
           }
@@ -2745,21 +2877,49 @@ export class FirstPersonWebGLScene {
           const t = (p - 0.76) / 0.24;
           const s = t * t * (3 - 2 * t);
           const bx = (asmX + 0.16) + (asmX - (asmX + 0.16)) * s;
-          this.draw3DTakeoutBag(bx, bagBaseY, asmZ, 1.0, a.vessel, Boolean(a.hasChopsticks), false);
+          this.draw3DTakeoutBag(bx, bagBaseY, asmZ, 1.0, a.vessel, Boolean(a.hasChopsticks), false, null, a.drink);
         }
       }
     }
 
-    // Блюдо и палочки, лежащие непосредственно НА ПОДНОСЕ (тарелка ближе к левому краю подноса!)
+    // Блюдо, напиток и палочки, лежащие непосредственно НА ПОДНОСЕ (тарелка слева, банка и палочки справа!)
     if (!a.hasBag && a.hasTray && !this.bagPackAnim.active && !isCarryingOrder) {
       const vesselOnTrayX = asmX - 0.13;
       const vesselOnTrayY = asmY + 0.016;
       if (a.vessel && !(this.assemblyVesselAnim.active && this.assemblyVesselAnim.action === 'place')) {
         this.drawFilledVessel3D(vesselOnTrayX, vesselOnTrayY, asmZ, a.vessel, 0.76);
       }
-      if (a.hasChopsticks && !this.chopsticksPlaceAnim.active) {
-        this.draw3DChopsticksPack(asmX + 0.19, asmY + 0.016, asmZ, 1.02);
+      if (a.drink && !this.drinkPlaceAnim.active) {
+        this.draw3DDrinkCan(asmX + 0.1, asmY + 0.016, asmZ - 0.05, a.drink, 1.12);
       }
+      if (a.hasChopsticks && !this.chopsticksPlaceAnim.active) {
+        this.draw3DChopsticksPack(asmX + 0.22, asmY + 0.016, asmZ, 1.02);
+      }
+    }
+
+    // Анимация выставления жестяной банки напитка из Крио-Холодильника на поднос или убирания внутрь полого пакета!
+    if (this.drinkPlaceAnim.active && this.drinkPlaceAnim.timer / this.drinkPlaceAnim.duration >= 0.34) {
+      const pAll = Math.min(1, this.drinkPlaceAnim.timer / this.drinkPlaceAnim.duration);
+      const t = Math.min(1, (pAll - 0.34) / 0.66);
+      const s = t * t * (3 - 2 * t);
+      const intoBag = Boolean(this.drinkPlaceAnim.intoBag);
+      const startX = 0.56;
+      const startY = 1.26;
+      const startZ = -0.06;
+      const targetX = intoBag ? asmX + 0.095 : asmX + 0.1;
+      const targetY = intoBag ? bagBaseY + 0.016 : asmY + 0.016;
+      const targetZ = intoBag ? asmZ + 0.01 : asmZ - 0.05;
+      const arcH = intoBag ? 0.28 : 0.12;
+      const dx = startX + (targetX - startX) * s;
+      const dy = startY + (targetY - startY) * s + Math.sin(t * Math.PI) * arcH;
+      const dz = startZ + (targetZ - startZ) * s;
+      this.draw3DDrinkCan(dx, dy, dz, this.drinkPlaceAnim.drinkId, 1.12, [0, 0, (1 - s) * 0.24]);
+      // Правая кибер-перчатка аккуратно ставит банку на поднос или опускает сверху внутрь пакета!
+      const gX = dx + 0.065;
+      const gY = dy + 0.07;
+      const gZ = dz + 0.05;
+      this.drawBox(gX, gY, gZ, 0.068, 0.036, 0.12, [0.16, 0.14, 0.24], 0.22, [0.14, 0.28, -0.18]);
+      this.drawBox(gX, gY + 0.018, gZ, 0.072, 0.011, 0.038, [0.0, 0.96, 0.83], 0.92, [0.14, 0.28, -0.18]);
     }
 
     // Анимация постановки посуды из левой руки на поднос (ближе к левому краю!) или внутрь полого пакета (с запечатыванием коробки!)
@@ -2787,7 +2947,7 @@ export class FirstPersonWebGLScene {
       const startX = 0.6;
       const startY = 1.03;
       const startZ = -0.36;
-      const targetX = a.hasBag ? asmX + 0.135 : asmX + 0.19;
+      const targetX = a.hasBag ? asmX + 0.16 : asmX + 0.22;
       const targetY = a.hasBag ? bagBaseY + 0.22 : asmY + 0.017;
       const cx = startX + (targetX - startX) * s;
       const cy = startY + (targetY - startY) * s + Math.sin(p * Math.PI) * 0.14;
@@ -4175,6 +4335,9 @@ export class FirstPersonWebGLScene {
     const isRightSector = rt.activeSector === 2;
     const needVesselPulse = !rt.activeVessel.type ? 0.35 + 0.25 * Math.sin(this.time * 5.0) : 0.16;
 
+    const isFridgeInteract = isRightSector && Boolean(rt.fridgeOpen) && this.fridgeDoorOpenT > 0.45;
+    const isWarehouseInteract = isRightSector && !rt.fridgeOpen;
+
     // 1. ДИСПЕНСЕР КЕРАМИЧЕСКИХ МИСОК «ДОНБУРИ» (ВСЕ 10 ЧИСТЫХ МИСОК В СТОПКЕ: 10 -> 9 -> 8 -> ... -> 0)
     const bowlX = 0.84;
     const bowlZ = -0.22;
@@ -4216,7 +4379,7 @@ export class FirstPersonWebGLScene {
       this.drawMesh('torus', bowlX, my + 0.063, bowlZ, ms * 0.98, 0.011, ms * 0.98, [0.86, 0.22, 0.32], 0.22, null, 0.88);
     }
 
-    if (isRightSector) {
+    if (isWarehouseInteract) {
       this.registerHitbox('vessel_bowl', bowlX, 1.01, bowlZ, 82);
     }
 
@@ -4234,7 +4397,7 @@ export class FirstPersonWebGLScene {
       this.drawBox(chopX + (c % 2) * 0.008, chopY + 0.126, chopZ + (c - 2.5) * 0.007, 0.006, 0.102, 0.011, [0.95, 0.93, 0.88], 0.22, [ang, 0, ang * 0.4]);
       this.drawBox(chopX + (c % 2) * 0.008, chopY + 0.136, chopZ + (c - 2.5) * 0.007, 0.007, 0.026, 0.012, [0.88, 0.16, 0.24], 0.4, [ang, 0, ang * 0.4]);
     }
-    if (isRightSector) {
+    if (isWarehouseInteract) {
       this.registerHitbox('table_chopsticks', chopX, chopY + 0.095, chopZ, 70);
     }
 
@@ -4263,55 +4426,275 @@ export class FirstPersonWebGLScene {
       this.draw3DWokBox(boxX, by, boxZ, 0.56 + k * 0.02, false);
     }
 
-    if (isRightSector) {
+    if (isWarehouseInteract) {
       this.registerHitbox('vessel_box', boxX, 1.0, boxZ, 78);
     }
 
-    // 3. ПРОФЕССИОНАЛЬНЫЙ БАРНЫЙ КРИО-ХОЛОДИЛЬНИК СО СТЕКЛЯННОЙ ВИТРИНОЙ (x = 0.89, z = +0.23)
-    // Корпус из матовой нержавейки, верхний компрессорный отсек с решёткой радиатора и цифровым дисплеем «-4°C»,
-    // внутренняя ледяная LED-подсветка, 3 стальные полки с гастроемкостями запасов и стеклянная дверца с ручкой!
-    this.drawBox(0.9, 1.19, 0.23, 0.3, 0.66, 0.38, [0.16, 0.21, 0.28], 0.1, null, 0.82);
-    // Внутренняя светящаяся крио-камера холодильника
-    this.drawBox(0.86, 1.15, 0.23, 0.24, 0.5, 0.33, [0.06, 0.28, 0.42], 0.45, null, 0.7);
-    // Верхняя панель агрегата с вентиляционными жалюзи и бирюзовым LED-индикатором температуры
-    this.drawBox(0.88, 1.46, 0.23, 0.31, 0.09, 0.39, [0.22, 0.27, 0.35], 0.12, null, 0.88);
-    this.drawBox(0.722, 1.46, 0.16, 0.012, 0.042, 0.095, [0.0, 0.96, 0.88], 0.92);
-    this.drawBox(0.722, 1.46, 0.29, 0.012, 0.045, 0.12, [0.08, 0.1, 0.14], 0.1);
+    // 3. ПРЕМИАЛЬНЫЙ ПОЛЫЙ 3D КРИО-ХОЛОДИЛЬНИК С ПРОЗРАЧНОЙ СТЕКЛЯННОЙ ВИТРИНОЙ И ОТКРЫВАЮЩЕЙСЯ ДВЕРЦЕЙ!
+    // (x = 0.72..1.08, z = 0.02..0.52, y = 0.895..1.66)
+    const fZ = 0.27;
+    const fFrontX = 0.72;
+    const fBackX = 1.08;
+    const fDepth = fBackX - fFrontX; // 0.36
+    const fMidX = (fFrontX + fBackX) * 0.5; // 0.90
+    const fWidth = 0.5; // z = 0.02 .. 0.52
+    const shellDark = [0.14, 0.19, 0.26];
+    const shellTrim = [0.22, 0.28, 0.37];
+    const innerSteel = [0.64, 0.78, 0.88];
+    const innerBack = [0.48, 0.68, 0.82];
 
-    // 3 внутренние стальные полки-решётки холодильника с богатым запасом ингредиентов
-    this.drawBox(0.84, 1.0, 0.23, 0.22, 0.012, 0.32, [0.58, 0.66, 0.74], 0.2, null, 0.9);
-    this.drawBox(0.84, 1.15, 0.23, 0.22, 0.012, 0.32, [0.58, 0.66, 0.74], 0.2, null, 0.9);
-    this.drawBox(0.84, 1.29, 0.23, 0.22, 0.012, 0.32, [0.58, 0.66, 0.74], 0.2, null, 0.9);
+    // 3А. ПОЛЫЙ КОРПУС ИЗ 5 ОТДЕЛЬНЫХ СТЕНОК (НИКАКОГО СПЛОШНОГО БЛОКА ВНУТРИ — ВИДНО НАСКВОЗЬ!)
+    // Нижний цоколь и дно внутренней камеры
+    this.drawBox(fMidX, 0.918, fZ, fDepth, 0.046, fWidth, shellDark, 0.08, null, 0.8);
+    this.drawBox(fMidX - 0.01, 0.942, fZ, fDepth - 0.03, 0.008, fWidth - 0.04, innerSteel, 0.16, null, 0.85);
+    // Задняя стенка (внешний кожух + светлая охлаждаемая внутренняя панель)
+    this.drawBox(fBackX - 0.014, 1.255, fZ, 0.028, 0.66, fWidth, shellDark, 0.08, null, 0.82);
+    this.drawBox(fBackX - 0.032, 1.255, fZ, 0.01, 0.61, fWidth - 0.044, innerBack, 0.28, null, 0.75);
+    // Внутренние вертикальные крио-LED полосы подсветки в дальних углах камеры!
+    this.drawBox(fBackX - 0.042, 1.255, fZ - fWidth * 0.44, 0.012, 0.58, 0.014, [0.58, 0.95, 1.0], 0.95);
+    this.drawBox(fBackX - 0.042, 1.255, fZ + fWidth * 0.44, 0.012, 0.58, 0.014, [0.58, 0.95, 1.0], 0.95);
+    // Левая (z = 0.03) и правая (z = 0.51) боковые стенки корпуса + светлые внутренние вкладыши
+    for (const side of [-1, 1]) {
+      const sz = fZ + side * (fWidth * 0.5 - 0.013);
+      const isz = fZ + side * (fWidth * 0.5 - 0.026);
+      this.drawBox(fMidX, 1.255, sz, fDepth, 0.66, 0.026, shellDark, 0.09, null, 0.82);
+      this.drawBox(fMidX - 0.006, 1.255, isz, fDepth - 0.034, 0.61, 0.006, innerSteel, 0.18, null, 0.78);
+    }
+    // Потолок внутренней камеры + верхняя ледяная LED-лампа внутри
+    this.drawBox(fMidX, 1.57, fZ, fDepth, 0.024, fWidth, shellTrim, 0.12, null, 0.85);
+    this.drawBox(fFrontX + 0.075, 1.555, fZ, 0.034, 0.01, fWidth - 0.09, [0.82, 0.98, 1.0], 0.98);
 
-    // Нижняя полка: лоток с маринованными яйцами Аджитама и рулеты свинины Тяшу
-    this.draw3DAjitamaEggHalf(0.81, 1.01, 0.14, 0.88, 0.4);
-    this.draw3DAjitamaEggHalf(0.81, 1.01, 0.21, 0.88, -0.3);
-    this.draw3DChashuSlice(0.81, 1.02, 0.3, 0.92, [0.18, 0.4, 0]);
-    this.draw3DChashuSlice(0.81, 1.04, 0.31, 0.92, [0.22, 0.2, 0]);
-
-    // Средняя полка: пачки листов Нори, зелёный лук и золотистые креветки Темпура
-    this.draw3DNoriSheet(0.81, 1.19, 0.14, 0.85, [-0.15, 0.35, 0]);
-    this.draw3DNoriSheet(0.83, 1.19, 0.16, 0.85, [-0.1, 0.42, 0]);
-    this.draw3DTempuraShrimp(0.8, 1.165, 0.25, 0.9, 0.3);
-    this.draw3DScallionRing(0.8, 1.17, 0.32, 0.95, [0.1, 0.3, 0]);
-
-    // Верхняя полка: запасные красные бутылочки острого чили-соуса с носиками
-    for (const bz of [0.14, 0.23, 0.31]) {
-      this.drawMesh('cylinder', 0.81, 1.34, bz, 0.048, 0.085, 0.048, [0.95, 0.14, 0.24], 0.45, null, 0.75);
-      this.drawMesh('cone', 0.81, 1.395, bz, 0.022, 0.032, 0.022, [1.0, 0.55, 0.1], 0.5);
+    // Верхний компрессорный козырёк с цифровым дисплеем «-4°C» и решёткой радиатора
+    this.drawBox(fMidX - 0.006, 1.622, fZ, fDepth + 0.014, 0.088, fWidth + 0.012, shellTrim, 0.12, null, 0.88);
+    this.drawBox(fFrontX - 0.014, 1.622, fZ - 0.11, 0.01, 0.044, 0.12, [0.04, 0.08, 0.12], 0.15);
+    this.drawBox(fFrontX - 0.019, 1.622, fZ - 0.11, 0.005, 0.024, 0.085, [0.0, 0.96, 0.88], 0.96);
+    // Вентиляционные жалюзи справа на козырьке
+    for (let v = 0; v < 4; v++) {
+      this.drawBox(fFrontX - 0.014, 1.602 + v * 0.013, fZ + 0.09, 0.01, 0.006, 0.17, [0.08, 0.11, 0.16], 0.08);
     }
 
-    // Алюминиевая рама стеклянной дверцы холодильника и длинная вертикальная хромированная ручка слева
-    this.drawBox(0.735, 1.15, 0.055, 0.022, 0.54, 0.022, [0.68, 0.75, 0.84], 0.25, null, 0.95);
-    this.drawBox(0.735, 1.15, 0.405, 0.022, 0.54, 0.022, [0.68, 0.75, 0.84], 0.25, null, 0.95);
-    this.drawBox(0.735, 1.41, 0.23, 0.022, 0.024, 0.37, [0.68, 0.75, 0.84], 0.25, null, 0.95);
-    this.drawBox(0.735, 0.89, 0.23, 0.022, 0.024, 0.37, [0.68, 0.75, 0.84], 0.25, null, 0.95);
-    // Световые блики на стекле витрины и вертикальная ручка дверцы
-    this.drawBox(0.732, 1.15, 0.23, 0.006, 0.5, 0.32, [0.0, 0.82, 1.0], 0.32, null, 0.98);
-    this.drawMesh('cylinder', 0.705, 1.15, 0.085, 0.016, 0.24, 0.016, [0.85, 0.9, 0.96], 0.3, null, 0.98);
+    // 3Б. ТРИ ВНУТРЕННИЕ СТАЛЬНЫЕ ПОЛКИ-РЕШЁТКИ С ПЕРЕДНЕЙ ХРОМИРОВАННОЙ КРОМКОЙ
+    const shelfBotY = 0.955;
+    const shelfMidY = 1.155;
+    const shelfTopY = 1.365;
+    for (const sy of [shelfMidY, shelfTopY]) {
+      this.drawBox(fMidX - 0.006, sy, fZ, fDepth - 0.06, 0.011, fWidth - 0.056, [0.68, 0.76, 0.84], 0.2, null, 0.92);
+      this.drawBox(fFrontX + 0.028, sy, fZ, 0.014, 0.016, fWidth - 0.052, [0.82, 0.88, 0.94], 0.26, null, 0.96);
+    }
 
-    if (isRightSector) {
-      this.registerHitbox('cryo_fridge', 0.86, 1.15, 0.23, 84);
+    const colZs = [fZ - 0.155, fZ, fZ + 0.155]; // [0.115, 0.27, 0.425]
+    const unlockedTop = gameState.getUnlockedToppings();
+    const maxCap = gameState.getMaxTrayCap();
+
+    // 3В. ВЕРХНЯЯ ПОЛКА (y = 1.365): ЖЕСТЯНЫЕ БАНКИ НАПИТКОВ 3-Х ВИДОВ В 3 РЯДА (ПО 3 БАНКИ В ГЛУБИНУ!)
+    const drinkRows = ['cola', 'matcha', 'ramune'];
+    const drinkDepthXs = [0.79, 0.88, 0.97];
+    const takingDrinkPhase =
+      this.drinkPlaceAnim.active && this.drinkPlaceAnim.timer / this.drinkPlaceAnim.duration < 0.36;
+    for (let rIdx = 0; rIdx < drinkRows.length; rIdx++) {
+      const dId = drinkRows[rIdx];
+      const dz = colZs[rIdx];
+      const dCfg = GAME_CONFIG.DRINKS?.[dId];
+      // Тонкий цветной ценник-маркер ряда на передней планке верхней полки
+      this.drawBox(fFrontX + 0.02, shelfTopY, dz, 0.005, 0.012, 0.1, dCfg?.bodyCol || [0.9, 0.2, 0.2], 0.72);
+      for (let dIdx = 0; dIdx < drinkDepthXs.length; dIdx++) {
+        // Если правая рука прямо сейчас вынимает переднюю банку этого ряда — скрываем её со своего места на полке!
+        if (dIdx === 0 && takingDrinkPhase && this.drinkPlaceAnim.drinkId === dId) continue;
+        this.draw3DDrinkCan(drinkDepthXs[dIdx], shelfTopY + 0.007, dz, dId, 1.0);
+      }
+      if (isFridgeInteract) {
+        this.registerHitbox(`fridge_drink_${dId}`, 0.81, shelfTopY + 0.068, dz, 48);
+      }
+    }
+
+    // Вспомогательная функция отрисовки стального гастро-контейнера с 3D-ингредиентом внутри холодильника!
+    const drawFridgeIngredientContainer = (topId, cy, cz) => {
+      const isUnlocked = unlockedTop.includes(topId);
+      const stock = gameState.persistent.trayStock[topId] ?? 0;
+      const ratio = isUnlocked ? stock / maxCap : 0;
+      const cx = 0.88;
+      const cwX = 0.21; // глубина по X
+      const cwZ = 0.132; // ширина по Z
+
+      // Стальной корпус контейнера + верхний фланец
+      this.drawBox(cx, cy + 0.024, cz, cwX, 0.044, cwZ, isUnlocked ? [0.34, 0.4, 0.48] : [0.2, 0.22, 0.27], 0.1, null, 0.85);
+      this.drawBox(cx, cy + 0.046, cz, cwX + 0.012, 0.007, cwZ + 0.012, [0.76, 0.82, 0.9], 0.18, null, 0.94);
+
+      // LED-индикатор уровня запаса на столе на переднем торце контейнера!
+      let indCol = [0.35, 0.4, 0.46];
+      let indGlow = 0.12;
+      if (isUnlocked) {
+        if (ratio <= 0) {
+          indCol = [1.0, 0.16, 0.28];
+          indGlow = 0.55 + 0.45 * Math.sin(this.time * 9.0);
+        } else if (ratio < 1) {
+          indCol = [1.0, 0.72, 0.1];
+          indGlow = 0.55 + 0.35 * Math.sin(this.time * 6.0);
+        } else {
+          indCol = [0.0, 0.96, 0.83];
+          indGlow = 0.65;
+        }
+      }
+      this.drawBox(cx - cwX * 0.5 - 0.003, cy + 0.026, cz, 0.006, 0.014, cwZ * 0.72, indCol, indGlow);
+
+      // Содержимое контейнера (3D-ингредиенты прямо как на столе!)
+      if (!isUnlocked) {
+        this.drawBox(cx, cy + 0.052, cz, cwX * 0.76, 0.012, cwZ * 0.74, [0.16, 0.18, 0.23], 0.06);
+      } else if (topId === 'egg') {
+        this.drawBox(cx, cy + 0.042, cz, cwX - 0.018, 0.008, cwZ - 0.018, [0.22, 0.13, 0.08], 0.08);
+        this.draw3DAjitamaEggHalf(cx - 0.045, cy + 0.048, cz - 0.022, 0.78, 0.35);
+        this.draw3DAjitamaEggHalf(cx + 0.01, cy + 0.048, cz + 0.02, 0.78, -0.4);
+        this.draw3DAjitamaEggHalf(cx + 0.052, cy + 0.048, cz - 0.012, 0.76, 0.8);
+      } else if (topId === 'chashu') {
+        this.drawBox(cx, cy + 0.042, cz, cwX - 0.018, 0.008, cwZ - 0.018, [0.2, 0.1, 0.09], 0.08);
+        this.draw3DChashuSlice(cx - 0.042, cy + 0.056, cz, 0.78, [0.18, 0.3, 0.12]);
+        this.draw3DChashuSlice(cx + 0.01, cy + 0.06, cz + 0.008, 0.78, [0.22, -0.2, 0.1]);
+        this.draw3DChashuSlice(cx + 0.052, cy + 0.056, cz - 0.006, 0.76, [0.14, 0.1, 0.08]);
+      } else if (topId === 'nori') {
+        this.drawBox(cx, cy + 0.042, cz, cwX - 0.018, 0.008, cwZ - 0.018, [0.06, 0.1, 0.08], 0.06);
+        for (let n = 0; n < 3; n++) {
+          this.draw3DNoriSheet(cx - 0.04 + n * 0.04, cy + 0.072, cz, 0.68, [-0.15, 0.25, 0.08]);
+        }
+      } else if (topId === 'scallion') {
+        this.drawBox(cx, cy + 0.042, cz, cwX - 0.018, 0.01, cwZ - 0.018, [0.09, 0.3, 0.12], 0.16);
+        for (let g = 0; g < 6; g++) {
+          const gx = cx - 0.055 + (g % 3) * 0.052;
+          const gz = cz + (g < 3 ? -0.024 : 0.024);
+          this.draw3DScallionRing(gx, cy + 0.054 + (g % 2) * 0.006, gz, 0.88, [0.2, g * 0.6, 0.1]);
+        }
+      } else if (topId === 'shrimp') {
+        this.drawBox(cx, cy + 0.042, cz, cwX - 0.018, 0.008, cwZ - 0.018, [0.18, 0.13, 0.07], 0.08);
+        this.draw3DTempuraShrimp(cx - 0.028, cy + 0.056, cz - 0.014, 0.76, 0.35);
+        this.draw3DTempuraShrimp(cx + 0.032, cy + 0.058, cz + 0.016, 0.76, -0.45);
+      } else if (topId === 'chili') {
+        this.drawBox(cx, cy + 0.044, cz, cwX - 0.018, 0.012, cwZ - 0.018, [0.76, 0.08, 0.12], 0.45);
+        for (const ox of [-0.036, 0.034]) {
+          this.drawMesh('cylinder', cx + ox, cy + 0.078, cz, 0.036, 0.068, 0.036, [0.96, 0.14, 0.22], 0.48, null, 0.78);
+          this.drawMesh('cone', cx + ox, cy + 0.122, cz, 0.016, 0.026, 0.016, [1.0, 0.52, 0.1], 0.55);
+        }
+      }
+
+      if (isFridgeInteract) {
+        this.registerHitbox(`fridge_top_${topId}`, cx - 0.03, cy + 0.058, cz, 48);
+      }
+    };
+
+    // 3Г. СРЕДНЯЯ ПОЛКА (y = 1.155): ВЕРХНИЙ РЯД ИНГРЕДИЕНТОВ СТОЛА (ЯЙЦО, СВИНИНА, НОРИ)
+    drawFridgeIngredientContainer('egg', shelfMidY + 0.006, colZs[0]);
+    drawFridgeIngredientContainer('chashu', shelfMidY + 0.006, colZs[1]);
+    drawFridgeIngredientContainer('nori', shelfMidY + 0.006, colZs[2]);
+
+    // 3Д. НИЖНЯЯ ПОЛКА (y = 0.955): НИЖНИЙ РЯД ИНГРЕДИЕНТОВ СТОЛА (ЛУК, КРЕВЕТКА, ЧИЛИ)
+    drawFridgeIngredientContainer('scallion', shelfBotY - 0.004, colZs[0]);
+    drawFridgeIngredientContainer('shrimp', shelfBotY - 0.004, colZs[1]);
+    drawFridgeIngredientContainer('chili', shelfBotY - 0.004, colZs[2]);
+
+    // 3Е. АНИМАЦИИ ПРАВОЙ РУКИ ВНУТРИ ХОЛОДИЛЬНИКА (ПОПОЛНЕНИЕ КОНТЕЙНЕРА И ЗАБОР БАНКИ НАПИТКА!)
+    if (this.fridgeRestockAnim.active) {
+      const topPosMap = {
+        egg: [0.84, shelfMidY + 0.065, colZs[0]],
+        chashu: [0.84, shelfMidY + 0.065, colZs[1]],
+        nori: [0.84, shelfMidY + 0.065, colZs[2]],
+        scallion: [0.84, shelfBotY + 0.055, colZs[0]],
+        shrimp: [0.84, shelfBotY + 0.055, colZs[1]],
+        chili: [0.84, shelfBotY + 0.055, colZs[2]]
+      };
+      const tp = topPosMap[this.fridgeRestockAnim.toppingId] || topPosMap.egg;
+      const p = Math.min(1, this.fridgeRestockAnim.timer / this.fridgeRestockAnim.duration);
+      let gx, gy, gz;
+      if (p < 0.35) {
+        const s = (p / 0.35) * (p / 0.35) * (3 - 2 * (p / 0.35));
+        gx = 0.48 + (tp[0] - 0.48) * s;
+        gy = 1.02 + (tp[1] - 1.02) * s;
+        gz = tp[2] + 0.08 * (1 - s);
+      } else {
+        const t = (p - 0.35) / 0.65;
+        const s = t * t * (3 - 2 * t);
+        gx = tp[0] + (0.42 - tp[0]) * s;
+        gy = tp[1] + Math.sin(t * Math.PI) * 0.08 - 0.06 * s;
+        gz = tp[2] - 0.42 * s;
+        // Мини-контейнер пополнения летит в руке из холодильника налево к столу!
+        this.drawBox(gx, gy - 0.02, gz, 0.12, 0.036, 0.095, [0.42, 0.5, 0.6], 0.2, [0, 0.2, 0], 0.9);
+        this.drawBox(gx, gy, gz, 0.1, 0.012, 0.075, [0.0, 0.96, 0.88], 0.78);
+      }
+      this.drawBox(gx - 0.04, gy + 0.02, gz + 0.02, 0.11, 0.038, 0.068, [0.16, 0.14, 0.24], 0.24, [0.1, 0.2, -0.15]);
+      this.drawBox(gx - 0.04, gy + 0.04, gz + 0.02, 0.038, 0.011, 0.072, [0.0, 0.96, 0.83], 0.94, [0.1, 0.2, -0.15]);
+    }
+
+    if (takingDrinkPhase) {
+      const pAll = Math.min(1, this.drinkPlaceAnim.timer / this.drinkPlaceAnim.duration);
+      const t = Math.min(1, pAll / 0.36);
+      const s = t * t * (3 - 2 * t);
+      const rIdx = Math.max(0, drinkRows.indexOf(this.drinkPlaceAnim.drinkId));
+      const startZ = colZs[rIdx] ?? fZ;
+      const startX = drinkDepthXs[0];
+      const startY = shelfTopY + 0.007;
+      const dx = startX + (0.48 - startX) * s;
+      const dy = startY + (1.28 - startY) * s + Math.sin(t * Math.PI) * 0.04;
+      const dz = startZ + (-0.08 - startZ) * s;
+      this.draw3DDrinkCan(dx, dy, dz, this.drinkPlaceAnim.drinkId, 1.02);
+      this.drawBox(dx - 0.055, dy + 0.055, dz + 0.03, 0.115, 0.038, 0.068, [0.16, 0.14, 0.24], 0.24, [0.1, 0.2, -0.12]);
+      this.drawBox(dx - 0.055, dy + 0.075, dz + 0.03, 0.038, 0.011, 0.072, [0.0, 0.96, 0.83], 0.94, [0.1, 0.2, -0.12]);
+    }
+
+    // 3Ж. ОТКРЫВАЮЩАЯСЯ ПРОЗРАЧНАЯ СТЕКЛЯННАЯ ДВЕРЦА НА ПЕТЛЯХ СПРАВА (pivot: x = 0.72, z = 0.51)
+    // Рисуется В САМОМ КОНЦЕ после всех полок и продуктов, чтобы прозрачное стекло идеально просвечивало содержимое!
+    const doorT = Math.max(0, Math.min(1, this.fridgeDoorOpenT));
+    const doorSmooth = doorT * doorT * (3 - 2 * doorT);
+    const doorAng = doorSmooth * 1.92; // Распахивается наружу и вправо на ~110°!
+    const pivotX = fFrontX;
+    const pivotZ = fZ + fWidth * 0.5 - 0.01; // 0.51
+    const doorW = fWidth - 0.02; // 0.48
+    const doorH = 0.62;
+    const doorMidY = 1.255;
+    const cosD = Math.cos(doorAng);
+    const sinD = Math.sin(doorAng);
+    const doorPt = (lx, lz) => [
+      pivotX + lx * cosD + lz * sinD,
+      pivotZ - lx * sinD + lz * cosD
+    ];
+    const doorRot = [0, doorAng, 0];
+    const frameCol = [0.7, 0.77, 0.86];
+
+    // Две петли справа
+    this.drawBox(pivotX, 1.02, pivotZ, 0.02, 0.036, 0.022, [0.46, 0.52, 0.6], 0.15, null, 0.95);
+    this.drawBox(pivotX, 1.49, pivotZ, 0.02, 0.036, 0.022, [0.46, 0.52, 0.6], 0.15, null, 0.95);
+
+    // 4 алюминиевых профиля рамы дверцы
+    const [flx, flz] = doorPt(0, -doorW + 0.012);
+    const [frx, frz] = doorPt(0, -0.012);
+    const [fcx, fcz] = doorPt(0, -doorW * 0.5);
+    this.drawBox(flx, doorMidY, flz, 0.022, doorH, 0.024, frameCol, 0.22, doorRot, 0.94);
+    this.drawBox(frx, doorMidY, frz, 0.022, doorH, 0.024, frameCol, 0.22, doorRot, 0.94);
+    this.drawBox(fcx, doorMidY + doorH * 0.5 - 0.012, fcz, 0.022, 0.024, doorW, frameCol, 0.22, doorRot, 0.94);
+    this.drawBox(fcx, doorMidY - doorH * 0.5 + 0.012, fcz, 0.022, 0.024, doorW, frameCol, 0.22, doorRot, 0.94);
+
+    // Вертикальная хромированная ручка дверцы (со стороны открывания слева!) + 2 кронштейна
+    const [hx, hz] = doorPt(-0.034, -doorW + 0.044);
+    const [hbx, hbz] = doorPt(-0.017, -doorW + 0.044);
+    this.drawMesh('cylinder', hx, doorMidY, hz, 0.015, 0.26, 0.015, [0.88, 0.93, 0.98], 0.28, doorRot, 0.98);
+    this.drawBox(hbx, doorMidY + 0.1, hbz, 0.032, 0.014, 0.014, [0.76, 0.82, 0.9], 0.22, doorRot, 0.96);
+    this.drawBox(hbx, doorMidY - 0.1, hbz, 0.032, 0.014, 0.014, [0.76, 0.82, 0.9], 0.22, doorRot, 0.96);
+
+    // НАСТОЯЩЕЕ ПРОЗРАЧНОЕ СТЕКЛО ВИТРИНЫ (pattern = 6, alpha = 0.22 — сквозь него чётко видны все 3 полки!)
+    this.drawBox(fcx, doorMidY, fcz, 0.005, doorH - 0.046, doorW - 0.046, [0.32, 0.84, 1.0], 0.26, doorRot, 0.98, 6, 0.22);
+
+    // 3З. ПРАВАЯ РУКА ГЕРОЯ, ОТКРЫВАЮЩАЯ И ЗАКРЫВАЮЩАЯ ДВЕРЦУ ЗА ХРОМИРОВАННУЮ РУЧКУ!
+    if (this.fridgeDoorHandAnim.active) {
+      const p = Math.min(1, this.fridgeDoorHandAnim.timer / this.fridgeDoorHandAnim.duration);
+      const wave = Math.sin(p * Math.PI);
+      const grabX = hx - 0.055 * (1 - wave) - 0.025;
+      const grabY = doorMidY - 0.06 * (1 - wave);
+      const grabZ = hz + 0.02;
+      const handRot = [0.08, doorAng + 0.35, -0.14];
+      // Кибер-перчатка правой руки на ручке дверцы + предплечье
+      this.drawBox(grabX, grabY, grabZ, 0.115, 0.042, 0.072, [0.16, 0.14, 0.24], 0.24, handRot);
+      this.drawBox(grabX, grabY + 0.022, grabZ, 0.04, 0.012, 0.076, [0.0, 0.96, 0.83], 0.95, handRot);
+      this.drawBox(grabX - 0.09, grabY - 0.03, grabZ + 0.04, 0.13, 0.048, 0.078, [0.11, 0.13, 0.2], 0.16, handRot);
+    }
+
+    if (isWarehouseInteract) {
+      this.registerHitbox('cryo_fridge', fFrontX + 0.12, 1.25, fZ, 98);
     }
   }
 
@@ -5181,7 +5564,9 @@ export class FirstPersonWebGLScene {
         bs,
         a.vessel || this.servePushAnim.active,
         Boolean(a.hasChopsticks),
-        true
+        true,
+        null,
+        a.drink || null
       );
       // Правая кибер-перчатка крепко держит обе сведённые витые ручки сверху пакета!
       const rhX = cx + R[0] * 0.02;
@@ -5191,7 +5576,7 @@ export class FirstPersonWebGLScene {
       this.drawBox(rhX, rhY, rhZ, 0.072, 0.036, 0.115, [0.16, 0.14, 0.24], 0.24, rhRot);
       this.drawBox(rhX, rhY + 0.02, rhZ, 0.076, 0.011, 0.038, [0.0, 0.96, 0.83], 0.94, rhRot);
     } else {
-      // Поднимаемся к клиенту с собранным ПОДНОСОМ (блюдо ближе к левому краю, палочки справа)
+      // Поднимаемся к клиенту с собранным ПОДНОСОМ (блюдо слева, банка напитка и палочки справа!)
       const ts = 0.82 * fadeScale;
       this.draw3DRamenTray(cx, cy, cz, ts);
       if (a.vessel) {
@@ -5203,11 +5588,20 @@ export class FirstPersonWebGLScene {
           0.65 * fadeScale
         );
       }
+      if (a.drink) {
+        this.draw3DDrinkCan(
+          cx + R[0] * 0.1 * ts - F[0] * 0.04 * ts,
+          cy + 0.016 * ts,
+          cz + R[2] * 0.1 * ts - F[2] * 0.04 * ts,
+          a.drink,
+          0.95 * fadeScale
+        );
+      }
       if (a.hasChopsticks) {
         this.draw3DChopsticksPack(
-          cx + R[0] * 0.19 * ts,
+          cx + R[0] * 0.22 * ts,
           cy + 0.016 * ts,
-          cz + R[2] * 0.19 * ts,
+          cz + R[2] * 0.22 * ts,
           0.88 * fadeScale
         );
       }
@@ -5306,8 +5700,8 @@ export class FirstPersonWebGLScene {
     });
   }
 
-  drawBox(x, y, z, sx, sy, sz, color, emissive = 0.0, rot = null, specular = 0.15, pattern = 0) {
-    this.drawMesh('box', x, y, z, sx, sy, sz, color, emissive, rot, specular, pattern);
+  drawBox(x, y, z, sx, sy, sz, color, emissive = 0.0, rot = null, specular = 0.15, pattern = 0, alpha = 1.0) {
+    this.drawMesh('box', x, y, z, sx, sy, sz, color, emissive, rot, specular, pattern, alpha);
   }
 
   drawTexturedQuad(tex, x, y, z, sx, sy, emissive = 0.75, rot = null) {
@@ -5329,11 +5723,12 @@ export class FirstPersonWebGLScene {
     gl.uniform1f(this.uEmissive, emissive);
     gl.uniform1f(this.uSpecular, 0.05);
     gl.uniform1f(this.uPattern, 0);
+    gl.uniform1f(this.uAlpha, 1.0);
     gl.drawArrays(gl.TRIANGLES, info.first, info.count);
     gl.uniform1f(this.uUseTex, 0.0);
   }
 
-  drawMesh(meshName, x, y, z, sx, sy, sz, color, emissive = 0.0, rot = null, specular = 0.25, pattern = 0) {
+  drawMesh(meshName, x, y, z, sx, sy, sz, color, emissive = 0.0, rot = null, specular = 0.25, pattern = 0, alpha = 1.0) {
     const gl = this.gl;
     const info = this.meshes[meshName] || this.meshes.box;
     if (!info) return;
@@ -5348,7 +5743,11 @@ export class FirstPersonWebGLScene {
     gl.uniform1f(this.uEmissive, emissive);
     gl.uniform1f(this.uSpecular, specular);
     gl.uniform1f(this.uPattern, pattern);
+    gl.uniform1f(this.uAlpha, alpha);
+    const isTranslucent = alpha < 0.99;
+    if (isTranslucent) gl.depthMask(false);
     gl.drawArrays(gl.TRIANGLES, info.first, info.count);
+    if (isTranslucent) gl.depthMask(true);
   }
 
   mat4Perspective(fovy, aspect, near, far) {

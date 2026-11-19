@@ -1,6 +1,6 @@
-import { GAME_CONFIG } from './config.js?v=70';
-import { gameState } from './state.js?v=70';
-import { audio } from './audio.js?v=70';
+import { GAME_CONFIG } from './config.js?v=71';
+import { gameState } from './state.js?v=71';
+import { audio } from './audio.js?v=71';
 
 export class CustomerAndDeliverySystem {
   constructor(onToast, onCustomerChanged, onDeliveryChanged) {
@@ -115,15 +115,26 @@ export class CustomerAndDeliverySystem {
     const greet = greetings[this.orderSeq % greetings.length];
     const wantsTakeout =
       !(gameState.persistent.day === 1 && this.orderSeq === 1) && Math.random() < 0.32;
+
+    // Клиент не всегда заказывает напиток (~45% заказов, кроме самого первого заказа 1-го дня)
+    const drinkKeys = Object.keys(GAME_CONFIG.DRINKS || {});
+    const wantsDrink =
+      !(gameState.persistent.day === 1 && this.orderSeq === 1) &&
+      drinkKeys.length > 0 &&
+      Math.random() < 0.45;
+    const drinkId = wantsDrink ? drinkKeys[Math.floor(Math.random() * drinkKeys.length)] : null;
+    const drinkCfg = drinkId ? GAME_CONFIG.DRINKS[drinkId] : null;
+    const drinkSuffix = drinkCfg ? `, и ещё ${drinkCfg.voiceName}` : '';
     const takeoutSuffix = wantsTakeout ? ', и упакуй с собой в коробочке!' : '!';
 
     const voiceText = extraToppingId
-      ? `${greet} Мне ${dish.voiceName}, добавь экстра ${extraVoiceMap[extraToppingId]}${takeoutSuffix}`
-      : `${greet} Мне один ${dish.voiceName} строго по меню${takeoutSuffix}`;
+      ? `${greet} Мне ${dish.voiceName}, добавь экстра ${extraVoiceMap[extraToppingId]}${drinkSuffix}${takeoutSuffix}`
+      : `${greet} Мне один ${dish.voiceName} строго по меню${drinkSuffix}${takeoutSuffix}`;
 
     const order = {
       isRiddle: false,
       wantsTakeout,
+      drink: drinkId,
       menuDishId: dish.id,
       menuDishName: wantsTakeout ? `${dish.name} (📦 С собой)` : dish.name,
       extraToppingId,

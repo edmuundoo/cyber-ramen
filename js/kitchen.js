@@ -1,6 +1,6 @@
-import { GAME_CONFIG } from './config.js?v=70';
-import { gameState } from './state.js?v=70';
-import { audio } from './audio.js?v=70';
+import { GAME_CONFIG } from './config.js?v=71';
+import { gameState } from './state.js?v=71';
+import { audio } from './audio.js?v=71';
 
 export class KitchenSystem {
   constructor(callbacks) {
@@ -674,6 +674,7 @@ export class KitchenSystem {
     const hadItems = Boolean(rt.assembly.vessel || rt.assembly.hasChopsticks || rt.assembly.drink);
     const prevVessel = rt.assembly.vessel ? JSON.parse(JSON.stringify(rt.assembly.vessel)) : null;
     const prevChopsticks = Boolean(rt.assembly.hasChopsticks);
+    const prevDrink = rt.assembly.drink || null;
     const onTray = Boolean(rt.assembly.hasTray);
 
     rt.assembly.hasBag = true;
@@ -692,7 +693,7 @@ export class KitchenSystem {
       this.onToast('🛍️ Пакет для заказа с собой поставлен на столешницу!', '#00f5d4');
     }
     this.renderAllKitchen();
-    return { hadItems, onTray, prevVessel, prevChopsticks };
+    return { hadItems, onTray, prevVessel, prevChopsticks, prevDrink };
   }
 
   // Поставить посуду (полную или даже пустую!) из левой руки на поднос / в пакет, или забрать обратно в руку
@@ -854,8 +855,32 @@ export class KitchenSystem {
       evalRes.notes.push('🥢 Палочки');
     }
 
+    // Проверка заказанного напитка из Крио-Холодильника
+    let drinkPay = 0;
+    const reqDrink = cust.order.drink || null;
+    const givenDrink = a.drink || null;
+    if (reqDrink) {
+      const reqCfg = GAME_CONFIG.DRINKS?.[reqDrink];
+      if (givenDrink === reqDrink && reqCfg) {
+        drinkPay = reqCfg.priceAdd;
+        evalRes.notes.push(`${reqCfg.emoji} ${reqCfg.shortName}`);
+      } else if (givenDrink) {
+        const givenCfg = GAME_CONFIG.DRINKS?.[givenDrink];
+        drinkPay = Math.round((givenCfg?.priceAdd || 30) * 0.45);
+        evalRes.isPerfect = false;
+        evalRes.notes.push('Другой напиток');
+      } else {
+        evalRes.isPerfect = false;
+        evalRes.notes.push('Забыт напиток');
+      }
+    } else if (givenDrink) {
+      const givenCfg = GAME_CONFIG.DRINKS?.[givenDrink];
+      drinkPay = 12;
+      evalRes.notes.push(`${givenCfg?.emoji || '🥫'} Комплимент`);
+    }
+
     const district = gameState.getCurrentDistrict();
-    const basePay = Math.round(cust.basePrice * evalRes.multiplier) + chopstickBonus;
+    const basePay = Math.round(cust.basePrice * evalRes.multiplier) + chopstickBonus + drinkPay;
 
     const speedFactor = cust.patience / 100;
     let rawTip = Math.round(
@@ -1107,6 +1132,78 @@ export class KitchenSystem {
     audio.playAlDentePing();
     this.onToast('🚀 3D-бокс в шлюзе! Дрон-курьер заберёт его по таймеру.', '#10f56c');
     this.renderAllKitchen();
+  }
+
+  // Пополнить ОДИН выбранный контейнер на столе по тапу на него внутри открытого Крио-Холодильника!
+  restockSingleTopping(toppingId) {
+    const cfg = GAME_CONFIG.TOPPINGS[toppingId];
+    if (!cfg) return false;
+    const unlocked = gameState.getUnlockedToppings();
+    if (!unlocked.includes(toppingId)) {
+      audio.playPenaltyBuzz();
+      this.onToast(`🔒 ${cfg.emoji} «${cfg.name}» ещё не открыто! Купите в магазине апгрейдов.`, '#ffaa00');
+      return false;
+    }
+
+    const maxCap = gameState.getMaxTrayCap();
+    const current = gameState.persistent.trayStock[toppingId] ?? 0;
+    const missing = maxCap - current;
+    if (missing <= 0) {
+      audio.playTapPop();
+      this.onToast(`❄️ Контейнер ${cfg.emoji} «${cfg.shortName}» на столе уже полон (${maxCap}/${maxCap})!`, '#00f5d4');
+      return false;
+    }
+
+    const cost = missing * cfg.restockUnitCost;
+    gameState.persistent.trayStock[toppingId] = maxCap;
+    gameState.runtime.dailyStats.restockSpent += cost;
+    audio.playTapPop();
+    this.onToast(
+      `❄️ ${cfg.emoji} ${cfg.shortName}: лоток на столе пополнен (+${missing}, -¥${cost})`,
+      '#00bbf9'
+    );
+    this.onTutorialEvent('tray_restocked');
+    gameState.save();
+    this.renderAllKitchen();
+    return true;
+  }
+
+  // Взять охлаждённую жестяную банку с верхней полки холодильника и выставить на поднос или убрать в пакет!
+  addDrinkToAssembly(drinkId) {
+    const rt = gameState.runtime;
+    const cfg = GAME_CONFIG.DRINKS?.[drinkId];
+    if (!cfg) return null;
+
+    if (!rt.assembly || (!rt.assembly.hasTray && !rt.assembly.hasBag)) {
+      audio.playPenaltyBuzz();
+      this.onToast('Сначала поставьте 🍱 Поднос или 🛍️ Пакет на центральный стол!', '#ffaa00');
+      return null;
+    }
+
+    if (rt.assembly.drink === drinkId) {
+      audio.playTapPop();
+      this.onToast(`${cfg.emoji} ${cfg.name} уже в заказе!`, '#00f5d4');
+      return null;
+    }
+
+    // Если меняем одну банку на другую — честно возвращаем себестоимость прошлой банки
+    if (rt.assembly.drink && GAME_CONFIG.DRINKS?.[rt.assembly.drink]) {
+      const oldCost = GAME_CONFIG.DRINKS[rt.assembly.drink].restockUnitCost || 0;
+      rt.dailyStats.restockSpent = Math.max(0, (rt.dailyStats.restockSpent || 0) - oldCost);
+    }
+
+    rt.assembly.drink = drinkId;
+    rt.dailyStats.restockSpent = (rt.dailyStats.restockSpent || 0) + (cfg.restockUnitCost || 10);
+    audio.playTapPop();
+    const intoBag = Boolean(rt.assembly.hasBag);
+    this.onToast(
+      intoBag
+        ? `${cfg.emoji} ${cfg.name} убрана в пакет (-¥${cfg.restockUnitCost})`
+        : `${cfg.emoji} ${cfg.name} выставлена на поднос (-¥${cfg.restockUnitCost})`,
+      '#00f5d4'
+    );
+    this.renderAllKitchen();
+    return { drinkId, intoBag };
   }
 
   restockAllToppings() {
