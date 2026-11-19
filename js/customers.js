@@ -1,6 +1,6 @@
-import { GAME_CONFIG } from './config.js?v=44';
-import { gameState } from './state.js?v=44';
-import { audio } from './audio.js?v=44';
+import { GAME_CONFIG } from './config.js?v=45';
+import { gameState } from './state.js?v=45';
+import { audio } from './audio.js?v=45';
 
 export class CustomerAndDeliverySystem {
   constructor(onToast, onCustomerChanged, onDeliveryChanged) {
@@ -38,7 +38,11 @@ export class CustomerAndDeliverySystem {
       const neonSlowdown = gameState.hasUpgrade('neon_sign') ? 0.75 : 1.0;
       // В первый день во время туториала терпение не падает ниже 45%
       const isTutorial = !gameState.persistent.tutorialDone && gameState.persistent.day === 1;
-      const decay = district.patienceDecayRate * neonSlowdown * (isTutorial ? 0.35 : 1.0);
+      const dirtyPileCount =
+        (rt.dirtyShelfLeft?.length || 0) + (rt.dirtyShelfRight?.length || 0);
+      const messPenalty = dirtyPileCount >= 5 ? 1.3 : 1.0;
+      const decay =
+        district.patienceDecayRate * neonSlowdown * messPenalty * (isTutorial ? 0.35 : 1.0);
 
       cust.patience = Math.max(isTutorial ? 45 : 0, cust.patience - decay * dt);
       if (cust.patience <= 0) {
@@ -163,6 +167,7 @@ export class CustomerAndDeliverySystem {
     // 1. Когда подходит человек — камера направляется прямо на него!
     rt.activeSector = 1;
     rt.cameraFocus = 'customer';
+    rt.customerPanSide = 0;
 
     this.onCustomerChanged();
 
@@ -177,6 +182,7 @@ export class CustomerAndDeliverySystem {
 
     rt.activeSector = 1;
     rt.cameraFocus = 'customer';
+    rt.customerPanSide = 0;
     this.onCustomerChanged();
 
     audio.speakCustomerOrder(cust.order.voiceText, cust.id, () => {

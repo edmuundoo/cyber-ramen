@@ -1,4 +1,4 @@
-import { GAME_CONFIG } from './config.js?v=44';
+import { GAME_CONFIG } from './config.js?v=45';
 
 const BASE_SAVE_KEY = 'CR_NIGHT_YATAI_SAVE_V1';
 
@@ -72,8 +72,9 @@ export function createInitialPersistentState() {
 
 export function createShiftRuntimeState() {
   return {
-    activeSector: 1, // 0: Лево (Варка), 1: Центр (Сборка), 2: Право (Склад/Курьер)
-    cameraFocus: 'worktable', // 'customer' (крупный план гостя при озвучке заказа) | 'worktable' (крупный план тарелки и лотков)
+    activeSector: 1, // -1: Мойка (слева от плиты), 0: Лево (Варка), 1: Центр (Сборка/Гость), 2: Право (Склад/Курьер)
+    cameraFocus: 'worktable', // 'customer' (верхний ракурс на гостя и полки) | 'worktable' (крупный план стола и лотков)
+    customerPanSide: 0, // -1: взгляд влево на левую полку, 0: по центру на гостя, +1: взгляд вправо на правую полку
     customerTalking: false,
     shiftElapsed: 0,
     shiftActive: true,
@@ -81,6 +82,14 @@ export function createShiftRuntimeState() {
     sauceModeArmed: false,
     vesselHeldInLeft: false,
     pendingVesselChoice: null,
+    // Круговорот из 10 керамических мисок (Чистые -> В заказе -> Едят -> Грязные на полке -> Грязные в мойке -> Чистые)
+    maxCleanBowls: 10,
+    cleanBowls: 10,
+    eatingTimers: [],
+    dirtyShelfLeft: [],
+    dirtyShelfRight: [],
+    dirtyInSink: [],
+    nextDirtyShelfSide: 'left',
     baskets: [
       { index: 0, state: 'empty', elapsed: 0 },
       { index: 1, state: 'empty', elapsed: 0 },

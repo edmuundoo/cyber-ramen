@@ -1,6 +1,6 @@
-import { GAME_CONFIG } from './config.js?v=44';
-import { gameState } from './state.js?v=44';
-import { audio } from './audio.js?v=44';
+import { GAME_CONFIG } from './config.js?v=45';
+import { gameState } from './state.js?v=45';
+import { audio } from './audio.js?v=45';
 
 export class KitchenSystem {
   constructor(callbacks) {
@@ -92,6 +92,32 @@ export class KitchenSystem {
           (slotVessel.broth || slotVessel.noodleState || slotVessel.toppings.length > 0)
         ) {
           slotVessel.tableAgeSec = (slotVessel.tableAgeSec || 0) + dt;
+        }
+      }
+    }
+
+    // 4. Таймеры гостей, которые едят из керамических мисок и затем оставляют грязную миску на левой или правой полке прилавка!
+    if (Array.isArray(rt.eatingTimers) && rt.eatingTimers.length > 0) {
+      for (let i = rt.eatingTimers.length - 1; i >= 0; i--) {
+        const item = rt.eatingTimers[i];
+        item.remainingSec -= dt;
+        if (item.remainingSec <= 0) {
+          rt.eatingTimers.splice(i, 1);
+          const dirtyBowl = {
+            broth: item.broth || 'tonkotsu',
+            placedAt: performance.now()
+          };
+          if (item.side === 'right') {
+            rt.dirtyShelfRight.push(dirtyBowl);
+          } else {
+            rt.dirtyShelfLeft.push(dirtyBowl);
+          }
+          audio.playTapPop();
+          const sideLabel = item.side === 'right' ? 'правой' : 'левой';
+          this.onToast(
+            `🍽️ Гость доел и оставил грязную миску на ${sideLabel} полке прилавка!`,
+            '#ffaa00'
+          );
         }
       }
     }
@@ -259,15 +285,40 @@ export class KitchenSystem {
       return false;
     }
 
+    // Если в руке уже есть пустая посуда того же типа — ничего не делаем
+    if (rt.activeVessel && rt.activeVessel.type === type && this.isVesselEmptyOfFood(rt.activeVessel)) {
+      return false;
+    }
+
+    // Если в руке была пустая чистая миска и игрок меняет её на коробку — возвращаем чистую миску обратно в стопку
+    if (rt.activeVessel && rt.activeVessel.type === 'bowl' && this.isVesselEmptyOfFood(rt.activeVessel)) {
+      rt.cleanBowls = Math.min(rt.maxCleanBowls || 10, (rt.cleanBowls ?? 0) + 1);
+    }
+
+    if (type === 'bowl') {
+      if ((rt.cleanBowls ?? 10) <= 0) {
+        audio.playPenaltyBuzz();
+        this.onToast(
+          '🍽️ Чистые миски закончились (0/10)! Заберите грязные с полки и помойте в мойке слева (или возьмите дорогую коробку -¥8)!',
+          '#ff385c'
+        );
+        return false;
+      }
+      rt.cleanBowls = Math.max(0, (rt.cleanBowls ?? 10) - 1);
+    } else if (type === 'box') {
+      // Картонные вок-коробочки всегда доступны, но стоят ¥8 за штуку
+      rt.dailyStats.restockSpent = (rt.dailyStats.restockSpent || 0) + 8;
+    }
+
     rt.activeVessel = this.createEmptyVessel(type);
     rt.vesselHeldInLeft = true;
     rt.pendingVesselChoice = null;
     audio.playTapPop();
     this.onToast(
       type === 'bowl'
-        ? '🍜 Чистая миска взята в левую руку!'
-        : '📦 Открытая вок-коробочка взята в левую руку!',
-      '#00f5d4'
+        ? `🍜 Чистая миска взята в левую руку (осталось чистых: ${rt.cleanBowls}/10)`
+        : '📦 Вок-коробка взята в левую руку (дорогая упаковка -¥8)',
+      type === 'bowl' ? '#00f5d4' : '#ffaa00'
     );
     this.renderAllKitchen();
     return true;
@@ -331,7 +382,10 @@ export class KitchenSystem {
       const slotEmpty = this.isVesselEmptyOfFood(slotV);
 
       if (handEmpty && slotEmpty) {
-        // Обе пустые — просто убираем пустую со стола
+        // Обе пустые — просто убираем пустую со стола (если это была чистая миска, возвращаем её в стопку)
+        if (slotV.type === 'bowl') {
+          rt.cleanBowls = Math.min(rt.maxCleanBowls || 10, (rt.cleanBowls ?? 0) + 1);
+        }
         rt.tableSlots[idx] = null;
         audio.playTapPop();
         this.onToast('Пустая посуда убрана со стола.', '#00f5d4');
@@ -355,6 +409,10 @@ export class KitchenSystem {
       }
 
       const targetVesselType = handEmpty ? handV.type : slotV.type;
+      // Если перелили из керамической миски в коробку — опустевшая испачканная миска отправляется в мойку!
+      if (fromType === 'bowl' && targetVesselType !== 'bowl') {
+        rt.dirtyInSink.push({ broth: mergedBroth || 'tonkotsu' });
+      }
       rt.activeVessel = {
         type: targetVesselType,
         broth: mergedBroth,
@@ -405,6 +463,15 @@ export class KitchenSystem {
     rt.vesselHeldInLeft = false;
     rt.sauceModeArmed = false;
 
+    if (tossed.type === 'bowl') {
+      // Сама керамическая миска не выбрасывается: если в ней была еда — миска уходит грязной в мойку, если пустая — возвращается в чистые!
+      if (hadFood) {
+        rt.dirtyInSink.push({ broth: tossed.broth || 'tonkotsu' });
+      } else {
+        rt.cleanBowls = Math.min(rt.maxCleanBowls || 10, (rt.cleanBowls ?? 0) + 1);
+      }
+    }
+
     if (hadFood) {
       const wasteCost =
         (tossed.broth ? 15 : 0) +
@@ -413,10 +480,20 @@ export class KitchenSystem {
       rt.dailyStats.wastedFoodCost = (rt.dailyStats.wastedFoodCost || 0) + wasteCost;
       rt.dailyStats.penalties += wasteCost;
       audio.playPenaltyBuzz();
-      this.onToast(`🗑️ Выброшено из руки в мусорку! Списаны продукты (-¥${wasteCost})`, '#ff385c');
+      this.onToast(
+        tossed.type === 'bowl'
+          ? `🗑️ Продукты выброшены (-¥${wasteCost}), грязная миска отправлена в мойку!`
+          : `🗑️ Выброшено из руки в мусорку! Списаны продукты (-¥${wasteCost})`,
+        '#ff385c'
+      );
     } else {
       audio.playTapPop();
-      this.onToast('🗑️ Пустая посуда сброшена из руки в мусорку', '#ffaa00');
+      this.onToast(
+        tossed.type === 'bowl'
+          ? '🍜 Пустая миска возвращена в чистую стопку'
+          : '🗑️ Пустая коробка сброшена из руки в мусорку',
+        '#ffaa00'
+      );
     }
 
     this.renderAllKitchen();
@@ -593,6 +670,17 @@ export class KitchenSystem {
       leftBadReviewFromTable ? '#ffaa00' : evalRes.isPerfect ? '#10f56c' : '#00f5d4'
     );
 
+    // Если отдали заказ в керамической миске — через 8–10 секунд гость доест и оставит грязную миску на левой или правой полке прилавка!
+    if (rt.activeVessel.type === 'bowl') {
+      const side = rt.nextDirtyShelfSide || 'left';
+      rt.nextDirtyShelfSide = side === 'left' ? 'right' : 'left';
+      rt.eatingTimers.push({
+        remainingSec: 7.5 + Math.random() * 2.5,
+        side,
+        broth: rt.activeVessel.broth || 'tonkotsu'
+      });
+    }
+
     rt.activeVessel = this.createEmptyVessel(null);
     rt.vesselHeldInLeft = false;
     rt.sauceModeArmed = false;
@@ -602,6 +690,46 @@ export class KitchenSystem {
     gameState.save();
     this.renderAllKitchen();
     return true;
+  }
+
+  // Забрать одну грязную миску с левой или правой верхней полки прилавка (1 тап = 1 миска уходит в мойку!)
+  collectDirtyBowlFromShelf(side = 'left') {
+    const rt = gameState.runtime;
+    const shelf = side === 'right' ? rt.dirtyShelfRight : rt.dirtyShelfLeft;
+    if (!shelf || shelf.length === 0) {
+      return null;
+    }
+
+    const bowl = shelf.pop();
+    rt.dirtyInSink.push(bowl);
+    audio.playTapPop();
+    this.onToast(
+      `🍽️ Грязная миска убрана с полки в мойку (в мойке: ${rt.dirtyInSink.length} шт.)`,
+      '#00f5d4'
+    );
+    this.renderAllKitchen();
+    return { side, bowl, remainingOnShelf: shelf.length };
+  }
+
+  // Помыть одну грязную миску в раковине (Сектор -1, левее плиты): 1 тап = 1 чистая миска возвращается на склад!
+  washOneBowlInSink() {
+    const rt = gameState.runtime;
+    if (!rt.dirtyInSink || rt.dirtyInSink.length === 0) {
+      audio.playTapPop();
+      this.onToast('✨ В мойке чисто! Грязные миски можно забрать с верхних полок прилавка.', '#00f5d4');
+      return null;
+    }
+
+    const washed = rt.dirtyInSink.pop();
+    rt.cleanBowls = Math.min(rt.maxCleanBowls || 10, (rt.cleanBowls ?? 0) + 1);
+    audio.playBoilBubble();
+    audio.playAlDentePing();
+    this.onToast(
+      `🫧 Миска вымыта до блеска! Чистых мисок: ${rt.cleanBowls}/10 (в мойке осталось: ${rt.dirtyInSink.length})`,
+      '#10f56c'
+    );
+    this.renderAllKitchen();
+    return washed;
   }
 
   // Автоматическое закрывание вок-коробочки и мгновенная передача дрону-курьеру при тапе по дрону!
@@ -818,12 +946,19 @@ export class KitchenSystem {
       }
     }
 
+    const needsSinkWash =
+      (rt.dirtyInSink?.length || 0) > 0 && (rt.cleanBowls ?? 10) <= 2;
+
     if (leftEdge && leftLabel) {
       if (rt.activeSector !== 0 && (hasAlDente || hasOver || hasBoiling)) {
         leftEdge.classList.add('is-visible');
         const color = hasAlDente ? '#10f56c' : hasOver ? '#ff385c' : '#ffaa00';
         leftEdge.style.setProperty('--alert-color', color);
         leftLabel.textContent = hasAlDente ? 'AL DENTE!' : hasOver ? 'ГОРИТ!' : 'ВАРКА';
+      } else if (rt.activeSector !== -1 && needsSinkWash) {
+        leftEdge.classList.add('is-visible');
+        leftEdge.style.setProperty('--alert-color', '#00f5d4');
+        leftLabel.textContent = `МОЙКА (${rt.dirtyInSink.length})`;
       } else {
         leftEdge.classList.remove('is-visible');
       }

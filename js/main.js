@@ -1,16 +1,16 @@
-import { GAME_CONFIG } from './config.js?v=44';
-import { gameState, createShiftRuntimeState } from './state.js?v=44';
-import { audio } from './audio.js?v=44';
+import { GAME_CONFIG } from './config.js?v=45';
+import { gameState, createShiftRuntimeState } from './state.js?v=45';
+import { audio } from './audio.js?v=45';
 import {
   buildCustomerPortraitSVG,
   buildCourierDroneSVG,
   generateAppleTouchIcon
-} from './renderer.js?v=44';
-import { FirstPersonWebGLScene } from './webgl3d.js?v=44';
-import { CustomerAndDeliverySystem } from './customers.js?v=44';
-import { KitchenSystem } from './kitchen.js?v=44';
-import { EconomySystem } from './economy.js?v=44';
-import { TutorialSystem } from './tutorial.js?v=44';
+} from './renderer.js?v=45';
+import { FirstPersonWebGLScene } from './webgl3d.js?v=45';
+import { CustomerAndDeliverySystem } from './customers.js?v=45';
+import { KitchenSystem } from './kitchen.js?v=45';
+import { EconomySystem } from './economy.js?v=45';
+import { TutorialSystem } from './tutorial.js?v=45';
 
 class CyberRamenApp {
   constructor() {
@@ -19,7 +19,7 @@ class CyberRamenApp {
 
     this.scene3D = new FirstPersonWebGLScene(this.streetCanvas, {
       onPickObject: (hitId) => this.handle3DObjectPicked(hitId),
-      onSwipeSector: (dir) => this.switchSector(gameState.runtime.activeSector + dir),
+      onSwipeSector: (dir) => this.handleHorizontalSwipe(dir),
       onSwipeUpVessel: () => this.handleVesselServeOrPack(),
       onSwipeDownPress: () => this.handlePressAction()
     });
@@ -195,6 +195,23 @@ class CyberRamenApp {
     if (hitId === 'cryo_fridge') {
       this.scene3D.triggerHandAction('fridge', [0.0, 0.75, 1.0]);
       this.kitchenSystem.restockAllToppings();
+      return;
+    }
+
+    if (hitId === 'dirty_bowl_left' || hitId === 'dirty_bowl_right') {
+      const side = hitId === 'dirty_bowl_right' ? 'right' : 'left';
+      const res = this.kitchenSystem.collectDirtyBowlFromShelf(side);
+      if (res) {
+        this.scene3D.triggerCollectDirtyBowlAnim(res.side, res.bowl);
+      }
+      return;
+    }
+
+    if (hitId === 'sink_wash') {
+      const washed = this.kitchenSystem.washOneBowlInSink();
+      if (washed) {
+        this.scene3D.triggerSinkWashAnim(washed);
+      }
     }
   }
 
@@ -203,7 +220,7 @@ class CyberRamenApp {
 
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker
-        .register('./sw.js?v=44', { updateViaCache: 'none' })
+        .register('./sw.js?v=45', { updateViaCache: 'none' })
         .then((reg) => reg.update())
         .catch(() => {});
     }
@@ -337,11 +354,30 @@ class CyberRamenApp {
     this.scene3D.triggerRightStackGrabAnim(type);
   }
 
+  handleHorizontalSwipe(dir) {
+    const rt = gameState.runtime;
+    // Когда камера поднята наверх на персонажа (cameraFocus === 'customer'),
+    // свайпы влево и вправо поворачивают взгляд чуть влево (на левую полку) и чуть вправо (на правую полку)!
+    if (rt.activeSector === 1 && rt.cameraFocus === 'customer') {
+      const curSide = rt.customerPanSide || 0;
+      const nextSide = Math.max(-1, Math.min(1, curSide + dir));
+      if (nextSide !== curSide) {
+        rt.customerPanSide = nextSide;
+        audio.playTapPop();
+      }
+      return;
+    }
+
+    this.switchSector(rt.activeSector + dir);
+  }
+
   switchSector(sectorIdx) {
-    const clamped = Math.max(0, Math.min(2, sectorIdx));
+    // Сектора: -1 (Мойка левее плиты), 0 (Плита), 1 (Центральный стол), 2 (Склад справа)
+    const clamped = Math.max(-1, Math.min(2, sectorIdx));
     if (gameState.runtime.activeSector === clamped) return;
 
     gameState.runtime.activeSector = clamped;
+    gameState.runtime.customerPanSide = 0;
     gameState.runtime.sauceModeArmed = false;
     // Посуда всегда остаётся в левой руке повара при перемещении между секторами,
     // пока игрок не поставит её на один из 3 слотов центрального стола, не отдаст заказу или не выбросит!
