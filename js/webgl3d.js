@@ -1,5 +1,5 @@
-import { GAME_CONFIG } from './config.js?v=68';
-import { gameState } from './state.js?v=68';
+import { GAME_CONFIG } from './config.js?v=69';
+import { gameState } from './state.js?v=69';
 import {
   createAlleyBackdropTexture,
   createBuildingFacadeTexture,
@@ -8,7 +8,7 @@ import {
   createKanjiSignTextures,
   createPedestrianTextures,
   AnimeCustomerTextureRenderer
-} from './art3d.js?v=68';
+} from './art3d.js?v=69';
 
 /**
  * Полноэкранный WebGL 3D движок от первого лица с процедурной высокодетализированной
@@ -988,7 +988,11 @@ export class FirstPersonWebGLScene {
       lastY = e.clientY;
       const dx = lastX - downX;
       const dy = lastY - downY;
-      this.dragPanX = Math.max(-0.28, Math.min(0.28, -dx * 0.0022));
+      const lockHorizontal =
+        gameState.runtime.activeSector === 1 &&
+        gameState.runtime.cameraFocus === 'customer' &&
+        Boolean(gameState.runtime.carryingAssembly);
+      this.dragPanX = lockHorizontal ? 0 : Math.max(-0.28, Math.min(0.28, -dx * 0.0022));
       this.dragPanY = Math.max(-0.18, Math.min(0.18, dy * 0.0018));
     });
 
@@ -1035,6 +1039,7 @@ export class FirstPersonWebGLScene {
           clearHeadTimers();
           gameState.runtime.cameraFocus = 'worktable';
           gameState.runtime.underCounterSide = 0;
+          gameState.runtime.carryingAssembly = false;
           audio.playTapPop();
           return;
         }
@@ -1042,6 +1047,7 @@ export class FirstPersonWebGLScene {
           clearHeadTimers();
           gameState.runtime.cameraFocus = 'customer';
           gameState.runtime.customerPanSide = dx < 0 ? 1 : -1;
+          gameState.runtime.carryingAssembly = false;
           audio.playTapPop();
           return;
         }
@@ -1049,6 +1055,7 @@ export class FirstPersonWebGLScene {
           clearHeadTimers();
           gameState.runtime.cameraFocus = 'worktable';
           gameState.runtime.customerPanSide = 0;
+          gameState.runtime.carryingAssembly = false;
           audio.playTapPop();
           return;
         }
@@ -1058,6 +1065,7 @@ export class FirstPersonWebGLScene {
           gameState.runtime.activeSector = 1;
           gameState.runtime.cameraFocus = 'customer';
           gameState.runtime.customerPanSide = 1;
+          gameState.runtime.carryingAssembly = false;
           syncSectorHighlight(1);
           audio.playTapPop();
           return;
@@ -1068,6 +1076,7 @@ export class FirstPersonWebGLScene {
           gameState.runtime.activeSector = 1;
           gameState.runtime.cameraFocus = 'customer';
           gameState.runtime.customerPanSide = -1;
+          gameState.runtime.carryingAssembly = false;
           syncSectorHighlight(1);
           audio.playTapPop();
           return;
@@ -1091,14 +1100,16 @@ export class FirstPersonWebGLScene {
         if (dy > 0 && gameState.runtime.activeSector === 1 && this._startedUnderCounter) {
           gameState.runtime.cameraFocus = 'worktable';
           gameState.runtime.underCounterSide = 0;
+          gameState.runtime.carryingAssembly = false;
           audio.playTapPop();
           return;
         }
 
-        // С верхнего плана (гость / полки): свайп ВВЕРХ (dy < 0) -> возвращаемся на столешницу!
+        // С верхнего плана (гость / полки): свайп ВВЕРХ (dy < 0) -> возвращаемся на столешницу (поднос ставится обратно на стол!)
         if (dy < 0 && gameState.runtime.activeSector === 1 && this._startedOnCustomer) {
           gameState.runtime.cameraFocus = 'worktable';
           gameState.runtime.customerPanSide = 0;
+          gameState.runtime.carryingAssembly = false;
           audio.playTapPop();
           return;
         }
@@ -1107,6 +1118,7 @@ export class FirstPersonWebGLScene {
         if (dy < 0 && gameState.runtime.activeSector === 1 && !this._startedOnCustomer && !this._startedUnderCounter) {
           gameState.runtime.cameraFocus = 'under_counter';
           gameState.runtime.underCounterSide = 0;
+          gameState.runtime.carryingAssembly = false;
           audio.playTapPop();
           return;
         }
@@ -1116,6 +1128,7 @@ export class FirstPersonWebGLScene {
           gameState.runtime.activeSector = 1;
           gameState.runtime.cameraFocus = 'under_counter';
           gameState.runtime.underCounterSide = 1;
+          gameState.runtime.carryingAssembly = false;
           syncSectorHighlight(1);
           audio.playTapPop();
           return;
@@ -1125,6 +1138,7 @@ export class FirstPersonWebGLScene {
           gameState.runtime.activeSector = 1;
           gameState.runtime.cameraFocus = 'customer';
           gameState.runtime.customerPanSide = 1;
+          gameState.runtime.carryingAssembly = false;
           syncSectorHighlight(1);
           audio.playTapPop();
           return;
@@ -1134,14 +1148,19 @@ export class FirstPersonWebGLScene {
           gameState.runtime.activeSector = 1;
           gameState.runtime.cameraFocus = 'customer';
           gameState.runtime.customerPanSide = -1;
+          gameState.runtime.carryingAssembly = false;
           syncSectorHighlight(1);
           audio.playTapPop();
           return;
         }
 
+        // ТОЛЬКО при свайпе вверх на клиента С ОСНОВНОЙ СТОЛЕШНИЦЫ (worktable) поднимаем поднос/пакет, если на нём что-то стоит!
         if (dy > 0 && gameState.runtime.activeSector === 1 && !this._startedOnCustomer && !this._startedUnderCounter) {
+          const a = gameState.runtime.assembly || {};
+          const hasAssembled = Boolean((a.hasTray || a.hasBag) && (a.vessel || a.hasChopsticks || a.drink));
           gameState.runtime.cameraFocus = 'customer';
           gameState.runtime.customerPanSide = 0;
+          gameState.runtime.carryingAssembly = hasAssembled;
           audio.playTapPop();
           return;
         }
@@ -1178,6 +1197,7 @@ export class FirstPersonWebGLScene {
       this.headPeeking = false;
       if (!gameState.runtime.customerTalking) {
         gameState.runtime.cameraFocus = 'worktable';
+        gameState.runtime.carryingAssembly = false;
       }
     }, delayMs);
   }
@@ -2592,6 +2612,7 @@ export class FirstPersonWebGLScene {
       rt.activeSector === 1 &&
       rt.cameraFocus === 'customer' &&
       (rt.customerPanSide || 0) === 0 &&
+      Boolean(rt.carryingAssembly) &&
       hasAssembled;
 
     // 0. ПОДСТОЛЬНЫЙ МЕТАЛЛИЧЕСКИЙ БАК-МУСОРКА СЛЕВА СПЕРЕДИ (x = -0.54, z = +0.06 — не мешает камере под прилавком!)
@@ -4541,6 +4562,7 @@ export class FirstPersonWebGLScene {
       rt.activeSector === 1 &&
       rt.cameraFocus === 'customer' &&
       (rt.customerPanSide || 0) === 0 &&
+      Boolean(rt.carryingAssembly) &&
       hasAssembled;
     if (
       this.droneDeliverAnim.active ||
@@ -5125,6 +5147,7 @@ export class FirstPersonWebGLScene {
       rt.activeSector === 1 &&
       rt.cameraFocus === 'customer' &&
       (rt.customerPanSide || 0) === 0 &&
+      Boolean(rt.carryingAssembly) &&
       hasAssembled;
 
     if (!isCarrying && !this.servePushAnim.active) return;

@@ -1,16 +1,16 @@
-import { GAME_CONFIG } from './config.js?v=68';
-import { gameState, createShiftRuntimeState } from './state.js?v=68';
-import { audio } from './audio.js?v=68';
+import { GAME_CONFIG } from './config.js?v=69';
+import { gameState, createShiftRuntimeState } from './state.js?v=69';
+import { audio } from './audio.js?v=69';
 import {
   buildCustomerPortraitSVG,
   buildCourierDroneSVG,
   generateAppleTouchIcon
-} from './renderer.js?v=68';
-import { FirstPersonWebGLScene } from './webgl3d.js?v=68';
-import { CustomerAndDeliverySystem } from './customers.js?v=68';
-import { KitchenSystem } from './kitchen.js?v=68';
-import { EconomySystem } from './economy.js?v=68';
-import { TutorialSystem } from './tutorial.js?v=68';
+} from './renderer.js?v=69';
+import { FirstPersonWebGLScene } from './webgl3d.js?v=69';
+import { CustomerAndDeliverySystem } from './customers.js?v=69';
+import { KitchenSystem } from './kitchen.js?v=69';
+import { EconomySystem } from './economy.js?v=69';
+import { TutorialSystem } from './tutorial.js?v=69';
 
 class CyberRamenApp {
   constructor() {
@@ -195,18 +195,16 @@ class CyberRamenApp {
 
     if (hitId === 'customer_serve') {
       if (gameState.runtime.cameraFocus === 'customer') {
-        if (this.kitchenSystem.hasAssembledOrder()) {
+        if (gameState.runtime.carryingAssembly && this.kitchenSystem.hasAssembledOrder()) {
           const served = this.kitchenSystem.serveToCounterCustomer();
           if (served) {
             this.scene3D.triggerServePushAnim(Boolean(served.servedBag));
           }
+        } else if (gameState.runtime.currentCustomer) {
+          this.customerSystem.announceCurrentCustomerOrder();
         } else {
-          const v = gameState.runtime.activeVessel;
-          if (v && v.type && (v.broth || v.noodleState)) {
-            this.kitchenSystem.serveToCounterCustomer();
-          } else {
-            gameState.runtime.cameraFocus = 'worktable';
-          }
+          gameState.runtime.cameraFocus = 'worktable';
+          gameState.runtime.carryingAssembly = false;
         }
       } else {
         this.customerSystem.announceCurrentCustomerOrder();
@@ -266,7 +264,7 @@ class CyberRamenApp {
 
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker
-        .register('./sw.js?v=68', { updateViaCache: 'none' })
+        .register('./sw.js?v=69', { updateViaCache: 'none' })
         .then((reg) => reg.update())
         .catch(() => {});
     }
@@ -334,6 +332,7 @@ class CyberRamenApp {
         const idx = Number(zone.getAttribute('data-sector-zone'));
         if (idx === 1 && gameState.runtime.activeSector === 1) {
           gameState.runtime.cameraFocus = 'worktable';
+          gameState.runtime.carryingAssembly = false;
         }
         this.switchSector(idx);
       });
@@ -427,26 +426,32 @@ class CyberRamenApp {
     }
 
     // Когда камера поднята наверх (cameraFocus === 'customer'):
-    // - свайпы влево/вправо поворачивают взгляд между левой полкой (-1), гостем (0) и правым дроном (+1);
-    // - если мы уже смотрим вправо (+1) и свайпаем вправо (+1) -> опускаемся к холодильнику (Сектор 2)!
-    // - если мы уже смотрим влево (-1) и свайпаем влево (-1) -> опускаемся к плите (Сектор 0)!
+    // - если держим в руках собранный поднос или пакет (carryingAssembly) — двигаться влево/вправо НЕЛЬЗЯ!
+    // - иначе свайпы влево/вправо поворачивают взгляд между левой полкой (-1), гостем (0) и правым дроном (+1)
+    //   БЕЗ поднятия подноса со столешницы!
     if (rt.activeSector === 1 && rt.cameraFocus === 'customer') {
+      if (rt.carryingAssembly) {
+        return;
+      }
       const curSide = rt.customerPanSide || 0;
       if (curSide === 1 && dir === 1) {
         rt.customerPanSide = 0;
         rt.cameraFocus = 'worktable';
+        rt.carryingAssembly = false;
         this.switchSector(2);
         return;
       }
       if (curSide === -1 && dir === -1) {
         rt.customerPanSide = 0;
         rt.cameraFocus = 'worktable';
+        rt.carryingAssembly = false;
         this.switchSector(0);
         return;
       }
       const nextSide = Math.max(-1, Math.min(1, curSide + dir));
       if (nextSide !== curSide) {
         rt.customerPanSide = nextSide;
+        rt.carryingAssembly = false;
         audio.playTapPop();
       }
       return;
@@ -456,6 +461,10 @@ class CyberRamenApp {
   }
 
   switchSector(sectorIdx) {
+    // Пока держим поднос или пакет перед клиентом — нельзя уходить в другие сектора влево/вправо!
+    if (gameState.runtime.cameraFocus === 'customer' && gameState.runtime.carryingAssembly) {
+      return;
+    }
     // Сектора: -1 (Мойка левее плиты), 0 (Плита), 1 (Центральный стол), 2 (Склад справа)
     const clamped = Math.max(-1, Math.min(2, sectorIdx));
     if (gameState.runtime.activeSector === clamped) return;
@@ -463,6 +472,7 @@ class CyberRamenApp {
     gameState.runtime.activeSector = clamped;
     gameState.runtime.customerPanSide = 0;
     gameState.runtime.underCounterSide = 0;
+    gameState.runtime.carryingAssembly = false;
     if (gameState.runtime.cameraFocus === 'under_counter') {
       gameState.runtime.cameraFocus = 'worktable';
     }

@@ -1,6 +1,6 @@
-import { GAME_CONFIG } from './config.js?v=68';
-import { gameState } from './state.js?v=68';
-import { audio } from './audio.js?v=68';
+import { GAME_CONFIG } from './config.js?v=69';
+import { gameState } from './state.js?v=69';
+import { audio } from './audio.js?v=69';
 
 export class CustomerAndDeliverySystem {
   constructor(onToast, onCustomerChanged, onDeliveryChanged) {
@@ -173,6 +173,7 @@ export class CustomerAndDeliverySystem {
       rt.activeSector = 1;
       rt.cameraFocus = 'customer';
       rt.customerPanSide = 0;
+      rt.carryingAssembly = false;
     }
 
     this.onCustomerChanged();
@@ -190,6 +191,7 @@ export class CustomerAndDeliverySystem {
       rt.activeSector = 1;
       rt.cameraFocus = 'customer';
       rt.customerPanSide = 0;
+      rt.carryingAssembly = false;
     }
     this.onCustomerChanged();
 
@@ -199,7 +201,8 @@ export class CustomerAndDeliverySystem {
         if (
           gameState.runtime.activeSector === 1 &&
           gameState.runtime.cameraFocus === 'customer' &&
-          (gameState.runtime.customerPanSide || 0) === 0
+          (gameState.runtime.customerPanSide || 0) === 0 &&
+          !gameState.runtime.carryingAssembly
         ) {
           gameState.runtime.cameraFocus = 'worktable';
         }
