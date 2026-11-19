@@ -1,4 +1,4 @@
-import { gameState } from './state.js?v=46';
+import { gameState } from './state.js?v=47';
 
 export class TutorialSystem {
   constructor() {
