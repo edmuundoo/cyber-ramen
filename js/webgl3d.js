@@ -1,5 +1,5 @@
-import { GAME_CONFIG } from './config.js?v=71';
-import { gameState } from './state.js?v=71';
+import { GAME_CONFIG } from './config.js?v=72';
+import { gameState } from './state.js?v=72';
 import {
   createAlleyBackdropTexture,
   createBuildingFacadeTexture,
@@ -8,7 +8,7 @@ import {
   createKanjiSignTextures,
   createPedestrianTextures,
   AnimeCustomerTextureRenderer
-} from './art3d.js?v=71';
+} from './art3d.js?v=72';
 
 /**
  * Полноэкранный WebGL 3D движок от первого лица с процедурной высокодетализированной
@@ -1510,9 +1510,9 @@ export class FirstPersonWebGLScene {
       this.lookAtTarget = [-0.86, 0.98 + this.dragPanY * 0.6, -0.16 + this.dragPanX];
     } else if (rt.activeSector === 2) {
       if (rt.fridgeOpen) {
-        // Средний комфортный план внутрь открытого Крио-Холодильника (видно все 3 полки и удобно тапать!)
-        this.camPosTarget = [0.14, 1.31, 0.25];
-        this.lookAtTarget = [0.88, 1.24 + this.dragPanY * 0.25, 0.27 - this.dragPanX * 0.25];
+        // Приподнятый средний план внутрь открытого Крио-Холодильника — смотрим чуть сверху на все 3 полки и контейнеры!
+        this.camPosTarget = [0.1, 1.52, 0.25];
+        this.lookAtTarget = [0.88, 1.19 + this.dragPanY * 0.25, 0.27 - this.dragPanX * 0.25];
       } else {
         this.camPosTarget = [0.05, 1.66, 0.45];
         this.lookAtTarget = [0.88, 0.98 + this.dragPanY * 0.6, -0.1 - this.dragPanX];
