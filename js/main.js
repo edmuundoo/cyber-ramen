@@ -1,16 +1,16 @@
-import { GAME_CONFIG } from './config.js?v=58';
-import { gameState, createShiftRuntimeState } from './state.js?v=58';
-import { audio } from './audio.js?v=58';
+import { GAME_CONFIG } from './config.js?v=59';
+import { gameState, createShiftRuntimeState } from './state.js?v=59';
+import { audio } from './audio.js?v=59';
 import {
   buildCustomerPortraitSVG,
   buildCourierDroneSVG,
   generateAppleTouchIcon
-} from './renderer.js?v=58';
-import { FirstPersonWebGLScene } from './webgl3d.js?v=58';
-import { CustomerAndDeliverySystem } from './customers.js?v=58';
-import { KitchenSystem } from './kitchen.js?v=58';
-import { EconomySystem } from './economy.js?v=58';
-import { TutorialSystem } from './tutorial.js?v=58';
+} from './renderer.js?v=59';
+import { FirstPersonWebGLScene } from './webgl3d.js?v=59';
+import { CustomerAndDeliverySystem } from './customers.js?v=59';
+import { KitchenSystem } from './kitchen.js?v=59';
+import { EconomySystem } from './economy.js?v=59';
+import { TutorialSystem } from './tutorial.js?v=59';
 
 class CyberRamenApp {
   constructor() {
@@ -43,7 +43,9 @@ class CyberRamenApp {
           this.scene3D.triggerBrothPourAnim(payload);
         } else if (ev === 'noodle_pulled' && payload && typeof payload === 'object') {
           this.scene3D.triggerNoodleDumpAnim(payload.index, payload.quality);
-        } else if (ev === 'topping_added' || ev === 'dish_served') {
+        } else if (ev === 'topping_added') {
+          this.scene3D.triggerToppingPlaceAnim(payload);
+        } else if (ev === 'dish_served') {
           this.scene3D.triggerHandAction(ev, [0, 0.96, 0.83]);
         }
         this.tutorial.onEvent(ev);
@@ -137,7 +139,6 @@ class CyberRamenApp {
 
     if (hitId.startsWith('topping_')) {
       const topId = hitId.replace('topping_', '');
-      this.scene3D.triggerHandAction('topping', [0.0, 0.95, 0.83]);
       this.kitchenSystem.handleToppingTap(topId);
       return;
     }
@@ -237,7 +238,7 @@ class CyberRamenApp {
 
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker
-        .register('./sw.js?v=58', { updateViaCache: 'none' })
+        .register('./sw.js?v=59', { updateViaCache: 'none' })
         .then((reg) => reg.update())
         .catch(() => {});
     }

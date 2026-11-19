@@ -1,5 +1,5 @@
-import { GAME_CONFIG } from './config.js?v=58';
-import { gameState } from './state.js?v=58';
+import { GAME_CONFIG } from './config.js?v=59';
+import { gameState } from './state.js?v=59';
 import {
   createAlleyBackdropTexture,
   createBuildingFacadeTexture,
@@ -8,7 +8,7 @@ import {
   createKanjiSignTextures,
   createPedestrianTextures,
   AnimeCustomerTextureRenderer
-} from './art3d.js?v=58';
+} from './art3d.js?v=59';
 
 /**
  * Полноэкранный WebGL 3D движок от первого лица с процедурной высокодетализированной
@@ -110,6 +110,12 @@ export class FirstPersonWebGLScene {
       timer: 0,
       duration: 1.48,
       vessel: null
+    };
+    this.toppingAnim = {
+      active: false,
+      toppingId: 'egg',
+      timer: 0,
+      duration: 0.68
     };
     this.centerPlaceFromRight = 0;
     this.existingShiftProgress = 0;
@@ -318,6 +324,14 @@ export class FirstPersonWebGLScene {
     this.sinkWashAnim.rackIndex = bowl?.rackIndex ?? 0;
     // Вода из крана начинает лить при тапе на тарелочку и продолжает идти ещё 1 секунду после завершения мытья!
     this.sinkFaucetFlowTimer = this.sinkWashAnim.duration + 1.0;
+  }
+
+  triggerToppingPlaceAnim(toppingId = 'egg') {
+    this.toppingAnim.active = true;
+    this.toppingAnim.toppingId = toppingId || 'egg';
+    this.toppingAnim.timer = 0;
+    this.toppingAnim.duration = 0.68;
+    this.vesselBounce = 0.75;
   }
 
   triggerRackToCleanStackAnim(fromRackIdx = 0) {
@@ -1200,6 +1214,12 @@ export class FirstPersonWebGLScene {
       this.handPourAnim.timer += dt;
       if (this.handPourAnim.timer >= this.handPourAnim.duration) {
         this.handPourAnim.active = false;
+      }
+    }
+    if (this.toppingAnim.active) {
+      this.toppingAnim.timer += dt;
+      if (this.toppingAnim.timer >= this.toppingAnim.duration) {
+        this.toppingAnim.active = false;
       }
     }
     if (this.centerPlaceFromRight > 0) {
@@ -2118,6 +2138,23 @@ export class FirstPersonWebGLScene {
         const t = (p - 0.76) / 0.24;
         const s = t * t * (3 - 2 * t);
         ext = 1.0 - s;
+      }
+    } else if (rt.activeSector === 1 && rt.cameraFocus === 'worktable' && this.toppingAnim.active) {
+      // При накладывании топпингов палочками левая рука с миской/коробкой тоже плавно выезжает чуть вперёд навстречу!
+      const p = Math.min(1, this.toppingAnim.timer / this.toppingAnim.duration);
+      if (p < 0.24) {
+        const t = p / 0.24;
+        ext = t * t * (3 - 2 * t) * 0.85;
+      } else if (p < 0.74) {
+        ext = 0.85;
+        if (p >= 0.56) {
+          const dropT = (p - 0.56) / 0.18;
+          catchDip = Math.sin(dropT * Math.PI) * 0.013;
+        }
+      } else {
+        const t = (p - 0.74) / 0.26;
+        const s = t * t * (3 - 2 * t);
+        ext = 0.85 * (1.0 - s);
       }
     }
 
@@ -4264,6 +4301,8 @@ export class FirstPersonWebGLScene {
     }
 
     const pPour = this.pourAnim.active ? Math.min(1, this.pourAnim.timer / this.pourAnim.duration) : 1;
+    const pTop = this.toppingAnim.active ? Math.min(1, this.toppingAnim.timer / this.toppingAnim.duration) : 1;
+    const hidePendingTop = this.toppingAnim.active && pTop < 0.64 && (v.toppings || []).length > 0;
     const heldView = {
       type: v.type,
       broth:
@@ -4274,7 +4313,7 @@ export class FirstPersonWebGLScene {
         this.pourAnim.active && this.pourAnim.type === 'noodles' && pPour < 0.42
           ? null
           : v.noodleState,
-      toppings: v.toppings || [],
+      toppings: hidePendingTop ? (v.toppings || []).slice(0, -1) : v.toppings || [],
       overflowCount: v.overflowCount || 0
     };
 
@@ -4314,6 +4353,132 @@ export class FirstPersonWebGLScene {
       0.15,
       lhRot
     );
+
+    // ПРАВАЯ РУКА С КУЛИНАРНЫМИ ПАЛОЧКАМИ «МОРИБАСИ»: НАКЛАДЫВАЕМ ИНГРЕДИЕНТЫ ИЗ ЛОТКОВ В ВЫДВИНУТУЮ МИСКУ/КОРОБКУ!
+    if (this.toppingAnim.active && rt.activeSector === 1 && rt.cameraFocus === 'worktable') {
+      const topId = this.toppingAnim.toppingId || 'egg';
+      const trayCoords = {
+        egg: [-0.28, 1.055, -0.85],
+        chashu: [0.0, 1.055, -0.85],
+        nori: [0.28, 1.055, -0.85],
+        scallion: [-0.28, 0.995, -0.62],
+        shrimp: [0.0, 0.995, -0.62],
+        chili: [0.28, 0.995, -0.62]
+      };
+      const [trayX, trayY, trayZ] = trayCoords[topId] || trayCoords.egg;
+      const rightStartX = basePos[0] + R[0] * 0.3 + F[0] * 0.04;
+      const rightStartY = basePos[1] + 0.06;
+      const rightStartZ = basePos[2] + R[2] * 0.3 + F[2] * 0.04;
+      const dropX = hx;
+      const dropY = hy + 0.095;
+      const dropZ = hz;
+
+      let tipX, tipY, tipZ;
+      let pinchGap = 0.032; // Расстояние между кончиками палочек (меньше = зажат ингредиент)
+      let carryingFood = false;
+
+      if (pTop < 0.3) {
+        // Фаза 1: Правая рука с палочками летит от героя к нужному лотку и зажимает ингредиент!
+        const t = pTop / 0.3;
+        const s = t * t * (3 - 2 * t);
+        tipX = rightStartX + (trayX - rightStartX) * s;
+        tipY = rightStartY + (trayY - rightStartY) * s + Math.sin(t * Math.PI) * 0.075;
+        tipZ = rightStartZ + (trayZ - rightStartZ) * s;
+        pinchGap = t < 0.65 ? 0.036 : 0.036 - ((t - 0.65) / 0.35) * 0.022;
+      } else if (pTop < 0.72) {
+        // Фаза 2: Палочки переносят зажатый 3D-ингредиент по дуге к выдвинутой левой руке и кладут прямо в миску/коробку!
+        const t = (pTop - 0.3) / 0.42;
+        const s = t * t * (3 - 2 * t);
+        tipX = trayX + (dropX - trayX) * s;
+        tipY = trayY + (dropY - trayY) * s + Math.sin(t * Math.PI) * 0.11;
+        tipZ = trayZ + (dropZ - trayZ) * s;
+        carryingFood = t < 0.82;
+        pinchGap = t < 0.8 ? 0.014 : 0.014 + ((t - 0.8) / 0.2) * 0.022;
+      } else {
+        // Фаза 3: Правая рука с палочками плавно возвращается к герою
+        const t = (pTop - 0.72) / 0.28;
+        const s = t * t * (3 - 2 * t);
+        tipX = dropX + (rightStartX - dropX) * s;
+        tipY = dropY + (rightStartY - dropY) * s + Math.sin(t * Math.PI) * 0.06;
+        tipZ = dropZ + (rightStartZ - dropZ) * s;
+        pinchGap = 0.034;
+      }
+
+      // Направляющий вектор палочек от кончиков вверх-вправо-назад к кисти правой руки
+      let sx = R[0] * 0.48 - F[0] * 0.56 + U[0] * 0.42;
+      let sy = R[1] * 0.48 - F[1] * 0.56 + U[1] * 0.42;
+      let sz = R[2] * 0.48 - F[2] * 0.56 + U[2] * 0.42;
+      const slen = Math.hypot(sx, sy, sz) || 1;
+      sx /= slen;
+      sy /= slen;
+      sz /= slen;
+
+      const stickYaw = Math.atan2(sx, sz);
+      const stickPitch = -Math.asin(Math.max(-0.95, Math.min(0.95, sy)));
+      const stickLen = 0.28;
+
+      if (topId === 'chili' && pTop >= 0.3 && pTop < 0.78) {
+        // Для острого чили-соуса правая рука сжимает красную бутылочку над миской с огненной струйкой!
+        const bottleX = tipX + sx * 0.06;
+        const bottleY = tipY + sy * 0.06 + 0.05;
+        const bottleZ = tipZ + sz * 0.06;
+        const bRot = [Math.PI * 0.72, yawAngle, 0.25];
+        this.drawMesh('cylinder', bottleX, bottleY, bottleZ, 0.058, 0.11, 0.058, [0.96, 0.12, 0.22], 0.72, bRot, 0.78);
+        this.drawMesh('cone', tipX, tipY + 0.025, tipZ, 0.028, 0.044, 0.028, [1.0, 0.25, 0.1], 0.85, bRot, 0.6);
+        if (pTop > 0.46 && pTop < 0.72) {
+          this.drawMesh('cylinder', dropX, (tipY + dropY) * 0.5, dropZ, 0.012, Math.max(0.04, tipY - dropY + 0.03), 0.012, [1.0, 0.16, 0.14], 0.95);
+        }
+      } else {
+        // Две длинные бамбуковые кулинарные палочки «Морибаси» с тёмными лакированными ручками!
+        for (const side of [-1, 1]) {
+          const tipOff = side * pinchGap * 0.5;
+          const midX = tipX + sx * (stickLen * 0.5) + R[0] * (tipOff * 0.5) + U[0] * (tipOff * 0.45);
+          const midY = tipY + sy * (stickLen * 0.5) + U[1] * (tipOff * 0.45);
+          const midZ = tipZ + sz * (stickLen * 0.5) + R[2] * (tipOff * 0.5) + U[2] * (tipOff * 0.45);
+          const spreadAngle = side * (pinchGap - 0.012) * 3.4;
+          this.drawBox(midX, midY, midZ, 0.0085, 0.0085, stickLen, [0.92, 0.78, 0.52], 0.16, [stickPitch + spreadAngle, stickYaw, 0], 0.45);
+          // Лакированная тёмно-бордовая верхняя часть палочки
+          const rearX = tipX + sx * (stickLen * 0.78) + R[0] * (tipOff * 0.25) + U[0] * (tipOff * 0.22);
+          const rearY = tipY + sy * (stickLen * 0.78) + U[1] * (tipOff * 0.22);
+          const rearZ = tipZ + sz * (stickLen * 0.78) + R[2] * (tipOff * 0.25) + U[2] * (tipOff * 0.22);
+          this.drawBox(rearX, rearY, rearZ, 0.0105, 0.0105, stickLen * 0.36, [0.46, 0.14, 0.16], 0.18, [stickPitch + spreadAngle, stickYaw, 0], 0.65);
+        }
+
+        // Зажатый между кончиками палочек 3D-ингредиент во время переноса в миску/коробку!
+        if (carryingFood) {
+          if (topId === 'egg') {
+            this.draw3DAjitamaEggHalf(tipX, tipY - 0.012, tipZ, 0.86, 0.4);
+          } else if (topId === 'chashu') {
+            this.draw3DChashuSlice(tipX, tipY, tipZ, 0.86, [0.35, 0.3, 0.2]);
+          } else if (topId === 'nori') {
+            this.draw3DNoriSheet(tipX, tipY + 0.01, tipZ, 0.9, [-0.22, 0.25, 0.14]);
+          } else if (topId === 'scallion') {
+            for (let k = 0; k < 5; k++) {
+              const a = k * 1.25;
+              this.draw3DScallionRing(
+                tipX + Math.cos(a) * 0.016,
+                tipY + (k % 2) * 0.008,
+                tipZ + Math.sin(a) * 0.016,
+                0.92,
+                [0.2, a, 0.15]
+              );
+            }
+          } else if (topId === 'shrimp') {
+            this.draw3DTempuraShrimp(tipX, tipY, tipZ, 0.92, 0.35);
+          }
+        }
+      }
+
+      // Компактная правая кибер-перчатка с коротким манжетом, держащая палочки (или бутылку чили)
+      const rhX = tipX + sx * 0.165;
+      const rhY = tipY + sy * 0.165;
+      const rhZ = tipZ + sz * 0.165;
+      const rhRot = [0.16, yawAngle + 0.38, -0.22];
+      this.drawBox(rhX, rhY, rhZ, 0.07, 0.036, 0.122, [0.16, 0.14, 0.24], 0.24, rhRot);
+      this.drawBox(rhX, rhY + 0.02, rhZ, 0.074, 0.012, 0.04, [0.0, 0.96, 0.83], 0.94, rhRot);
+      this.drawBox(rhX - R[0] * 0.032, rhY - 0.01, rhZ - R[2] * 0.032, 0.028, 0.024, 0.05, [0.2, 0.18, 0.3], 0.25, rhRot);
+      this.drawBox(rhX + sx * 0.085, rhY + sy * 0.085, rhZ + sz * 0.085, 0.076, 0.046, 0.125, [0.11, 0.13, 0.2], 0.16, rhRot);
+    }
   }
 
   drawParticles3D(dt) {
