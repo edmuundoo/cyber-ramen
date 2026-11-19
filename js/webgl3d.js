@@ -1,5 +1,5 @@
-import { GAME_CONFIG } from './config.js?v=51';
-import { gameState } from './state.js?v=51';
+import { GAME_CONFIG } from './config.js?v=52';
+import { gameState } from './state.js?v=52';
 import {
   createAlleyBackdropTexture,
   createBuildingFacadeTexture,
@@ -8,7 +8,7 @@ import {
   createKanjiSignTextures,
   createPedestrianTextures,
   AnimeCustomerTextureRenderer
-} from './art3d.js?v=51';
+} from './art3d.js?v=52';
 
 /**
  * Полноэкранный WebGL 3D движок от первого лица с процедурной высокодетализированной
@@ -90,9 +90,10 @@ export class FirstPersonWebGLScene {
     this.sinkWashAnim = {
       active: false,
       timer: 0,
-      duration: 0.54,
+      duration: 0.56,
       bowl: null
     };
+    this.sinkFaucetFlowTimer = 0;
     this.centerPlaceFromRight = 0;
     this.existingShiftProgress = 0;
     this.returnHeldAnim = { active: false, type: 'bowl', timer: 0, duration: 0.48 };
@@ -281,8 +282,10 @@ export class FirstPersonWebGLScene {
   triggerSinkWashAnim(bowl = null) {
     this.sinkWashAnim.active = true;
     this.sinkWashAnim.timer = 0;
-    this.sinkWashAnim.duration = 0.54;
+    this.sinkWashAnim.duration = 0.56;
     this.sinkWashAnim.bowl = bowl || { broth: 'tonkotsu' };
+    // Вода из крана начинает лить при тапе на тарелочку и продолжает идти ещё 1 секунду после завершения мытья!
+    this.sinkFaucetFlowTimer = this.sinkWashAnim.duration + 1.0;
   }
 
   triggerCenterVesselArrivalAnim(type = 'bowl', hadExisting = false) {
@@ -1143,6 +1146,9 @@ export class FirstPersonWebGLScene {
         this.sinkWashAnim.active = false;
       }
     }
+    if (this.sinkFaucetFlowTimer > 0) {
+      this.sinkFaucetFlowTimer = Math.max(0, this.sinkFaucetFlowTimer - dt);
+    }
     if (this.centerPlaceFromRight > 0) {
       this.centerPlaceFromRight = Math.max(0, this.centerPlaceFromRight - dt * 2.8);
     }
@@ -1172,8 +1178,8 @@ export class FirstPersonWebGLScene {
     //   * cameraFocus === 'customer': верхний ракурс на гостя (с возможностью покрутиться чуть влево -1 и чуть вправо +1 на полки с грязными мисками!)
     //   * cameraFocus === 'worktable': крупный план рабочего стола
     if (rt.activeSector === -1) {
-      this.camPosTarget = [-0.06, 1.66, 0.25];
-      this.lookAtTarget = [-0.88, 0.96, 0.72 + this.dragPanX];
+      this.camPosTarget = [-0.1, 1.68, 0.26];
+      this.lookAtTarget = [-0.88, 0.84, 0.72 + this.dragPanX];
     } else if (rt.activeSector === 0) {
       this.camPosTarget = [-0.04, 1.68, 0.46];
       this.lookAtTarget = [-0.86, 0.98, -0.16 + this.dragPanX];
@@ -1936,9 +1942,16 @@ export class FirstPersonWebGLScene {
     // Деревянная подставка-столешница на правом (x = +0.68) крыле верхнего бортика прилавка под грязные миски
     this.drawBox(0.68, 1.072, -1.04, 0.58, 0.016, 0.24, [0.32, 0.2, 0.14], 0.08, null, 0.55);
 
-    // ЛЕВАЯ СТОЛЕШНИЦА ВАРОЧНОГО ЦЕХА И МОЙКИ ПОСУДЫ (удлинена вдоль +Z под раковину левее плиты!)
-    this.drawBox(-0.92, 0.44, 0.06, 0.92, 0.82, 2.32, woodMain, 0.0);
-    this.drawBox(-0.92, 0.86, 0.06, 0.96, 0.07, 2.38, [0.22, 0.26, 0.32], 0.05, null, 0.45);
+    // ЛЕВАЯ СТОЛЕШНИЦА ВАРОЧНОГО ЦЕХА И МОЙКИ ПОСУДЫ (с настоящим глубоким сквозным вырезом под чашу раковины на z = 0.48..0.96!)
+    // 1) Секция под варочной плитой (z от -1.13 до +0.48)
+    this.drawBox(-0.92, 0.44, -0.325, 0.92, 0.82, 1.61, woodMain, 0.0);
+    this.drawBox(-0.92, 0.86, -0.325, 0.96, 0.07, 1.61, [0.22, 0.26, 0.32], 0.05, null, 0.45);
+    // 2) Нижняя тумба под глубокой чашей раковины и сушилкой (z от +0.48 до +1.25, верх тумбы ниже дна раковины y = 0.75)
+    this.drawBox(-0.92, 0.375, 0.865, 0.92, 0.75, 0.77, woodMain, 0.0);
+    // 3) Столешница вокруг выреза раковины (дальняя часть под сушилкой z = 0.96..1.25 и боковые перемычки)
+    this.drawBox(-0.92, 0.86, 1.105, 0.96, 0.07, 0.29, [0.22, 0.26, 0.32], 0.05, null, 0.45);
+    this.drawBox(-1.265, 0.86, 0.72, 0.27, 0.07, 0.48, [0.22, 0.26, 0.32], 0.05, null, 0.45);
+    this.drawBox(-0.535, 0.86, 0.72, 0.19, 0.07, 0.48, [0.22, 0.26, 0.32], 0.05, null, 0.45);
     this.drawBox(-0.45, 0.9, 0.06, 0.03, 0.025, 2.32, [0.0, 0.96, 0.83], 0.65);
 
     // ПРАВАЯ СТОЛЕШНИЦА СКЛАДА И УПАКОВКИ
@@ -3180,30 +3193,43 @@ export class FirstPersonWebGLScene {
   }
 
   // =========================================================================
-  // СЕКТОР -1 (МОЙКА ЛЕВЕЕ ВАРОЧНОЙ ПЛИТЫ В 3D): СТАЛЬНАЯ РАКОВИНА С КРАНОМ-ГУСАКОМ,
-  // ДОЗАТОРОМ НЕОНОВОЙ ПЕНЫ, ГУБКОЙ, СУШИЛКОЙ И СТОПКОЙ ГРЯЗНЫХ МИСОК!
+  // СЕКТОР -1 (МОЙКА ЛЕВЕЕ ВАРОЧНОЙ ПЛИТЫ В 3D): ПУСТАЯ ГЛУБОКАЯ СТАЛЬНАЯ РАКОВИНА СО СЛИВОМ,
+  // КУДА СКЛАДЫВАЕТСЯ ГРЯЗНАЯ ПОСУДА, И КРАН, ИЗ КОТОРОГО ВОДА ЛЬЁТ ПРИ ТАПЕ НА ТАРЕЛКУ (+1 СЕК ПОСЛЕ МЫТЬЯ)!
   // =========================================================================
   drawLeftSinkStation3D() {
     const rt = gameState.runtime;
     const sinkX = -0.88;
     const sinkY = 0.905;
     const sinkZ = 0.72;
+    const floorY = 0.768; // Дно глубокой пустой раковины (утоплено на ~16 см ниже бортиков!)
+    const rimY = 0.925;
     const dirtyList = rt.dirtyInSink || [];
     const isWashing = this.sinkWashAnim.active;
+    const isWaterFlowing = isWashing || this.sinkFaucetFlowTimer > 0;
 
-    // 1. ВНЕШНИЙ СТАЛЬНОЙ КОРПУС И БОРТИКИ РАКОВИНЫ (левее плиты, z = +0.72)
-    this.drawBox(sinkX, sinkY, sinkZ, 0.64, 0.045, 0.62, [0.34, 0.39, 0.46], 0.08, null, 0.85);
-    // Тёмная глубокая чаша мойки внутри стальных бортиков + мыльная вода на дне
-    this.drawBox(sinkX, sinkY + 0.012, sinkZ, 0.52, 0.032, 0.48, [0.11, 0.15, 0.2], 0.04, null, 0.5);
-    const waterGlow = isWashing ? 0.65 : dirtyList.length > 0 ? 0.38 : 0.22;
-    this.drawBox(sinkX, sinkY + 0.025, sinkZ, 0.49, 0.012, 0.45, [0.08, 0.56, 0.72], waterGlow, null, 0.92, 4);
+    // 1. ПУСТАЯ ГЛУБОКАЯ ЧАША РАКОВИНЫ ИЗ МАТОВОЙ НЕРЖАВЕЙКИ (БЕЗ СТОЯЧЕЙ ВОДЫ!)
+    // Сухое стальное дно глубокой раковины
+    this.drawBox(sinkX, floorY, sinkZ, 0.52, 0.014, 0.5, [0.16, 0.19, 0.24], 0.04, null, 0.78);
+    // 4 глубокие внутренние вертикальные стальные стенки раковины (от дна y = 0.768 до бортика y = 0.925)
+    const wallMidY = (floorY + rimY) * 0.5;
+    const wallH = rimY - floorY;
+    this.drawBox(sinkX - 0.25, wallMidY, sinkZ, 0.018, wallH, 0.5, [0.25, 0.29, 0.36], 0.05, null, 0.82); // Дальняя стенка под краном
+    this.drawBox(sinkX + 0.25, wallMidY, sinkZ, 0.018, wallH, 0.5, [0.19, 0.23, 0.29], 0.04, null, 0.78); // Ближняя стенка
+    this.drawBox(sinkX, wallMidY, sinkZ - 0.24, 0.5, 0.018 + wallH, 0.018, [0.28, 0.33, 0.4], 0.06, null, 0.85); // Правая стенка (к плите)
+    this.drawBox(sinkX, wallMidY, sinkZ + 0.24, 0.5, 0.018 + wallH, 0.018, [0.22, 0.26, 0.33], 0.05, null, 0.8); // Левая стенка (к сушилке)
 
-    // 4 хромированных бортика раковины по периметру + неоновый индикатор на переднем крае
+    // Круглое стальное сливное отверстие с решёткой в центре сухого дна раковины
+    this.drawMesh('torus', sinkX + 0.02, floorY + 0.008, sinkZ, 0.074, 0.01, 0.074, [0.62, 0.68, 0.76], 0.12, null, 0.92);
+    this.drawMesh('cylinder', sinkX + 0.02, floorY + 0.007, sinkZ, 0.064, 0.004, 0.064, [0.05, 0.07, 0.1], 0.02, null, 0.3);
+    this.drawBox(sinkX + 0.02, floorY + 0.009, sinkZ, 0.06, 0.003, 0.007, [0.52, 0.58, 0.66], 0.1, null, 0.9);
+    this.drawBox(sinkX + 0.02, floorY + 0.009, sinkZ, 0.007, 0.003, 0.06, [0.52, 0.58, 0.66], 0.1, null, 0.9);
+
+    // 4 верхних хромированных бортика раковины по периметру + неоновый индикатор на переднем крае
     const rimCol = [0.62, 0.68, 0.76];
-    this.drawBox(sinkX, sinkY + 0.032, sinkZ - 0.27, 0.62, 0.018, 0.045, rimCol, 0.12, null, 0.92);
-    this.drawBox(sinkX, sinkY + 0.032, sinkZ + 0.27, 0.62, 0.018, 0.045, rimCol, 0.12, null, 0.92);
-    this.drawBox(sinkX - 0.28, sinkY + 0.032, sinkZ, 0.045, 0.018, 0.58, rimCol, 0.12, null, 0.92);
-    this.drawBox(sinkX + 0.28, sinkY + 0.032, sinkZ, 0.045, 0.018, 0.58, rimCol, 0.12, null, 0.92);
+    this.drawBox(sinkX, rimY, sinkZ - 0.26, 0.58, 0.02, 0.042, rimCol, 0.12, null, 0.92);
+    this.drawBox(sinkX, rimY, sinkZ + 0.26, 0.58, 0.02, 0.042, rimCol, 0.12, null, 0.92);
+    this.drawBox(sinkX - 0.27, rimY, sinkZ, 0.042, 0.02, 0.54, rimCol, 0.12, null, 0.92);
+    this.drawBox(sinkX + 0.27, rimY, sinkZ, 0.042, 0.02, 0.54, rimCol, 0.12, null, 0.92);
 
     const sinkLedCol =
       dirtyList.length > 0
@@ -3213,7 +3239,7 @@ export class FirstPersonWebGLScene {
       dirtyList.length > 0
         ? 0.55 + 0.35 * Math.sin(this.time * 6.0)
         : 0.35;
-    this.drawBox(sinkX + 0.305, sinkY + 0.034, sinkZ, 0.012, 0.012, 0.46, sinkLedCol, sinkLedPulse);
+    this.drawBox(sinkX + 0.295, rimY + 0.002, sinkZ, 0.012, 0.012, 0.46, sinkLedCol, sinkLedPulse);
 
     // 2. ВЫСОКИЙ ХРОМИРОВАННЫЙ КРАН-ГУСАК И ВЕНТИЛИ ГОРЯЧЕЙ/ХОЛОДНОЙ ВОДЫ (x = -1.10, z = +0.72)
     const faucetX = sinkX - 0.22;
@@ -3226,76 +3252,94 @@ export class FirstPersonWebGLScene {
     this.drawMesh('cylinder', faucetX + 0.01, sinkY + 0.055, sinkZ + 0.11, 0.038, 0.028, 0.038, [1.0, 0.22, 0.35], 0.75, null, 0.9);
 
     // 3. ДОЗАТОР МОЮЩЕГО СРЕДСТВА И ПОРОЛОНОВАЯ ГУБКА НА БОРТИКЕ (z = +0.46)
-    this.drawMesh('cylinder', sinkX - 0.14, sinkY + 0.085, sinkZ - 0.25, 0.054, 0.1, 0.054, [0.0, 0.86, 0.78], 0.65, null, 0.85);
-    this.drawBox(sinkX - 0.12, sinkY + 0.145, sinkZ - 0.25, 0.048, 0.014, 0.016, [0.88, 0.92, 0.96], 0.25);
+    this.drawMesh('cylinder', sinkX - 0.14, sinkY + 0.085, sinkZ - 0.26, 0.054, 0.1, 0.054, [0.0, 0.86, 0.78], 0.65, null, 0.85);
+    this.drawBox(sinkX - 0.12, sinkY + 0.145, sinkZ - 0.26, 0.048, 0.014, 0.016, [0.88, 0.92, 0.96], 0.25);
     if (!isWashing) {
       // Жёлто-зелёная кухонная губка на переднем углу мойки
-      this.drawBox(sinkX + 0.18, sinkY + 0.048, sinkZ - 0.24, 0.075, 0.024, 0.052, [1.0, 0.86, 0.18], 0.35, [0, 0.25, 0]);
-      this.drawBox(sinkX + 0.18, sinkY + 0.062, sinkZ - 0.24, 0.075, 0.008, 0.052, [0.1, 0.78, 0.38], 0.35, [0, 0.25, 0]);
+      this.drawBox(sinkX + 0.18, rimY + 0.016, sinkZ - 0.25, 0.075, 0.024, 0.052, [1.0, 0.86, 0.18], 0.35, [0, 0.25, 0]);
+      this.drawBox(sinkX + 0.18, rimY + 0.03, sinkZ - 0.25, 0.075, 0.008, 0.052, [0.1, 0.78, 0.38], 0.35, [0, 0.25, 0]);
     }
 
     // 4. МЕТАЛЛИЧЕСКАЯ СУШИЛКА ДЛЯ ВЫМЫТЫХ МИСОК СЛЕВА ОТ РАКОВИНЫ (z = +1.05)
-    this.drawBox(sinkX, sinkY + 0.015, sinkZ + 0.33, 0.44, 0.022, 0.16, [0.22, 0.26, 0.33], 0.08, null, 0.8);
+    this.drawBox(sinkX, sinkY + 0.015, sinkZ + 0.34, 0.44, 0.022, 0.16, [0.22, 0.26, 0.33], 0.08, null, 0.8);
     for (let r = -3; r <= 3; r++) {
-      this.drawBox(sinkX + r * 0.055, sinkY + 0.045, sinkZ + 0.33, 0.008, 0.045, 0.14, [0.68, 0.75, 0.84], 0.15, null, 0.92);
+      this.drawBox(sinkX + r * 0.055, sinkY + 0.045, sinkZ + 0.34, 0.008, 0.045, 0.14, [0.68, 0.75, 0.84], 0.15, null, 0.92);
     }
 
-    // 5. ГРЯЗНЫЕ МИСКИ ВНУТРИ РАКОВИНЫ (1-й ряд плоско и не на одной линии, 2-й и 3-й ряды вставлены одна в другую под наклоном!)
+    // 5. ГРЯЗНЫЕ МИСКИ НА ДНЕ ГЛУБОКОЙ ПУСТОЙ РАКОВИНЫ (1-й ряд плоско на дне, 2-й и 3-й ряды вставлены одна в другую под наклоном!)
     const sinkPyramid = [
-      // 1-й ряд (3 плоские миски на дне раковины вразнобой)
-      { dx: -0.08, dy: 0.024, dz: -0.11, rot: [0.0, 0.3, 0.0] },
-      { dx: 0.09, dy: 0.024, dz: 0.03, rot: [0.0, -0.45, 0.0] },
-      { dx: -0.03, dy: 0.024, dz: 0.12, rot: [0.0, 0.65, 0.0] },
+      // 1-й ряд (3 плоские миски прямо на дне глубокой пустой раковины вразнобой)
+      { dx: -0.08, dy: 0.008, dz: -0.11, rot: [0.0, 0.3, 0.0] },
+      { dx: 0.09, dy: 0.008, dz: 0.03, rot: [0.0, -0.45, 0.0] },
+      { dx: -0.03, dy: 0.008, dz: 0.12, rot: [0.0, 0.65, 0.0] },
       // 2-й ряд (вставлены одна в другую в миски 1-го ряда под углом!)
-      { dx: -0.08 + 0.014, dy: 0.056, dz: -0.11 + 0.01, rot: [0.22, -0.5, -0.25] },
-      { dx: 0.09 - 0.013, dy: 0.057, dz: 0.03 - 0.01, rot: [-0.2, 0.45, 0.24] },
-      { dx: -0.03 + 0.012, dy: 0.056, dz: 0.12 - 0.011, rot: [-0.22, 0.75, -0.23] },
+      { dx: -0.08 + 0.014, dy: 0.04, dz: -0.11 + 0.01, rot: [0.22, -0.5, -0.25] },
+      { dx: 0.09 - 0.013, dy: 0.041, dz: 0.03 - 0.01, rot: [-0.2, 0.45, 0.24] },
+      { dx: -0.03 + 0.012, dy: 0.04, dz: 0.12 - 0.011, rot: [-0.22, 0.75, -0.23] },
       // 3-й ряд (вставлены одна в другую поверх 2-го ряда)
-      { dx: -0.08 - 0.008, dy: 0.088, dz: -0.11 - 0.006, rot: [-0.19, 0.35, 0.23] },
-      { dx: 0.09 + 0.01, dy: 0.089, dz: 0.03 + 0.008, rot: [0.21, -0.6, -0.24] },
-      { dx: -0.03 - 0.009, dy: 0.088, dz: 0.12 + 0.006, rot: [0.2, 0.25, 0.22] }
+      { dx: -0.08 - 0.008, dy: 0.072, dz: -0.11 - 0.006, rot: [-0.19, 0.35, 0.23] },
+      { dx: 0.09 + 0.01, dy: 0.073, dz: 0.03 + 0.008, rot: [0.21, -0.6, -0.24] },
+      { dx: -0.03 - 0.009, dy: 0.072, dz: 0.12 + 0.006, rot: [0.2, 0.25, 0.22] }
     ];
     const visibleDirty = Math.min(10, dirtyList.length);
     for (let i = 0; i < visibleDirty; i++) {
       const sp = sinkPyramid[i % sinkPyramid.length];
-      const extraY = Math.floor(i / sinkPyramid.length) * 0.04;
+      const extraY = Math.floor(i / sinkPyramid.length) * 0.034;
+      const bx = sinkX + sp.dx;
+      const by = floorY + sp.dy + extraY;
+      const bz = sinkZ + sp.dz;
       this.drawDirtyBowl3D(
-        sinkX + sp.dx,
-        sinkY + sp.dy + extraY,
-        sinkZ + sp.dz,
+        bx,
+        by,
+        bz,
         dirtyList[i].broth,
         0.46,
         sp.rot
       );
+      if (rt.activeSector === -1) {
+        this.registerHitbox('sink_wash', bx, by + 0.03, bz, 88);
+      }
     }
 
-    // 6. АНИМАЦИЯ МЫТЬЯ МИСКИ ПОД СТРУЁЙ ВОДЫ С ГУБКОЙ И ШАПКОЙ МЫЛЬНОЙ ПЕНЫ!
-    if (isWashing) {
-      const p = Math.min(1, this.sinkWashAnim.timer / this.sinkWashAnim.duration);
-      const spoutX = faucetX + 0.18;
-      const spoutZ = sinkZ;
+    // 6. СТРУЯ ВОДЫ ИЗ КРАНА (ВКЛЮЧАЕТСЯ ПРИ ТАПЕ НА ТАРЕЛКУ И АВТОМАТИЧЕСКИ ВЫКЛЮЧАЕТСЯ ЧЕРЕЗ 1 СЕКУНДУ ПОСЛЕ МЫТЬЯ, ЕСЛИ НЕ ТАПНУТЬ ЕЩЁ РАЗ!)
+    const spoutX = faucetX + 0.18;
+    const spoutTopY = sinkY + 0.205;
+    const spoutZ = sinkZ;
+    if (isWaterFlowing) {
+      const streamBottomY = isWashing ? floorY + 0.12 : floorY + 0.01;
+      const streamH = spoutTopY - streamBottomY;
+      const streamMidY = (spoutTopY + streamBottomY) * 0.5;
+      const streamW = 0.02 + Math.sin(this.time * 48) * 0.0035;
 
-      // Яркая бирюзово-белая струя горячей воды из крана прямо в центр раковины
       this.drawMesh(
         'cylinder',
         spoutX,
-        sinkY + 0.12,
+        streamMidY,
         spoutZ,
-        0.022 + Math.sin(this.time * 45) * 0.004,
-        0.2,
-        0.022 + Math.sin(this.time * 45) * 0.004,
+        streamW,
+        streamH,
+        streamW,
         [0.55, 0.96, 1.0],
         0.92,
         null,
         0.98,
         4
       );
+      // Маленькие брызги-колечки в точке падения струи в сливное отверстие на дне раковины
+      const splashR = 0.032 + ((this.time * 3.2) % 0.045);
+      this.drawMesh('torus', spoutX, floorY + 0.012, spoutZ, splashR, 0.005, splashR, [0.65, 0.96, 1.0], 0.85);
+    }
 
-      // Моющаяся миска под струёй воды (в первой половине в пене, во второй — сверкает чистотой и уходит на сушилку!)
-      const slideToRack = p < 0.65 ? 0 : (p - 0.65) / 0.35;
+    // 7. АНИМАЦИЯ МЫТЬЯ ТАРЕЛОЧКИ ПОД СТРУЁЙ ВОДЫ С ГУБКОЙ И ШАПКОЙ МЫЛЬНОЙ ПЕНЫ!
+    if (isWashing) {
+      const p = Math.min(1, this.sinkWashAnim.timer / this.sinkWashAnim.duration);
+
+      // Моющаяся миска поднимается со дна раковины под струю воды, моется в пене и уходит на сушилку!
+      const liftIn = Math.min(1, p / 0.18);
+      const slideToRack = p < 0.68 ? 0 : (p - 0.68) / 0.32;
       const wx = spoutX + Math.sin(p * Math.PI * 4) * 0.015 * (1 - slideToRack);
-      const wy = sinkY + 0.05 + slideToRack * 0.03;
-      const wz = spoutZ + slideToRack * 0.28;
+      const wy = floorY + 0.02 + liftIn * 0.1 + slideToRack * 0.03;
+      const wz = spoutZ + slideToRack * 0.32;
       this.drawMesh('bowl_lathe', wx, wy, wz, 0.21, 0.082, 0.21, [0.16, 0.1, 0.24], 0.18 + slideToRack * 0.35, null, 0.95, 3);
       this.drawMesh('torus', wx, wy + 0.072, wz, 0.205, 0.012, 0.205, [0.86, 0.22, 0.32], 0.35, null, 0.95);
 
@@ -3329,9 +3373,9 @@ export class FirstPersonWebGLScene {
       }
     }
 
-    // Регистрируем крупный хитбокс раковины ТОЛЬКО когда камера находится в Секторе -1 (Мойка)!
+    // Общий страховочный хитбокс по чаше раковины ТОЛЬКО когда камера в Секторе -1 (Мойка)
     if (rt.activeSector === -1) {
-      this.registerHitbox('sink_wash', sinkX, sinkY + 0.08, sinkZ, 108);
+      this.registerHitbox('sink_wash', sinkX, floorY + 0.06, sinkZ, 112);
     }
   }
 
