@@ -1,5 +1,5 @@
-import { GAME_CONFIG } from './config.js?v=65';
-import { gameState } from './state.js?v=65';
+import { GAME_CONFIG } from './config.js?v=66';
+import { gameState } from './state.js?v=66';
 import {
   createAlleyBackdropTexture,
   createBuildingFacadeTexture,
@@ -8,7 +8,7 @@ import {
   createKanjiSignTextures,
   createPedestrianTextures,
   AnimeCustomerTextureRenderer
-} from './art3d.js?v=65';
+} from './art3d.js?v=66';
 
 /**
  * Полноэкранный WebGL 3D движок от первого лица с процедурной высокодетализированной
@@ -2350,21 +2350,21 @@ export class FirstPersonWebGLScene {
   // 3D-МОДЕЛИ ПОДНОСА, БУМАЖНОГО ПАКЕТА С СОБОЙ, ПАЛОЧЕК И НИШИ ПОД ПРИЛАВКОМ
   // =========================================================================
   draw3DRamenTray(x, y, z, s = 1.0, rot = null) {
-    const baseCol = [0.16, 0.08, 0.1];     // Тёмно-лаковый японский поднос «О-бон» (широкий и просторный!)
+    const baseCol = [0.16, 0.08, 0.1];     // Тёмно-лаковый японский поднос «О-бон»
     const rimCol = [0.68, 0.16, 0.22];     // Алая лаковая окантовка по краям подноса
     const innerCol = [0.11, 0.09, 0.13];   // Нескользящее матовое дно подноса
-    const tw = 0.66 * s;
-    const td = 0.42 * s;
-    const th = 0.014 * s;
-    const lipH = 0.028 * s;
+    const tw = 0.6 * s;
+    const td = 0.38 * s;
+    const th = 0.013 * s;
+    const lipH = 0.027 * s;
 
     this.drawBox(x, y + th * 0.5, z, tw, th, td, baseCol, 0.08, rot, 0.65);
-    this.drawBox(x, y + th + 0.001 * s, z, tw - 0.038 * s, 0.004 * s, td - 0.038 * s, innerCol, 0.04, rot, 0.35);
+    this.drawBox(x, y + th + 0.001 * s, z, tw - 0.036 * s, 0.004 * s, td - 0.036 * s, innerCol, 0.04, rot, 0.35);
     // 4 приподнятых бортика подноса
-    this.drawBox(x, y + lipH * 0.5, z - td * 0.48, tw, lipH, 0.02 * s, rimCol, 0.2, rot, 0.78);
-    this.drawBox(x, y + lipH * 0.5, z + td * 0.48, tw, lipH, 0.02 * s, rimCol, 0.2, rot, 0.78);
-    this.drawBox(x - tw * 0.48, y + lipH * 0.5, z, 0.02 * s, lipH, td, rimCol, 0.2, rot, 0.78);
-    this.drawBox(x + tw * 0.48, y + lipH * 0.5, z, 0.02 * s, lipH, td, rimCol, 0.2, rot, 0.78);
+    this.drawBox(x, y + lipH * 0.5, z - td * 0.48, tw, lipH, 0.019 * s, rimCol, 0.2, rot, 0.78);
+    this.drawBox(x, y + lipH * 0.5, z + td * 0.48, tw, lipH, 0.019 * s, rimCol, 0.2, rot, 0.78);
+    this.drawBox(x - tw * 0.48, y + lipH * 0.5, z, 0.019 * s, lipH, td, rimCol, 0.2, rot, 0.78);
+    this.drawBox(x + tw * 0.48, y + lipH * 0.5, z, 0.019 * s, lipH, td, rimCol, 0.2, rot, 0.78);
   }
 
   draw3DChopsticksPack(x, y, z, s = 1.0, rot = null) {
@@ -2451,7 +2451,7 @@ export class FirstPersonWebGLScene {
     const trayY = 0.358;
     const trayZ = -0.44;
     const trayPulse = !a.hasTray ? 0.55 + 0.35 * Math.sin(this.time * 5.5) : 0.2;
-    this.drawBox(trayX, trayY - 0.002, trayZ + 0.27, 0.68, 0.01, 0.012, [0.0, 0.96, 0.83], trayPulse);
+    this.drawBox(trayX, trayY - 0.002, trayZ + 0.25, 0.62, 0.01, 0.012, [0.0, 0.96, 0.83], trayPulse);
 
     const visibleTrays = a.hasTray ? 5 : 6;
     for (let t = 0; t < visibleTrays; t++) {
@@ -2542,9 +2542,9 @@ export class FirstPersonWebGLScene {
       const ty = 0.62 + (asmY - 0.62) * s + Math.sin(p * Math.PI) * 0.12;
       const tz = 0.04 + (asmZ - 0.04) * s;
       this.draw3DRamenTray(tx, ty, tz, 0.92 + 0.08 * s, [0.22 * (1 - s), 0, 0]);
-      // Две перчатки по краям широкого подноса, ставящие его на стол
-      this.drawBox(tx - 0.33, ty + 0.01, tz + 0.03, 0.068, 0.036, 0.12, [0.16, 0.14, 0.24], 0.22, [0.12, -0.2, 0.1]);
-      this.drawBox(tx + 0.33, ty + 0.01, tz + 0.03, 0.068, 0.036, 0.12, [0.16, 0.14, 0.24], 0.22, [0.12, 0.2, -0.1]);
+      // Две перчатки по краям подноса, ставящие его на стол
+      this.drawBox(tx - 0.3, ty + 0.01, tz + 0.03, 0.068, 0.036, 0.12, [0.16, 0.14, 0.24], 0.22, [0.12, -0.2, 0.1]);
+      this.drawBox(tx + 0.3, ty + 0.01, tz + 0.03, 0.068, 0.036, 0.12, [0.16, 0.14, 0.24], 0.22, [0.12, 0.2, -0.1]);
     }
 
     // Если пакет стоит на столе/подносе (и мы не проигрываем анимацию упаковки и не держим его перед клиентом)
@@ -2577,10 +2577,10 @@ export class FirstPersonWebGLScene {
           const t = p / 0.34;
           const s = t * t * (3 - 2 * t);
           if (this.bagPackAnim.prevVessel) {
-            this.drawFilledVessel3D(asmX - 0.08, asmY + 0.016, asmZ, this.bagPackAnim.prevVessel, 0.72);
+            this.drawFilledVessel3D(asmX - 0.13, asmY + 0.016, asmZ, this.bagPackAnim.prevVessel, 0.72);
           }
           if (this.bagPackAnim.prevChopsticks) {
-            this.draw3DChopsticksPack(asmX + 0.16, asmY + 0.016, asmZ, 0.98);
+            this.draw3DChopsticksPack(asmX + 0.19, asmY + 0.016, asmZ, 0.98);
           }
           const bx = 0.36 + (asmX + 0.14 - 0.36) * s;
           const by = 0.64 + (bagBaseY - 0.64) * s + Math.sin(t * Math.PI) * 0.1;
@@ -2592,14 +2592,14 @@ export class FirstPersonWebGLScene {
           const bagPosX = asmX + 0.14;
           this.draw3DTakeoutBag(bagPosX, bagBaseY, asmZ, 0.94, t > 0.75, t > 0.8 && this.bagPackAnim.prevChopsticks, false);
           if (this.bagPackAnim.prevVessel && t < 0.85) {
-            const vx = (asmX - 0.08) + (bagPosX - (asmX - 0.08)) * s;
+            const vx = (asmX - 0.13) + (bagPosX - (asmX - 0.13)) * s;
             const vy = (asmY + 0.016) + (bagBaseY + 0.16 - (asmY + 0.016)) * s + Math.sin(t * Math.PI) * 0.12 - (t > 0.65 ? (t - 0.65) * 0.45 : 0);
             const vsc = 0.72 * (1 - Math.max(0, t - 0.55) * 0.9);
             this.drawFilledVessel3D(vx, vy, asmZ, this.bagPackAnim.prevVessel, Math.max(0.35, vsc));
             this.drawBox(vx - 0.08, vy + 0.02, asmZ + 0.06, 0.068, 0.036, 0.12, [0.16, 0.14, 0.24], 0.22, [0.15, -0.25, 0.15]);
           }
           if (this.bagPackAnim.prevChopsticks && t < 0.85) {
-            const cx = (asmX + 0.16) + (bagPosX + 0.04 - (asmX + 0.16)) * s;
+            const cx = (asmX + 0.19) + (bagPosX + 0.04 - (asmX + 0.19)) * s;
             const cy = (asmY + 0.016) + (bagBaseY + 0.22 - (asmY + 0.016)) * s + Math.sin(t * Math.PI) * 0.08;
             this.draw3DChopsticksPack(cx, cy, asmZ, 0.94, [0, 0, -0.4 * s]);
           }
@@ -2612,29 +2612,29 @@ export class FirstPersonWebGLScene {
       }
     }
 
-    // Блюдо и палочки, лежащие непосредственно НА БОЛЬШОМ ПОДНОСЕ (когда пакета нет!)
+    // Блюдо и палочки, лежащие непосредственно НА ПОДНОСЕ (тарелка ближе к левому краю подноса!)
     if (!a.hasBag && a.hasTray && !this.bagPackAnim.active && !isCarryingOrder) {
-      const vesselOnTrayX = asmX - 0.085;
-      const vesselOnTrayY = asmY + 0.017;
+      const vesselOnTrayX = asmX - 0.13;
+      const vesselOnTrayY = asmY + 0.016;
       if (a.vessel && !(this.assemblyVesselAnim.active && this.assemblyVesselAnim.action === 'place')) {
-        this.drawFilledVessel3D(vesselOnTrayX, vesselOnTrayY, asmZ, a.vessel, 0.78);
+        this.drawFilledVessel3D(vesselOnTrayX, vesselOnTrayY, asmZ, a.vessel, 0.76);
       }
       if (a.hasChopsticks && !this.chopsticksPlaceAnim.active) {
-        this.draw3DChopsticksPack(asmX + 0.22, asmY + 0.017, asmZ, 1.05);
+        this.draw3DChopsticksPack(asmX + 0.19, asmY + 0.016, asmZ, 1.02);
       }
     }
 
-    // Анимация постановки посуды из левой руки на поднос или внутрь пакета
+    // Анимация постановки посуды из левой руки на поднос (ближе к левому краю!) или внутрь пакета
     if (this.assemblyVesselAnim.active && this.assemblyVesselAnim.vessel && this.assemblyVesselAnim.action === 'place') {
       const p = Math.min(1, this.assemblyVesselAnim.timer / this.assemblyVesselAnim.duration);
       const s = p * p * (3 - 2 * p);
       const handPos = this.getLeftHandWorldPos();
-      const targetX = this.assemblyVesselAnim.intoBag ? asmX : asmX - 0.085;
-      const targetY = this.assemblyVesselAnim.intoBag ? bagBaseY + 0.16 : asmY + 0.018;
+      const targetX = this.assemblyVesselAnim.intoBag ? asmX : asmX - 0.13;
+      const targetY = this.assemblyVesselAnim.intoBag ? bagBaseY + 0.16 : asmY + 0.017;
       const vx = handPos[0] + (targetX - handPos[0]) * s;
       const vy = handPos[1] + (targetY - handPos[1]) * s + Math.sin(p * Math.PI) * 0.08;
       const vz = handPos[2] + (asmZ - handPos[2]) * s;
-      const vsc = this.assemblyVesselAnim.intoBag ? 0.64 * (1 - s * 0.35) : 0.64 + 0.14 * s;
+      const vsc = this.assemblyVesselAnim.intoBag ? 0.64 * (1 - s * 0.35) : 0.64 + 0.12 * s;
       this.drawFilledVessel3D(vx, vy, vz, this.assemblyVesselAnim.vessel, vsc);
     }
 
@@ -2645,17 +2645,17 @@ export class FirstPersonWebGLScene {
       const startX = 0.6;
       const startY = 1.03;
       const startZ = -0.36;
-      const targetX = a.hasBag ? asmX + 0.04 : asmX + 0.22;
-      const targetY = a.hasBag ? bagBaseY + 0.22 : asmY + 0.018;
+      const targetX = a.hasBag ? asmX + 0.04 : asmX + 0.19;
+      const targetY = a.hasBag ? bagBaseY + 0.22 : asmY + 0.017;
       const cx = startX + (targetX - startX) * s;
       const cy = startY + (targetY - startY) * s + Math.sin(p * Math.PI) * 0.1;
       const cz = startZ + (asmZ - startZ) * s;
-      this.draw3DChopsticksPack(cx, cy, cz, 1.02, [0, 0, (1 - s) * 0.6]);
+      this.draw3DChopsticksPack(cx, cy, cz, 1.0, [0, 0, (1 - s) * 0.6]);
       this.drawBox(cx + 0.05, cy + 0.03, cz + 0.05, 0.066, 0.034, 0.11, [0.16, 0.14, 0.24], 0.22, [0.15, 0.25, -0.15]);
     }
 
     if (isCenterWorktable && (a.hasTray || a.hasBag)) {
-      this.registerHitbox('assembly_zone', asmX, asmY + 0.08, asmZ, 120);
+      this.registerHitbox('assembly_zone', asmX, asmY + 0.08, asmZ, 116);
     }
 
     // 2. 6 УВЕЛИЧЕННЫХ И ВЫСОКОДЕТАЛИЗИРОВАННЫХ 3D-ГАСТРОЕМКОСТЕЙ (GN-КОНТЕЙНЕРОВ) В 2 ШИРОКИХ РЯДА
@@ -4745,7 +4745,7 @@ export class FirstPersonWebGLScene {
     } else if (this.assemblyVesselAnim.active && this.assemblyVesselAnim.action === 'pickup') {
       const p = Math.min(1, this.assemblyVesselAnim.timer / this.assemblyVesselAnim.duration);
       const s = p * p * (3 - 2 * p);
-      const startX = this.assemblyVesselAnim.intoBag ? 0.0 : -0.085;
+      const startX = this.assemblyVesselAnim.intoBag ? 0.0 : -0.13;
       const startY = this.assemblyVesselAnim.intoBag ? 1.06 : 0.92;
       const startZ = -0.24;
       hx = startX + (basePos[0] - startX) * s;
@@ -5051,32 +5051,32 @@ export class FirstPersonWebGLScene {
       this.drawBox(rhX, rhY, rhZ, 0.068, 0.036, 0.115, [0.16, 0.14, 0.24], 0.24, rhRot);
       this.drawBox(rhX, rhY + 0.02, rhZ, 0.072, 0.011, 0.038, [0.0, 0.96, 0.83], 0.94, rhRot);
     } else {
-      // Поднимаемся к клиенту с собранным БОЛЬШИМ ПОДНОСОМ (обе руки держат его по бокам, на нём блюдо и палочки!)
-      const ts = 0.8 * fadeScale;
+      // Поднимаемся к клиенту с собранным ПОДНОСОМ (блюдо ближе к левому краю, палочки справа)
+      const ts = 0.82 * fadeScale;
       this.draw3DRamenTray(cx, cy, cz, ts);
       if (a.vessel) {
         this.drawFilledVessel3D(
-          cx - R[0] * 0.08 * ts,
+          cx - R[0] * 0.13 * ts,
           cy + 0.016 * ts,
-          cz - R[2] * 0.08 * ts,
+          cz - R[2] * 0.13 * ts,
           a.vessel,
-          0.66 * fadeScale
+          0.65 * fadeScale
         );
       }
       if (a.hasChopsticks) {
         this.draw3DChopsticksPack(
-          cx + R[0] * 0.21 * ts,
+          cx + R[0] * 0.19 * ts,
           cy + 0.016 * ts,
-          cz + R[2] * 0.21 * ts,
-          0.9 * fadeScale
+          cz + R[2] * 0.19 * ts,
+          0.88 * fadeScale
         );
       }
 
-      // Обе кибер-перчатки героя держат широкий поднос слева и справа за бортики
+      // Обе кибер-перчатки героя держат поднос слева и справа за бортики
       for (const side of [-1, 1]) {
-        const hx = cx + R[0] * (0.31 * side * ts) - F[0] * 0.03;
+        const hx = cx + R[0] * (0.28 * side * ts) - F[0] * 0.03;
         const hy = cy - 0.008;
-        const hz = cz + R[2] * (0.31 * side * ts) - F[2] * 0.03;
+        const hz = cz + R[2] * (0.28 * side * ts) - F[2] * 0.03;
         const hRot = [0.08, yawAngle + side * 0.22, -side * 0.12];
         this.drawBox(hx, hy, hz, 0.07, 0.034, 0.12, [0.16, 0.14, 0.24], 0.24, hRot);
         this.drawBox(hx, hy + 0.019, hz, 0.074, 0.011, 0.038, [0.0, 0.96, 0.83], 0.94, hRot);
