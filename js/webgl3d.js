@@ -1,5 +1,5 @@
-import { GAME_CONFIG } from './config.js?v=48';
-import { gameState } from './state.js?v=48';
+import { GAME_CONFIG } from './config.js?v=49';
+import { gameState } from './state.js?v=49';
 import {
   createAlleyBackdropTexture,
   createBuildingFacadeTexture,
@@ -8,7 +8,7 @@ import {
   createKanjiSignTextures,
   createPedestrianTextures,
   AnimeCustomerTextureRenderer
-} from './art3d.js?v=48';
+} from './art3d.js?v=49';
 
 /**
  * Полноэкранный WebGL 3D движок от первого лица с процедурной высокодетализированной
@@ -870,9 +870,70 @@ export class FirstPersonWebGLScene {
       const dx = endX - downX;
       const dy = endY - downY;
       const dist = Math.hypot(dx, dy);
+      const absX = Math.abs(dx);
+      const absY = Math.abs(dy);
+
+      const clearHeadTimers = () => {
+        this.headPeeking = false;
+        if (this.headReturnTimer) {
+          clearTimeout(this.headReturnTimer);
+          this.headReturnTimer = null;
+        }
+      };
+
+      const syncSectorHighlight = (secIdx) => {
+        const shell = document.getElementById('app-shell');
+        if (shell) shell.setAttribute('data-active-sector', String(secIdx));
+        document.querySelectorAll('[data-sector-zone]').forEach((zone) => {
+          const idx = Number(zone.getAttribute('data-sector-zone'));
+          zone.classList.toggle('is-active', idx === secIdx);
+        });
+      };
+
+      // 0. ДИАГОНАЛЬНЫЙ СВАЙП С ЦЕНТРАЛЬНОГО СТОЛА В ПРАВЫЙ ВЕРХНИЙ ИЛИ ЛЕВЫЙ ВЕРХНИЙ УГОЛ:
+      // - Свайп в правый верхний угол (dx > 0, dy < 0) -> сразу на правую верхнюю полку с грязной посудой (customerPanSide = +1)!
+      // - Свайп в левый верхний угол (dx < 0, dy < 0) -> сразу на левую верхнюю чистую полочку (customerPanSide = -1)!
+      const isDiagonalGesture = dist > 24 && absX > absY * 0.34 && absY > absX * 0.34;
+      if (isDiagonalGesture) {
+        if (gameState.runtime.activeSector === 1 && !this._startedOnCustomer && dy < 0) {
+          clearHeadTimers();
+          gameState.runtime.cameraFocus = 'customer';
+          gameState.runtime.customerPanSide = dx > 0 ? 1 : -1;
+          audio.playTapPop();
+          return;
+        }
+        // Если мы на верхнем плане (на полке или у гостя) и делаем диагональный свайп вниз -> возвращаемся на центральный стол!
+        if (gameState.runtime.activeSector === 1 && this._startedOnCustomer && dy > 0) {
+          clearHeadTimers();
+          gameState.runtime.cameraFocus = 'worktable';
+          gameState.runtime.customerPanSide = 0;
+          audio.playTapPop();
+          return;
+        }
+        // Если мы у холодильника справа (Сектор 2) и свайпаем по диагонали наверх -> попадаем на правую полку с грязной посудой!
+        if (gameState.runtime.activeSector === 2 && dy < 0) {
+          clearHeadTimers();
+          gameState.runtime.activeSector = 1;
+          gameState.runtime.cameraFocus = 'customer';
+          gameState.runtime.customerPanSide = 1;
+          syncSectorHighlight(1);
+          audio.playTapPop();
+          return;
+        }
+        // Если мы у плиты слева (Сектор 0) и свайпаем по диагонали наверх -> попадаем на левую верхнюю полочку!
+        if (gameState.runtime.activeSector === 0 && dy < 0) {
+          clearHeadTimers();
+          gameState.runtime.activeSector = 1;
+          gameState.runtime.cameraFocus = 'customer';
+          gameState.runtime.customerPanSide = -1;
+          syncSectorHighlight(1);
+          audio.playTapPop();
+          return;
+        }
+      }
 
       // 1. ГОРИЗОНТАЛЬНЫЙ СВАЙП (переключение секторов или поворот на верхнем плане с переходом к плите/холодильнику)
-      if (dist > 24 && Math.abs(dx) > Math.abs(dy) * 1.08) {
+      if (dist > 24 && absX > absY * 1.05) {
         if (this.callbacks.onSwipeSector) {
           this.callbacks.onSwipeSector(dx < 0 ? 1 : -1);
         }
@@ -884,16 +945,13 @@ export class FirstPersonWebGLScene {
       // - Если камера на центральном столе (Сектор 1) -> поднимаемся на покупателя по центру (customerPanSide = 0);
       // - Если камера у холодильника справа (Сектор 2) -> поднимаемся сразу на правую верхнюю полку с грязной посудой (customerPanSide = +1)!
       // - Если камера у варочной плиты слева (Сектор 0) -> поднимаемся сразу на левую верхнюю полочку (customerPanSide = -1)!
-      if (dist > 22 && Math.abs(dy) > Math.abs(dx) * 1.05) {
-        this.headPeeking = false;
-        if (this.headReturnTimer) {
-          clearTimeout(this.headReturnTimer);
-          this.headReturnTimer = null;
-        }
+      if (dist > 22 && absY >= absX * 0.95) {
+        clearHeadTimers();
 
         if (gameState.runtime.activeSector === 1 && this._startedOnCustomer) {
           gameState.runtime.cameraFocus = 'worktable';
           gameState.runtime.customerPanSide = 0;
+          audio.playTapPop();
           return;
         }
 
@@ -901,6 +959,8 @@ export class FirstPersonWebGLScene {
           gameState.runtime.activeSector = 1;
           gameState.runtime.cameraFocus = 'customer';
           gameState.runtime.customerPanSide = 1;
+          syncSectorHighlight(1);
+          audio.playTapPop();
           return;
         }
 
@@ -908,12 +968,15 @@ export class FirstPersonWebGLScene {
           gameState.runtime.activeSector = 1;
           gameState.runtime.cameraFocus = 'customer';
           gameState.runtime.customerPanSide = -1;
+          syncSectorHighlight(1);
+          audio.playTapPop();
           return;
         }
 
         if (gameState.runtime.activeSector === 1) {
           gameState.runtime.cameraFocus = 'customer';
           gameState.runtime.customerPanSide = 0;
+          audio.playTapPop();
           return;
         }
       }
@@ -2353,25 +2416,26 @@ export class FirstPersonWebGLScene {
       this.registerHitbox('pacifier_cat', catX, catBaseY + 0.13, catZ, 52);
     }
 
-    // 4. ПИРАМИДА ИЗ ГРЯЗНЫХ МИСОК НА ПРАВОЙ ВЕРХНЕЙ ПОЛКЕ ПРИЛАВКА:
-    // - Первый ряд (3 нижние миски) стоят ПЛОСКО на полке (rx = 0, rz = 0), но НЕ в одну линию и на разном расстоянии друг от друга
-    //   (первая чуть поодаль и ближе к краю, а вторая и третья — ближе друг к другу и на разных линиях по глубине dz);
-    // - Начиная со второго и верхних рядов миски ложатся поверх них уже ПОД НАКЛОНОМ, образуя пирамиду!
+    // 4. ГРЯЗНЫЕ МИСКИ НА ПРАВОЙ ВЕРХНЕЙ ПОЛКЕ ПРИЛАВКА (ВСТАВЛЯЮТСЯ ОДНА В ДРУГУЮ ПОД НАКЛОНОМ, КАК В ЖИЗНИ!):
+    // - Первый ряд (3 нижние миски, индексы 0..2) стоят ПЛОСКО на полке (rx = 0, rz = 0), НЕ в одну линию и на разном расстоянии друг от друга;
+    // - Второй ряд (индексы 3..5): 4-я миска вставляется прямо ВНУТРЬ 1-й грязной миски под углом/наклоном (одна в другую, упираясь в палочки и дно!),
+    //   5-я миска вставляется внутрь 2-й под наклоном, 6-я — внутрь 3-й под наклоном;
+    // - Третий и четвёртый ярусы (индексы 6..9) продолжают вкладываться одна в другую поверх второго ряда с живым чередованием наклона!
     const pyramidSlots = [
-      // 1-й ряд (основание из 3 мисок): стоят абсолютно плоско (rx=0, rz=0), вразнобой по глубине dz и с разным шагом по dx!
+      // 1-й ряд (основание из 3 мисок): стоят абсолютно плоско (rx=0, rz=0), вразнобой по глубине dz и с разным шагом по dx
       { dx: -0.2, dy: 0.0, dz: 0.036, rot: [0.0, 0.35, 0.0] },
       { dx: 0.03, dy: 0.0, dz: -0.042, rot: [0.0, -0.55, 0.0] },
       { dx: 0.18, dy: 0.0, dz: 0.024, rot: [0.0, 0.75, 0.0] },
-      // 2-й ярус: ложатся сверху уже под наклоном в промежутки между нижними мисками
-      { dx: -0.08, dy: 0.056, dz: -0.008, rot: [0.22, -0.5, 0.28] },
-      { dx: 0.1, dy: 0.058, dz: -0.01, rot: [-0.2, 0.45, -0.26] },
-      { dx: 0.01, dy: 0.088, dz: 0.024, rot: [0.26, 0.8, -0.18] },
-      // 3-й ярус пирамиды (под наклоном выше)
-      { dx: -0.04, dy: 0.126, dz: -0.012, rot: [-0.25, -0.7, 0.32] },
-      { dx: 0.06, dy: 0.134, dz: 0.01, rot: [0.24, 0.35, -0.3] },
-      // Верхушка пирамиды (9–10 мисок)
-      { dx: 0.01, dy: 0.178, dz: -0.005, rot: [0.28, -0.3, 0.24] },
-      { dx: -0.01, dy: 0.22, dz: 0.008, rot: [-0.22, 0.65, -0.32] }
+      // 2-й ряд: каждая следующая миска вставлена ВНУТРЬ соответствующей миски 1-го ряда (одна в другую, dy=0.034) под наклоном!
+      { dx: -0.2 + 0.015, dy: 0.034, dz: 0.036 - 0.01, rot: [0.22, -0.48, -0.26] },
+      { dx: 0.03 - 0.014, dy: 0.035, dz: -0.042 + 0.012, rot: [-0.21, 0.52, 0.25] },
+      { dx: 0.18 + 0.013, dy: 0.034, dz: 0.024 - 0.011, rot: [0.2, 0.85, -0.24] },
+      // 3-й ряд: вставляются одна в другую поверх мисок 2-го ряда с наклоном в другую сторону (dy=0.068)
+      { dx: -0.2 - 0.008, dy: 0.068, dz: 0.036 + 0.006, rot: [-0.19, 0.32, 0.24] },
+      { dx: 0.03 + 0.011, dy: 0.069, dz: -0.042 - 0.006, rot: [0.23, -0.65, -0.25] },
+      { dx: 0.18 - 0.009, dy: 0.068, dz: 0.024 + 0.007, rot: [-0.21, 0.25, 0.23] },
+      // 10-я миска (4-й ярус): вложена внутрь центральной стопки под наклоном (dy=0.103)
+      { dx: 0.03 - 0.01, dy: 0.103, dz: -0.042 + 0.008, rot: [-0.24, 0.7, 0.27] }
     ];
 
     const rightList = rt.dirtyShelfRight || [];
@@ -3177,14 +3241,20 @@ export class FirstPersonWebGLScene {
       this.drawBox(sinkX + r * 0.055, sinkY + 0.045, sinkZ + 0.33, 0.008, 0.045, 0.14, [0.68, 0.75, 0.84], 0.15, null, 0.92);
     }
 
-    // 5. ПИРАМИДА ИЗ ГРЯЗНЫХ МИСОК ВНУТРИ РАКОВИНЫ (1-й ряд плоско и не на одной линии, верхние ярусы — под наклоном!)
+    // 5. ГРЯЗНЫЕ МИСКИ ВНУТРИ РАКОВИНЫ (1-й ряд плоско и не на одной линии, 2-й и 3-й ряды вставлены одна в другую под наклоном!)
     const sinkPyramid = [
+      // 1-й ряд (3 плоские миски на дне раковины вразнобой)
       { dx: -0.08, dy: 0.024, dz: -0.11, rot: [0.0, 0.3, 0.0] },
       { dx: 0.09, dy: 0.024, dz: 0.03, rot: [0.0, -0.45, 0.0] },
       { dx: -0.03, dy: 0.024, dz: 0.12, rot: [0.0, 0.65, 0.0] },
-      { dx: 0.02, dy: 0.072, dz: -0.02, rot: [0.24, -0.5, 0.28] },
-      { dx: -0.01, dy: 0.076, dz: 0.06, rot: [-0.22, 0.45, -0.26] },
-      { dx: 0.01, dy: 0.122, dz: 0.01, rot: [0.26, 0.75, -0.24] }
+      // 2-й ряд (вставлены одна в другую в миски 1-го ряда под углом!)
+      { dx: -0.08 + 0.014, dy: 0.056, dz: -0.11 + 0.01, rot: [0.22, -0.5, -0.25] },
+      { dx: 0.09 - 0.013, dy: 0.057, dz: 0.03 - 0.01, rot: [-0.2, 0.45, 0.24] },
+      { dx: -0.03 + 0.012, dy: 0.056, dz: 0.12 - 0.011, rot: [-0.22, 0.75, -0.23] },
+      // 3-й ряд (вставлены одна в другую поверх 2-го ряда)
+      { dx: -0.08 - 0.008, dy: 0.088, dz: -0.11 - 0.006, rot: [-0.19, 0.35, 0.23] },
+      { dx: 0.09 + 0.01, dy: 0.089, dz: 0.03 + 0.008, rot: [0.21, -0.6, -0.24] },
+      { dx: -0.03 - 0.009, dy: 0.088, dz: 0.12 + 0.006, rot: [0.2, 0.25, 0.22] }
     ];
     const visibleDirty = Math.min(10, dirtyList.length);
     for (let i = 0; i < visibleDirty; i++) {
