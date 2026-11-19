@@ -1,16 +1,16 @@
-import { GAME_CONFIG } from './config.js?v=53';
-import { gameState, createShiftRuntimeState } from './state.js?v=53';
-import { audio } from './audio.js?v=53';
+import { GAME_CONFIG } from './config.js?v=54';
+import { gameState, createShiftRuntimeState } from './state.js?v=54';
+import { audio } from './audio.js?v=54';
 import {
   buildCustomerPortraitSVG,
   buildCourierDroneSVG,
   generateAppleTouchIcon
-} from './renderer.js?v=53';
-import { FirstPersonWebGLScene } from './webgl3d.js?v=53';
-import { CustomerAndDeliverySystem } from './customers.js?v=53';
-import { KitchenSystem } from './kitchen.js?v=53';
-import { EconomySystem } from './economy.js?v=53';
-import { TutorialSystem } from './tutorial.js?v=53';
+} from './renderer.js?v=54';
+import { FirstPersonWebGLScene } from './webgl3d.js?v=54';
+import { CustomerAndDeliverySystem } from './customers.js?v=54';
+import { KitchenSystem } from './kitchen.js?v=54';
+import { EconomySystem } from './economy.js?v=54';
+import { TutorialSystem } from './tutorial.js?v=54';
 
 class CyberRamenApp {
   constructor() {
@@ -212,6 +212,15 @@ class CyberRamenApp {
       if (washed) {
         this.scene3D.triggerSinkWashAnim(washed);
       }
+      return;
+    }
+
+    if (hitId === 'sink_clean_rack') {
+      const moved = this.kitchenSystem.collectCleanBowlFromRack();
+      if (moved) {
+        this.scene3D.triggerRackToCleanStackAnim(moved.fromRackIdx);
+      }
+      return;
     }
   }
 
@@ -220,7 +229,7 @@ class CyberRamenApp {
 
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker
-        .register('./sw.js?v=53', { updateViaCache: 'none' })
+        .register('./sw.js?v=54', { updateViaCache: 'none' })
         .then((reg) => reg.update())
         .catch(() => {});
     }

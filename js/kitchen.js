@@ -1,6 +1,6 @@
-import { GAME_CONFIG } from './config.js?v=53';
-import { gameState } from './state.js?v=53';
-import { audio } from './audio.js?v=53';
+import { GAME_CONFIG } from './config.js?v=54';
+import { gameState } from './state.js?v=54';
+import { audio } from './audio.js?v=54';
 
 export class KitchenSystem {
   constructor(callbacks) {
@@ -747,25 +747,61 @@ export class KitchenSystem {
     return { side, bowl, remainingOnShelf: shelf.length };
   }
 
-  // Помыть одну грязную миску в раковине (Сектор -1, левее плиты): 1 тап = 1 чистая миска возвращается на склад!
+  // Помыть одну грязную миску в раковине (Сектор -1, левее плиты):
+  // Руки протягиваются к миске, моют её губкой и кладут слева на площадку для чистой посуды (washedOnRack)!
   washOneBowlInSink() {
     const rt = gameState.runtime;
     if (!rt.dirtyInSink || rt.dirtyInSink.length === 0) {
       audio.playTapPop();
-      this.onToast('✨ В мойке чисто! Грязные миски можно забрать с верхних полок прилавка.', '#00f5d4');
+      if ((rt.washedOnRack || 0) > 0) {
+        this.onToast(
+          `✨ В мойке пусто! Тапните по чистым мискам слева на сушилке (${rt.washedOnRack} шт.), чтобы убрать их в стопку!`,
+          '#00f5d4'
+        );
+      } else {
+        this.onToast('✨ В мойке чисто! Грязные миски можно забрать с правой верхней полки прилавка.', '#00f5d4');
+      }
       return null;
     }
 
     const washed = rt.dirtyInSink.pop();
-    rt.cleanBowls = Math.min(rt.maxCleanBowls || 10, (rt.cleanBowls ?? 0) + 1);
+    const sinkIndex = rt.dirtyInSink.length;
+    const rackIndex = rt.washedOnRack || 0;
+    rt.washedOnRack = rackIndex + 1;
     audio.playBoilBubble();
+    this.onToast(
+      `🫧 Миска вымыта и положена слева на сушилку (${rt.washedOnRack} шт.)! Тапните по ней, чтобы убрать в стопку чистых!`,
+      '#00f5d4'
+    );
+    this.renderAllKitchen();
+    return {
+      ...washed,
+      sinkIndex,
+      rackIndex
+    };
+  }
+
+  // Забрать уже вымытую чистую миску с площадки слева от раковины (только тогда она попадает в стопку с чистой посудой!)
+  collectCleanBowlFromRack() {
+    const rt = gameState.runtime;
+    if (!rt.washedOnRack || rt.washedOnRack <= 0) {
+      return null;
+    }
+
+    const fromRackIdx = rt.washedOnRack - 1;
+    rt.washedOnRack = Math.max(0, rt.washedOnRack - 1);
+    rt.cleanBowls = Math.min(rt.maxCleanBowls || 10, (rt.cleanBowls ?? 0) + 1);
+    audio.playTapPop();
     audio.playAlDentePing();
     this.onToast(
-      `🫧 Миска вымыта до блеска! Чистых мисок: ${rt.cleanBowls}/10 (в мойке осталось: ${rt.dirtyInSink.length})`,
+      `✨ Чистая миска убрана в стопку! Чистых мисок на складе: ${rt.cleanBowls}/10`,
       '#10f56c'
     );
     this.renderAllKitchen();
-    return washed;
+    return {
+      fromRackIdx,
+      remainingOnRack: rt.washedOnRack
+    };
   }
 
   // Автоматическое закрывание вок-коробочки и мгновенная передача дрону-курьеру при тапе по дрону!

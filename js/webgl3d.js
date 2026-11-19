@@ -1,5 +1,5 @@
-import { GAME_CONFIG } from './config.js?v=53';
-import { gameState } from './state.js?v=53';
+import { GAME_CONFIG } from './config.js?v=54';
+import { gameState } from './state.js?v=54';
 import {
   createAlleyBackdropTexture,
   createBuildingFacadeTexture,
@@ -8,7 +8,7 @@ import {
   createKanjiSignTextures,
   createPedestrianTextures,
   AnimeCustomerTextureRenderer
-} from './art3d.js?v=53';
+} from './art3d.js?v=54';
 
 /**
  * Полноэкранный WebGL 3D движок от первого лица с процедурной высокодетализированной
@@ -90,8 +90,16 @@ export class FirstPersonWebGLScene {
     this.sinkWashAnim = {
       active: false,
       timer: 0,
-      duration: 0.56,
-      bowl: null
+      duration: 0.96,
+      bowl: null,
+      sinkIndex: 0,
+      rackIndex: 0
+    };
+    this.rackPickupAnim = {
+      active: false,
+      timer: 0,
+      duration: 0.42,
+      fromRackIdx: 0
     };
     this.sinkFaucetFlowTimer = 0;
     this.handPourAnim = {
@@ -303,10 +311,19 @@ export class FirstPersonWebGLScene {
   triggerSinkWashAnim(bowl = null) {
     this.sinkWashAnim.active = true;
     this.sinkWashAnim.timer = 0;
-    this.sinkWashAnim.duration = 0.56;
+    this.sinkWashAnim.duration = 0.96;
     this.sinkWashAnim.bowl = bowl || { broth: 'tonkotsu' };
+    this.sinkWashAnim.sinkIndex = bowl?.sinkIndex ?? 0;
+    this.sinkWashAnim.rackIndex = bowl?.rackIndex ?? 0;
     // Вода из крана начинает лить при тапе на тарелочку и продолжает идти ещё 1 секунду после завершения мытья!
     this.sinkFaucetFlowTimer = this.sinkWashAnim.duration + 1.0;
+  }
+
+  triggerRackToCleanStackAnim(fromRackIdx = 0) {
+    this.rackPickupAnim.active = true;
+    this.rackPickupAnim.timer = 0;
+    this.rackPickupAnim.duration = 0.42;
+    this.rackPickupAnim.fromRackIdx = fromRackIdx;
   }
 
   triggerCenterVesselArrivalAnim(type = 'bowl', hadExisting = false) {
@@ -1165,6 +1182,12 @@ export class FirstPersonWebGLScene {
       this.sinkWashAnim.timer += dt;
       if (this.sinkWashAnim.timer >= this.sinkWashAnim.duration) {
         this.sinkWashAnim.active = false;
+      }
+    }
+    if (this.rackPickupAnim.active) {
+      this.rackPickupAnim.timer += dt;
+      if (this.rackPickupAnim.timer >= this.rackPickupAnim.duration) {
+        this.rackPickupAnim.active = false;
       }
     }
     if (this.sinkFaucetFlowTimer > 0) {
@@ -3279,18 +3302,49 @@ export class FirstPersonWebGLScene {
     this.drawMesh('cylinder', faucetX + 0.01, sinkY + 0.055, sinkZ + 0.11, 0.038, 0.028, 0.038, [1.0, 0.22, 0.35], 0.75, null, 0.9);
 
     // 3. ДОЗАТОР МОЮЩЕГО СРЕДСТВА И ПОРОЛОНОВАЯ ГУБКА НА БОРТИКЕ (z = +0.46)
+    const spongeHomeX = sinkX + 0.18;
+    const spongeHomeY = rimY + 0.016;
+    const spongeHomeZ = sinkZ - 0.25;
     this.drawMesh('cylinder', sinkX - 0.14, sinkY + 0.085, sinkZ - 0.26, 0.054, 0.1, 0.054, [0.0, 0.86, 0.78], 0.65, null, 0.85);
     this.drawBox(sinkX - 0.12, sinkY + 0.145, sinkZ - 0.26, 0.048, 0.014, 0.016, [0.88, 0.92, 0.96], 0.25);
     if (!isWashing) {
       // Жёлто-зелёная кухонная губка на переднем углу мойки
-      this.drawBox(sinkX + 0.18, rimY + 0.016, sinkZ - 0.25, 0.075, 0.024, 0.052, [1.0, 0.86, 0.18], 0.35, [0, 0.25, 0]);
-      this.drawBox(sinkX + 0.18, rimY + 0.03, sinkZ - 0.25, 0.075, 0.008, 0.052, [0.1, 0.78, 0.38], 0.35, [0, 0.25, 0]);
+      this.drawBox(spongeHomeX, spongeHomeY, spongeHomeZ, 0.075, 0.024, 0.052, [1.0, 0.86, 0.18], 0.35, [0, 0.25, 0]);
+      this.drawBox(spongeHomeX, spongeHomeY + 0.014, spongeHomeZ, 0.075, 0.008, 0.052, [0.1, 0.78, 0.38], 0.35, [0, 0.25, 0]);
     }
 
-    // 4. МЕТАЛЛИЧЕСКАЯ СУШИЛКА ДЛЯ ВЫМЫТЫХ МИСОК СЛЕВА ОТ РАКОВИНЫ (z = +1.05)
-    this.drawBox(sinkX, sinkY + 0.015, sinkZ + 0.34, 0.44, 0.022, 0.16, [0.22, 0.26, 0.33], 0.08, null, 0.8);
+    // 4. ПЛОЩАДКА ДЛЯ ЧИСТОЙ ВЫМЫТОЙ ПОСУДЫ СЛЕВА ОТ РАКОВИНЫ (z = +1.07)
+    // Вымытые миски складываются сюда левой рукой; только при тапе по чистой посуде на этой площадке они уходят в стопку чистых!
+    const rackX = sinkX;
+    const rackY = sinkY + 0.015;
+    const rackZ = sinkZ + 0.35;
+    const totalWashedOnRack = Math.max(0, Math.min(10, rt.washedOnRack || 0));
+    const pWash = isWashing ? Math.min(1, this.sinkWashAnim.timer / this.sinkWashAnim.duration) : 1;
+    // Пока рука ещё моет и несёт текущую миску к площадке (pWash < 0.88), на площадке лежат предыдущие миски
+    const staticRackCount = Math.max(
+      0,
+      totalWashedOnRack - (isWashing && pWash < 0.88 ? 1 : 0)
+    );
+
+    this.drawBox(rackX, rackY, rackZ, 0.42, 0.022, 0.22, [0.22, 0.26, 0.33], 0.08, null, 0.82);
     for (let r = -3; r <= 3; r++) {
-      this.drawBox(sinkX + r * 0.055, sinkY + 0.045, sinkZ + 0.34, 0.008, 0.045, 0.14, [0.68, 0.75, 0.84], 0.15, null, 0.92);
+      this.drawBox(rackX + r * 0.052, rackY + 0.014, rackZ, 0.008, 0.01, 0.19, [0.68, 0.75, 0.84], 0.15, null, 0.92);
+    }
+    // Неоновый зелёный индикатор площадки чистой посуды (пульсирует, когда на площадке лежат чистые миски, готовые к переносу в стопку!)
+    const rackLedGlow = totalWashedOnRack > 0 ? 0.55 + 0.4 * Math.sin(this.time * 6.5) : 0.18;
+    const rackLedCol = totalWashedOnRack > 0 ? [0.06, 0.96, 0.48] : [0.0, 0.86, 0.78];
+    this.drawBox(rackX + 0.205, rackY + 0.008, rackZ, 0.012, 0.012, 0.19, rackLedCol, rackLedGlow);
+
+    // Отрисовываем стопку уже вымытых чистых мисок на площадке слева от раковины
+    for (let m = 0; m < staticRackCount; m++) {
+      const my = rackY + 0.016 + m * 0.022;
+      const ms = 0.195 + m * 0.0018;
+      this.drawMesh('bowl_lathe', rackX, my, rackZ, ms, 0.074, ms, [0.16, 0.1, 0.24], 0.16, null, 0.92, 3);
+      this.drawMesh('torus', rackX, my + 0.064, rackZ, ms * 0.98, 0.011, ms * 0.98, [0.86, 0.22, 0.32], 0.28, null, 0.95);
+    }
+
+    if (rt.activeSector === -1 && totalWashedOnRack > 0) {
+      this.registerHitbox('sink_clean_rack', rackX, rackY + 0.04 + staticRackCount * 0.015, rackZ, 96);
     }
 
     // 5. ГРЯЗНЫЕ МИСКИ НА ДНЕ ГЛУБОКОЙ ПУСТОЙ РАКОВИНЫ (1-й ряд плоско на дне, 2-й и 3-й ряды вставлены одна в другую под наклоном!)
@@ -3333,7 +3387,7 @@ export class FirstPersonWebGLScene {
     const spoutTopY = sinkY + 0.205;
     const spoutZ = sinkZ;
     if (isWaterFlowing) {
-      const streamBottomY = isWashing ? floorY + 0.12 : floorY + 0.01;
+      const streamBottomY = isWashing && pWash >= 0.15 && pWash < 0.68 ? floorY + 0.12 : floorY + 0.01;
       const streamH = spoutTopY - streamBottomY;
       const streamMidY = (spoutTopY + streamBottomY) * 0.5;
       const streamW = 0.02 + Math.sin(this.time * 48) * 0.0035;
@@ -3357,52 +3411,211 @@ export class FirstPersonWebGLScene {
       this.drawMesh('torus', spoutX, floorY + 0.012, spoutZ, splashR, 0.005, splashR, [0.65, 0.96, 1.0], 0.85);
     }
 
-    // 7. АНИМАЦИЯ МЫТЬЯ ТАРЕЛОЧКИ ПОД СТРУЁЙ ВОДЫ С ГУБКОЙ И ШАПКОЙ МЫЛЬНОЙ ПЕНЫ!
+    // Вспомогательная отрисовка протягивающейся от героя кибер-руки с предплечьем и перчаткой
+    const drawReachingArm = (hx, hy, hz, isLeftHand = true, extraYaw = 0, extraRoll = 0) => {
+      const originX = -0.34;
+      const originY = 1.16;
+      const originZ = isLeftHand ? 0.78 : 0.38;
+      const yaw = 1.18 + extraYaw + (isLeftHand ? 0.15 : -0.15);
+      const handRot = [0.16, yaw, extraRoll];
+
+      // Перчатка с неоновой бирюзовой полосой и большим пальцем
+      this.drawBox(hx, hy, hz, 0.074, 0.038, 0.128, [0.16, 0.14, 0.24], 0.24, handRot);
+      this.drawBox(hx, hy + 0.021, hz, 0.078, 0.012, 0.042, [0.0, 0.96, 0.83], 0.94, handRot);
+      const thumbZOff = isLeftHand ? -0.042 : 0.042;
+      this.drawBox(hx - 0.02, hy + 0.008, hz + thumbZOff, 0.032, 0.026, 0.052, [0.2, 0.18, 0.3], 0.25, handRot);
+
+      // Предплечье, тянущееся от самого героя к кисти руки
+      const midX = (hx + originX) * 0.5;
+      const midY = (hy + originY) * 0.5;
+      const midZ = (hz + originZ) * 0.5;
+      const armLen = Math.hypot(hx - originX, hy - originY, hz - originZ);
+      const armYaw = Math.atan2(hx - originX, hz - originZ);
+      const armPitch = -Math.asin(Math.max(-0.9, Math.min(0.9, (hy - originY) / Math.max(0.1, armLen))));
+      this.drawBox(midX, midY, midZ, 0.078, 0.052, Math.max(0.14, armLen * 0.85), [0.11, 0.13, 0.2], 0.16, [armPitch, armYaw, 0]);
+    };
+
+    // 7. ДЕТАЛИЗИРОВАННАЯ 4-ФАЗНАЯ АНИМАЦИЯ МЫТЬЯ ОТ ПЕРВОГО ЛИЦА:
+    // - Фаза 1 (p < 0.22): От героя протягиваются обе руки в раковину — левая берёт грязную тарелку со дна, правая берёт губку;
+    // - Фаза 2 (0.22 <= p < 0.66): Левая рука держит тарелку под струёй воды, а правая рука моет её губкой с пышной белой пеной;
+    // - Фаза 3 (0.66 <= p < 0.88): Тарелка сверкает чистотой — левая рука кладёт её СЛЕВА на площадку для чистой посуды;
+    // - Фаза 4 (p >= 0.88): Руки плавно возвращаются к герою!
     if (isWashing) {
-      const p = Math.min(1, this.sinkWashAnim.timer / this.sinkWashAnim.duration);
+      const p = pWash;
+      const sIdx = this.sinkWashAnim.sinkIndex ?? 0;
+      const sp = sinkPyramid[sIdx % sinkPyramid.length];
+      const extraY = Math.floor(sIdx / sinkPyramid.length) * 0.034;
+      const pickX = sinkX + sp.dx;
+      const pickY = floorY + sp.dy + extraY;
+      const pickZ = sinkZ + sp.dz;
 
-      // Моющаяся миска поднимается со дна раковины под струю воды, моется в пене и уходит на сушилку!
-      const liftIn = Math.min(1, p / 0.18);
-      const slideToRack = p < 0.68 ? 0 : (p - 0.68) / 0.32;
-      const wx = spoutX + Math.sin(p * Math.PI * 4) * 0.015 * (1 - slideToRack);
-      const wy = floorY + 0.02 + liftIn * 0.1 + slideToRack * 0.03;
-      const wz = spoutZ + slideToRack * 0.32;
-      this.drawMesh('bowl_lathe', wx, wy, wz, 0.21, 0.082, 0.21, [0.16, 0.1, 0.24], 0.18 + slideToRack * 0.35, null, 0.95, 3);
-      this.drawMesh('torus', wx, wy + 0.072, wz, 0.205, 0.012, 0.205, [0.86, 0.22, 0.32], 0.35, null, 0.95);
+      const washX = spoutX + 0.015;
+      const washY = floorY + 0.135;
+      const washZ = spoutZ;
 
-      // Круговые движения руки с губкой и пышные белые пузыри мыльной пены!
-      if (p < 0.75) {
-        const scrubAng = p * Math.PI * 5;
-        const sx = wx + Math.cos(scrubAng) * 0.055;
-        const sz = wz + Math.sin(scrubAng) * 0.055;
-        // Губка и правая рука повара в перчатке
-        this.drawBox(sx, wy + 0.065, sz, 0.07, 0.024, 0.05, [1.0, 0.86, 0.18], 0.45, [0, scrubAng, 0]);
-        this.drawBox(sx + 0.08, wy + 0.095, sz - 0.04, 0.072, 0.046, 0.125, [0.16, 0.14, 0.24], 0.24, [0.2, 0.4, -0.25]);
-        this.drawBox(sx + 0.08, wy + 0.12, sz - 0.04, 0.076, 0.013, 0.042, [0.0, 0.96, 0.83], 0.94, [0.2, 0.4, -0.25]);
+      const rIdx = this.sinkWashAnim.rackIndex ?? 0;
+      const targetRackY = rackY + 0.016 + rIdx * 0.022;
 
-        // Пузыри белой пены вокруг моющейся миски
-        for (let b = 0; b < 7; b++) {
-          const ba = b * 0.9 + this.time * 10;
-          const br = 0.045 + (b % 3) * 0.026;
-          const bSize = 0.024 + Math.sin(p * Math.PI) * 0.014;
+      const lhOrigin = [-0.36, 1.14, 0.78];
+      const rhOrigin = [-0.36, 1.14, 0.38];
+
+      if (p < 0.22) {
+        // ФАЗА 1: Протягиваем руки от себя, захватываем грязную тарелку со дна раковины и поднимаем под кран!
+        const t = p / 0.22;
+        if (t < 0.52) {
+          const reach = t / 0.52;
+          const s = reach * reach * (3 - 2 * reach);
+          // Грязная тарелка ещё лежит на дне раковины, пока руки тянутся к ней
+          this.drawDirtyBowl3D(pickX, pickY, pickZ, this.sinkWashAnim.bowl?.broth || 'tonkotsu', 0.46, sp.rot);
+          drawReachingArm(
+            lhOrigin[0] + (pickX + 0.06 - lhOrigin[0]) * s,
+            lhOrigin[1] + (pickY + 0.02 - lhOrigin[1]) * s,
+            lhOrigin[2] + (pickZ + 0.05 - lhOrigin[2]) * s,
+            true
+          );
+          drawReachingArm(
+            rhOrigin[0] + (spongeHomeX - rhOrigin[0]) * s,
+            rhOrigin[1] + (spongeHomeY + 0.02 - rhOrigin[1]) * s,
+            rhOrigin[2] + (spongeHomeZ - rhOrigin[2]) * s,
+            false
+          );
+          this.drawBox(spongeHomeX, spongeHomeY, spongeHomeZ, 0.075, 0.024, 0.052, [1.0, 0.86, 0.18], 0.35, [0, 0.25, 0]);
+          this.drawBox(spongeHomeX, spongeHomeY + 0.014, spongeHomeZ, 0.075, 0.008, 0.052, [0.1, 0.78, 0.38], 0.35, [0, 0.25, 0]);
+        } else {
+          const lift = (t - 0.52) / 0.48;
+          const s = lift * lift * (3 - 2 * lift);
+          const bx = pickX + (washX - pickX) * s;
+          const by = pickY + (washY - pickY) * s;
+          const bz = pickZ + (washZ - pickZ) * s;
+          this.drawDirtyBowl3D(bx, by, bz, this.sinkWashAnim.bowl?.broth || 'tonkotsu', 0.46, [0.15 * s, 0, -0.15 * s]);
+          drawReachingArm(bx + 0.07, by - 0.01, bz + 0.06, true);
+
+          const spX = spongeHomeX + (washX + 0.02 - spongeHomeX) * s;
+          const spY = spongeHomeY + (washY + 0.055 - spongeHomeY) * s;
+          const spZ = spongeHomeZ + (washZ - 0.04 - spongeHomeZ) * s;
+          this.drawBox(spX, spY, spZ, 0.072, 0.024, 0.05, [1.0, 0.86, 0.18], 0.45, [0, 0.3, 0]);
+          this.drawBox(spX, spY + 0.014, spZ, 0.072, 0.008, 0.05, [0.1, 0.78, 0.38], 0.45, [0, 0.3, 0]);
+          drawReachingArm(spX + 0.06, spY + 0.025, spZ - 0.04, false);
+        }
+      } else if (p < 0.66) {
+        // ФАЗА 2: Левая рука держит тарелку под струёй, а правая рука активно намывает её губочкой с пеной!
+        const t = (p - 0.22) / 0.44;
+        const rock = Math.sin(t * Math.PI * 4) * 0.014;
+        const bx = washX + rock;
+        const by = washY;
+        const bz = washZ;
+        const bowlTilt = [0.16, 0, -0.18 + rock * 3];
+
+        if (t < 0.48) {
+          // В первой половине мытья ещё видны смываемые следы бульона
+          this.drawDirtyBowl3D(bx, by, bz, this.sinkWashAnim.bowl?.broth || 'tonkotsu', 0.47, bowlTilt);
+        } else {
+          // Во второй половине мытья тарелка уже полностью чистая и блестит!
+          this.drawMesh('bowl_lathe', bx, by, bz, 0.205, 0.078, 0.205, [0.16, 0.1, 0.24], 0.22, bowlTilt, 0.95, 3);
+          this.drawMesh('torus', bx, by + 0.068, bz, 0.2, 0.011, 0.2, [0.86, 0.22, 0.32], 0.35, bowlTilt, 0.96);
+        }
+        drawReachingArm(bx + 0.07, by - 0.01, bz + 0.065, true, 0, -0.15);
+
+        // Правая рука с губкой совершает круговые движения внутри миски
+        const scrubAng = t * Math.PI * 6;
+        const sx = bx + Math.cos(scrubAng) * 0.052;
+        const sz = bz + Math.sin(scrubAng) * 0.052;
+        const sy = by + 0.058;
+        this.drawBox(sx, sy, sz, 0.072, 0.024, 0.05, [1.0, 0.86, 0.18], 0.48, [0, scrubAng, 0]);
+        this.drawBox(sx, sy + 0.014, sz, 0.072, 0.008, 0.05, [0.1, 0.78, 0.38], 0.48, [0, scrubAng, 0]);
+        drawReachingArm(sx + 0.065, sy + 0.028, sz - 0.045, false, 0, 0.2);
+
+        // Пышная шапка белых мыльных пузырей вокруг губки и тарелки
+        for (let b = 0; b < 8; b++) {
+          const ba = b * 0.785 + this.time * 11;
+          const br = 0.042 + (b % 3) * 0.025;
+          const bSize = 0.024 + Math.sin(t * Math.PI) * 0.015;
           this.drawMesh(
             'sphere',
-            wx + Math.cos(ba) * br,
-            wy + 0.055 + (b % 2) * 0.018,
-            wz + Math.sin(ba) * br,
+            bx + Math.cos(ba) * br,
+            by + 0.05 + (b % 2) * 0.018,
+            bz + Math.sin(ba) * br,
             bSize,
             bSize,
             bSize,
             [0.95, 0.98, 1.0],
-            0.88
+            0.9
           );
         }
+      } else if (p < 0.88) {
+        // ФАЗА 3: Тарелка чистая! Левая рука переносит и кладёт её СЛЕВА на площадку для чистой посуды!
+        const t = (p - 0.66) / 0.22;
+        const s = t * t * (3 - 2 * t);
+        const arc = Math.sin(t * Math.PI) * 0.075;
+        const bx = washX + (rackX - washX) * s;
+        const by = washY + (targetRackY - washY) * s + arc;
+        const bz = washZ + (rackZ - washZ) * s;
+        const ms = 0.195 + rIdx * 0.0018;
+
+        this.drawMesh('bowl_lathe', bx, by, bz, ms, 0.074, ms, [0.16, 0.1, 0.24], 0.22, null, 0.95, 3);
+        this.drawMesh('torus', bx, by + 0.064, bz, ms * 0.98, 0.011, ms * 0.98, [0.86, 0.22, 0.32], 0.32, null, 0.96);
+        drawReachingArm(bx + 0.075, by + 0.01, bz + 0.04, true);
+
+        // Правая рука кладёт губку обратно на угол раковины и уходит к герою
+        const spX = washX + 0.02 + (spongeHomeX - (washX + 0.02)) * s;
+        const spY = washY + 0.055 + (spongeHomeY - (washY + 0.055)) * s;
+        const spZ = washZ - 0.04 + (spongeHomeZ - (washZ - 0.04)) * s;
+        this.drawBox(spX, spY, spZ, 0.075, 0.024, 0.052, [1.0, 0.86, 0.18], 0.35, [0, 0.25, 0]);
+        this.drawBox(spX, spY + 0.014, spZ, 0.075, 0.008, 0.052, [0.1, 0.78, 0.38], 0.35, [0, 0.25, 0]);
+        drawReachingArm(
+          spX + 0.06 + (rhOrigin[0] - (spX + 0.06)) * s * 0.6,
+          spY + 0.025 + (rhOrigin[1] - (spY + 0.025)) * s * 0.6,
+          spZ - 0.04 + (rhOrigin[2] - (spZ - 0.04)) * s * 0.6,
+          false
+        );
+      } else {
+        // ФАЗА 4: Чистая тарелка уже лежит слева на площадке, а левая рука возвращается к герою
+        const t = (p - 0.88) / 0.12;
+        const s = t * t * (3 - 2 * t);
+        this.drawBox(spongeHomeX, spongeHomeY, spongeHomeZ, 0.075, 0.024, 0.052, [1.0, 0.86, 0.18], 0.35, [0, 0.25, 0]);
+        this.drawBox(spongeHomeX, spongeHomeY + 0.014, spongeHomeZ, 0.075, 0.008, 0.052, [0.1, 0.78, 0.38], 0.35, [0, 0.25, 0]);
+        drawReachingArm(
+          rackX + 0.075 + (lhOrigin[0] - (rackX + 0.075)) * s,
+          targetRackY + 0.01 + (lhOrigin[1] - (targetRackY + 0.01)) * s,
+          rackZ + 0.04 + (lhOrigin[2] - (rackZ + 0.04)) * s,
+          true
+        );
+      }
+    }
+
+    // 8. АНИМАЦИЯ ЗАБОРА ЧИСТОЙ МИСКИ С ПЛОЩАДКИ СЛЕВА В ОСНОВНУЮ СТОПКУ ЧИСТОЙ ПОСУДЫ ПРИ ТАПЕ ПО НЕЙ!
+    if (this.rackPickupAnim.active) {
+      const p = Math.min(1, this.rackPickupAnim.timer / this.rackPickupAnim.duration);
+      const rIdx = this.rackPickupAnim.fromRackIdx || 0;
+      const startY = rackY + 0.016 + rIdx * 0.022;
+      const lhOrigin = [-0.36, 1.14, 0.78];
+
+      if (p < 0.35) {
+        const t = p / 0.35;
+        const s = t * t * (3 - 2 * t);
+        this.drawMesh('bowl_lathe', rackX, startY, rackZ, 0.198, 0.074, 0.198, [0.16, 0.1, 0.24], 0.22, null, 0.95, 3);
+        this.drawMesh('torus', rackX, startY + 0.064, rackZ, 0.194, 0.011, 0.194, [0.86, 0.22, 0.32], 0.32, null, 0.96);
+        drawReachingArm(
+          lhOrigin[0] + (rackX + 0.07 - lhOrigin[0]) * s,
+          lhOrigin[1] + (startY + 0.02 - lhOrigin[1]) * s,
+          lhOrigin[2] + (rackZ + 0.03 - lhOrigin[2]) * s,
+          true
+        );
+      } else {
+        const t = (p - 0.35) / 0.65;
+        const s = t * t * (3 - 2 * t);
+        const bx = rackX + (0.25 - rackX) * s;
+        const by = startY + 0.14 * Math.sin(t * Math.PI) + 0.08 * s;
+        const bz = rackZ + (0.15 - rackZ) * s;
+        this.drawMesh('bowl_lathe', bx, by, bz, 0.198 * (1 - s * 0.25), 0.074 * (1 - s * 0.25), 0.198 * (1 - s * 0.25), [0.16, 0.1, 0.24], 0.24, null, 0.95, 3);
+        this.drawMesh('torus', bx, by + 0.064 * (1 - s * 0.25), bz, 0.194 * (1 - s * 0.25), 0.011, 0.194 * (1 - s * 0.25), [0.86, 0.22, 0.32], 0.35, null, 0.96);
+        drawReachingArm(bx + 0.06, by + 0.01, bz + 0.03, true);
       }
     }
 
     // Общий страховочный хитбокс по чаше раковины ТОЛЬКО когда камера в Секторе -1 (Мойка)
     if (rt.activeSector === -1) {
-      this.registerHitbox('sink_wash', sinkX, floorY + 0.06, sinkZ, 112);
+      this.registerHitbox('sink_wash', sinkX, floorY + 0.06, sinkZ, 108);
     }
   }
 
@@ -3720,7 +3933,13 @@ export class FirstPersonWebGLScene {
     const rt = gameState.runtime;
     const v = rt.activeVessel;
     if (!v || (v.type !== 'bowl' && v.type !== 'box')) return;
-    if (this.droneDeliverAnim.active || this.trashTossAnim.active) return;
+    if (
+      this.droneDeliverAnim.active ||
+      this.trashTossAnim.active ||
+      (rt.activeSector === -1 && (this.sinkWashAnim.active || this.rackPickupAnim.active))
+    ) {
+      return;
+    }
 
     const basePos = this.getLeftHandWorldPos();
     let hx = basePos[0];
