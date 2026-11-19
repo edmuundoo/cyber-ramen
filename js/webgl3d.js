@@ -1,5 +1,5 @@
-import { GAME_CONFIG } from './config.js?v=56';
-import { gameState } from './state.js?v=56';
+import { GAME_CONFIG } from './config.js?v=57';
+import { gameState } from './state.js?v=57';
 import {
   createAlleyBackdropTexture,
   createBuildingFacadeTexture,
@@ -8,7 +8,7 @@ import {
   createKanjiSignTextures,
   createPedestrianTextures,
   AnimeCustomerTextureRenderer
-} from './art3d.js?v=56';
+} from './art3d.js?v=57';
 
 /**
  * Полноэкранный WebGL 3D движок от первого лица с процедурной высокодетализированной
@@ -37,6 +37,7 @@ export class FirstPersonWebGLScene {
     this.lookAtCurrent = [0, 0.94, -0.51];
     this.lookAtTarget = [0, 0.94, -0.51];
     this.dragPanX = 0;
+    this.dragPanY = 0;
 
     // Пружинная анимация наполнения 3D-миски при добавлении ингредиентов
     this.vesselBounce = 0;
@@ -898,13 +899,16 @@ export class FirstPersonWebGLScene {
       lastX = e.clientX;
       lastY = e.clientY;
       const dx = lastX - downX;
+      const dy = lastY - downY;
       this.dragPanX = Math.max(-0.28, Math.min(0.28, -dx * 0.0022));
+      this.dragPanY = Math.max(-0.18, Math.min(0.18, dy * 0.0018));
     });
 
     const finishGesture = (endX, endY, isCancel = false) => {
       if (!isPointerDown) return;
       isPointerDown = false;
       this.dragPanX = 0;
+      this.dragPanY = 0;
 
       if (gameState.runtime.sauceModeArmed) return;
 
@@ -931,28 +935,28 @@ export class FirstPersonWebGLScene {
         });
       };
 
-      // 0. ДИАГОНАЛЬНЫЙ СВАЙП С ЦЕНТРАЛЬНОГО СТОЛА В ПРАВЫЙ ВЕРХНИЙ ИЛИ ЛЕВЫЙ ВЕРХНИЙ УГОЛ:
-      // - Свайп в правый верхний угол (dx > 0, dy < 0) -> сразу на правую верхнюю полку с грязной посудой (customerPanSide = +1)!
-      // - Свайп в левый верхний угол (dx < 0, dy < 0) -> сразу на левую верхнюю чистую полочку (customerPanSide = -1)!
+      // 0. ДИАГОНАЛЬНЫЙ СВАЙП В ЕДИНОМ СТИЛЕ «ПРИТЯГИВАЕМ К СЕБЕ» (как при перетягивании камеры на смартфоне):
+      // - Со стола свайп в нижний левый угол (dx < 0, dy > 0) -> притягиваем к себе правый верхний угол (полка с грязной посудой, +1)!
+      // - Со стола свайп в нижний правый угол (dx > 0, dy > 0) -> притягиваем к себе левый верхний угол (-1)!
+      // - С верхнего ракурса свайп вверх по диагонали (dy < 0) -> притягиваем обратно к себе центральную столешницу!
       const isDiagonalGesture = dist > 24 && absX > absY * 0.34 && absY > absX * 0.34;
       if (isDiagonalGesture) {
-        if (gameState.runtime.activeSector === 1 && !this._startedOnCustomer && dy < 0) {
+        if (gameState.runtime.activeSector === 1 && !this._startedOnCustomer && dy > 0) {
           clearHeadTimers();
           gameState.runtime.cameraFocus = 'customer';
-          gameState.runtime.customerPanSide = dx > 0 ? 1 : -1;
+          gameState.runtime.customerPanSide = dx < 0 ? 1 : -1;
           audio.playTapPop();
           return;
         }
-        // Если мы на верхнем плане (на полке или у гостя) и делаем диагональный свайп вниз -> возвращаемся на центральный стол!
-        if (gameState.runtime.activeSector === 1 && this._startedOnCustomer && dy > 0) {
+        if (gameState.runtime.activeSector === 1 && this._startedOnCustomer && dy < 0) {
           clearHeadTimers();
           gameState.runtime.cameraFocus = 'worktable';
           gameState.runtime.customerPanSide = 0;
           audio.playTapPop();
           return;
         }
-        // Если мы у холодильника справа (Сектор 2) и свайпаем по диагонали наверх -> попадаем на правую полку с грязной посудой!
-        if (gameState.runtime.activeSector === 2 && dy < 0) {
+        // От холодильника справа (Сектор 2) тянем к себе вниз (dy > 0) -> правая верхняя полка с грязной посудой (+1)!
+        if (gameState.runtime.activeSector === 2 && dy > 0) {
           clearHeadTimers();
           gameState.runtime.activeSector = 1;
           gameState.runtime.cameraFocus = 'customer';
@@ -961,8 +965,8 @@ export class FirstPersonWebGLScene {
           audio.playTapPop();
           return;
         }
-        // Если мы у плиты слева (Сектор 0) и свайпаем по диагонали наверх -> попадаем на левую верхнюю полочку!
-        if (gameState.runtime.activeSector === 0 && dy < 0) {
+        // От плиты слева (Сектор 0) тянем к себе вниз (dy > 0) -> левый верхний угол (-1)!
+        if (gameState.runtime.activeSector === 0 && dy > 0) {
           clearHeadTimers();
           gameState.runtime.activeSector = 1;
           gameState.runtime.cameraFocus = 'customer';
@@ -973,7 +977,7 @@ export class FirstPersonWebGLScene {
         }
       }
 
-      // 1. ГОРИЗОНТАЛЬНЫЙ СВАЙП (переключение секторов или поворот на верхнем плане с переходом к плите/холодильнику)
+      // 1. ГОРИЗОНТАЛЬНЫЙ СВАЙП («притягиваем к себе»: палец влево dx < 0 -> поворот направо; палец вправо dx > 0 -> налево)
       if (dist > 24 && absX > absY * 1.05) {
         if (this.callbacks.onSwipeSector) {
           this.callbacks.onSwipeSector(dx < 0 ? 1 : -1);
@@ -981,22 +985,20 @@ export class FirstPersonWebGLScene {
         return;
       }
 
-      // 2. ВЕРТИКАЛЬНЫЙ СВАЙП:
-      // - Если камера на верхнем плане (cameraFocus === 'customer') -> возвращаемся на стол внизу;
-      // - Если камера на центральном столе (Сектор 1) -> поднимаемся на покупателя по центру (customerPanSide = 0);
-      // - Если камера у холодильника справа (Сектор 2) -> поднимаемся сразу на правую верхнюю полку с грязной посудой (customerPanSide = +1)!
-      // - Если камера у варочной плиты слева (Сектор 0) -> поднимаемся сразу на левую верхнюю полочку (customerPanSide = -1)!
+      // 2. ВЕРТИКАЛЬНЫЙ СВАЙП («притягиваем к себе», без реверса!):
+      // - Палец ВВЕРХ (dy < 0, притягиваем столешницу снизу) -> с верхнего ракурса возвращаемся на рабочий стол;
+      // - Палец ВНИЗ (dy > 0, притягиваем верх прилавка к себе) -> со стола/холодильника/плиты поднимаем взгляд наверх!
       if (dist > 22 && absY >= absX * 0.95) {
         clearHeadTimers();
 
-        if (gameState.runtime.activeSector === 1 && this._startedOnCustomer) {
+        if (dy < 0 && gameState.runtime.activeSector === 1 && this._startedOnCustomer) {
           gameState.runtime.cameraFocus = 'worktable';
           gameState.runtime.customerPanSide = 0;
           audio.playTapPop();
           return;
         }
 
-        if (gameState.runtime.activeSector === 2) {
+        if (dy > 0 && gameState.runtime.activeSector === 2) {
           gameState.runtime.activeSector = 1;
           gameState.runtime.cameraFocus = 'customer';
           gameState.runtime.customerPanSide = 1;
@@ -1005,7 +1007,7 @@ export class FirstPersonWebGLScene {
           return;
         }
 
-        if (gameState.runtime.activeSector === 0) {
+        if (dy > 0 && gameState.runtime.activeSector === 0) {
           gameState.runtime.activeSector = 1;
           gameState.runtime.cameraFocus = 'customer';
           gameState.runtime.customerPanSide = -1;
@@ -1014,12 +1016,13 @@ export class FirstPersonWebGLScene {
           return;
         }
 
-        if (gameState.runtime.activeSector === 1) {
+        if (dy > 0 && gameState.runtime.activeSector === 1 && !this._startedOnCustomer) {
           gameState.runtime.cameraFocus = 'customer';
           gameState.runtime.customerPanSide = 0;
           audio.playTapPop();
           return;
         }
+        return;
       }
 
       if (isCancel) return;
@@ -1229,32 +1232,32 @@ export class FirstPersonWebGLScene {
     //   * cameraFocus === 'worktable': крупный план рабочего стола
     if (rt.activeSector === -1) {
       this.camPosTarget = [-0.1, 1.68, 0.26];
-      this.lookAtTarget = [-0.88, 0.84, 0.72 + this.dragPanX];
+      this.lookAtTarget = [-0.88, 0.84 + this.dragPanY * 0.4, 0.72 + this.dragPanX];
     } else if (rt.activeSector === 0) {
       this.camPosTarget = [-0.04, 1.68, 0.46];
-      this.lookAtTarget = [-0.86, 0.98, -0.16 + this.dragPanX];
+      this.lookAtTarget = [-0.86, 0.98 + this.dragPanY * 0.6, -0.16 + this.dragPanX];
     } else if (rt.activeSector === 2) {
       this.camPosTarget = [0.05, 1.66, 0.45];
-      this.lookAtTarget = [0.88, 0.98, -0.1 - this.dragPanX];
+      this.lookAtTarget = [0.88, 0.98 + this.dragPanY * 0.6, -0.1 - this.dragPanX];
     } else if (rt.cameraFocus === 'customer') {
       const panSide = rt.customerPanSide || 0;
       const dims = this.getCustomerDimensions(rt.currentCustomer);
       const lookY = rt.currentCustomer ? dims.y + dims.h * 0.06 : 1.32;
       if (panSide === -1) {
-        // Взгляд чуть влево — на левую полочку прилавка, где гости оставляют грязные миски
+        // Взгляд чуть влево — на левый верхний угол прилавка
         this.camPosTarget = [-0.06, 1.48, 0.04];
-        this.lookAtTarget = [-0.58 + this.dragPanX * 0.4, 1.15, -1.06];
+        this.lookAtTarget = [-0.58 + this.dragPanX * 0.4, 1.15 + this.dragPanY * 0.6, -1.06];
       } else if (panSide === 1) {
         // Взгляд чуть вправо — на правую полочку прилавка с грязными мисками
         this.camPosTarget = [0.08, 1.48, 0.04];
-        this.lookAtTarget = [0.58 + this.dragPanX * 0.4, 1.15, -1.06];
+        this.lookAtTarget = [0.58 + this.dragPanX * 0.4, 1.15 + this.dragPanY * 0.6, -1.06];
       } else {
         this.camPosTarget = [0.02, 1.46, 0.02];
-        this.lookAtTarget = [0.05 + this.dragPanX * 0.4, lookY, -1.24];
+        this.lookAtTarget = [0.05 + this.dragPanX * 0.4, lookY + this.dragPanY * 0.6, -1.24];
       }
     } else {
       this.camPosTarget = [0.0, 1.78, 0.26];
-      this.lookAtTarget = [0.0 + this.dragPanX, 0.92, -0.52];
+      this.lookAtTarget = [0.0 + this.dragPanX, 0.92 + this.dragPanY * 0.75, -0.52];
     }
 
     const lerp = Math.min(1, dt * 6.5);

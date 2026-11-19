@@ -1,4 +1,4 @@
-import { GAME_CONFIG } from './config.js?v=56';
+import { GAME_CONFIG } from './config.js?v=57';
 
 const BASE_SAVE_KEY = 'CR_NIGHT_YATAI_SAVE_V1';
 
