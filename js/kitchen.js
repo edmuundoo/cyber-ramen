@@ -1,6 +1,6 @@
-import { GAME_CONFIG } from './config.js?v=57';
-import { gameState } from './state.js?v=57';
-import { audio } from './audio.js?v=57';
+import { GAME_CONFIG } from './config.js?v=58';
+import { gameState } from './state.js?v=58';
+import { audio } from './audio.js?v=58';
 
 export class KitchenSystem {
   constructor(callbacks) {
@@ -96,7 +96,7 @@ export class KitchenSystem {
       }
     }
 
-    // 4. Таймеры гостей, которые едят из керамических мисок и затем оставляют грязную миску на ПРАВОЙ полке прилавка!
+    // 4. Таймеры гостей, которые едят из керамических мисок и затем оставляют грязную миску на ЛЕВОЙ полке прилавка (слева от котика)!
     if (Array.isArray(rt.eatingTimers) && rt.eatingTimers.length > 0) {
       for (let i = rt.eatingTimers.length - 1; i >= 0; i--) {
         const item = rt.eatingTimers[i];
@@ -107,10 +107,10 @@ export class KitchenSystem {
             broth: item.broth || 'tonkotsu',
             placedAt: performance.now()
           };
-          rt.dirtyShelfRight.push(dirtyBowl);
+          rt.dirtyShelfLeft.push(dirtyBowl);
           audio.playTapPop();
           this.onToast(
-            '🍽️ Гость доел и оставил грязную миску на правой полке прилавка!',
+            '🍽️ Гость доел и оставил грязную миску на левой полке прилавка!',
             '#ffaa00'
           );
         }
@@ -708,11 +708,11 @@ export class KitchenSystem {
       leftBadReviewFromTable ? '#ffaa00' : evalRes.isPerfect ? '#10f56c' : '#00f5d4'
     );
 
-    // Если отдали заказ в керамической миске — через 8–10 секунд гость доест и оставит грязную миску на правой полке прилавка!
+    // Если отдали заказ в керамической миске — через 8–10 секунд гость доест и оставит грязную миску на левой полке прилавка (слева от котика)!
     if (rt.activeVessel.type === 'bowl') {
       rt.eatingTimers.push({
         remainingSec: 7.5 + Math.random() * 2.5,
-        side: 'right',
+        side: 'left',
         broth: rt.activeVessel.broth || 'tonkotsu'
       });
     }
@@ -759,7 +759,7 @@ export class KitchenSystem {
           '#00f5d4'
         );
       } else {
-        this.onToast('✨ В мойке чисто! Грязные миски можно забрать с правой верхней полки прилавка.', '#00f5d4');
+        this.onToast('✨ В мойке чисто! Грязные миски можно забрать с левой верхней полки прилавка.', '#00f5d4');
       }
       return null;
     }

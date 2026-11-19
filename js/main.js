@@ -1,16 +1,16 @@
-import { GAME_CONFIG } from './config.js?v=57';
-import { gameState, createShiftRuntimeState } from './state.js?v=57';
-import { audio } from './audio.js?v=57';
+import { GAME_CONFIG } from './config.js?v=58';
+import { gameState, createShiftRuntimeState } from './state.js?v=58';
+import { audio } from './audio.js?v=58';
 import {
   buildCustomerPortraitSVG,
   buildCourierDroneSVG,
   generateAppleTouchIcon
-} from './renderer.js?v=57';
-import { FirstPersonWebGLScene } from './webgl3d.js?v=57';
-import { CustomerAndDeliverySystem } from './customers.js?v=57';
-import { KitchenSystem } from './kitchen.js?v=57';
-import { EconomySystem } from './economy.js?v=57';
-import { TutorialSystem } from './tutorial.js?v=57';
+} from './renderer.js?v=58';
+import { FirstPersonWebGLScene } from './webgl3d.js?v=58';
+import { CustomerAndDeliverySystem } from './customers.js?v=58';
+import { KitchenSystem } from './kitchen.js?v=58';
+import { EconomySystem } from './economy.js?v=58';
+import { TutorialSystem } from './tutorial.js?v=58';
 
 class CyberRamenApp {
   constructor() {
@@ -84,7 +84,15 @@ class CyberRamenApp {
       return;
     }
     if (rt.cameraFocus === 'customer') {
-      this.kitchenSystem.serveToCounterCustomer();
+      if ((rt.customerPanSide || 0) === 1) {
+        const delivered = this.kitchenSystem.deliverBoxToCourierDrone();
+        if (delivered) {
+          this.scene3D.triggerAutoCloseAndDroneDeliverAnim(delivered);
+          this.renderCourierWindow();
+        }
+      } else {
+        this.kitchenSystem.serveToCounterCustomer();
+      }
     } else {
       // Если камера на столе — ставим посуду из руки на свободный слот стола
       const freeIdx = (rt.tableSlots || []).findIndex((s) => !s);
@@ -229,7 +237,7 @@ class CyberRamenApp {
 
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker
-        .register('./sw.js?v=57', { updateViaCache: 'none' })
+        .register('./sw.js?v=58', { updateViaCache: 'none' })
         .then((reg) => reg.update())
         .catch(() => {});
     }

@@ -1,5 +1,5 @@
-import { GAME_CONFIG } from './config.js?v=57';
-import { gameState } from './state.js?v=57';
+import { GAME_CONFIG } from './config.js?v=58';
+import { gameState } from './state.js?v=58';
 import {
   createAlleyBackdropTexture,
   createBuildingFacadeTexture,
@@ -8,7 +8,7 @@ import {
   createKanjiSignTextures,
   createPedestrianTextures,
   AnimeCustomerTextureRenderer
-} from './art3d.js?v=57';
+} from './art3d.js?v=58';
 
 /**
  * Полноэкранный WebGL 3D движок от первого лица с процедурной высокодетализированной
@@ -1244,13 +1244,13 @@ export class FirstPersonWebGLScene {
       const dims = this.getCustomerDimensions(rt.currentCustomer);
       const lookY = rt.currentCustomer ? dims.y + dims.h * 0.06 : 1.32;
       if (panSide === -1) {
-        // Взгляд чуть влево — на левый верхний угол прилавка
-        this.camPosTarget = [-0.06, 1.48, 0.04];
-        this.lookAtTarget = [-0.58 + this.dragPanX * 0.4, 1.15 + this.dragPanY * 0.6, -1.06];
+        // Взгляд влево — на левую деревянную полочку с грязными мисками (слева от котика!)
+        this.camPosTarget = [-0.08, 1.48, 0.04];
+        this.lookAtTarget = [-0.66 + this.dragPanX * 0.4, 1.15 + this.dragPanY * 0.6, -1.06];
       } else if (panSide === 1) {
-        // Взгляд чуть вправо — на правую полочку прилавка с грязными мисками
+        // Взгляд вправо — на парящего за прилавком дрона-курьера справа от посетителей!
         this.camPosTarget = [0.08, 1.48, 0.04];
-        this.lookAtTarget = [0.58 + this.dragPanX * 0.4, 1.15 + this.dragPanY * 0.6, -1.06];
+        this.lookAtTarget = [0.72 + this.dragPanX * 0.4, 1.34 + this.dragPanY * 0.6, -1.26];
       } else {
         this.camPosTarget = [0.02, 1.46, 0.02];
         this.lookAtTarget = [0.05 + this.dragPanX * 0.4, lookY + this.dragPanY * 0.6, -1.24];
@@ -1992,8 +1992,8 @@ export class FirstPersonWebGLScene {
     this.drawBox(0, 0.54, -1.06, 2.32, 0.98, 0.09, [0.15, 0.18, 0.24], 0.05, null, 0.5);
     this.drawBox(0, 1.045, -1.06, 2.34, 0.048, 0.13, counterCol, 0.08, null, 0.68);
     this.drawBox(0, 1.068, -1.0, 2.24, 0.015, 0.02, trimCol, trimEmissive);
-    // Деревянная подставка-столешница на правом (x = +0.68) крыле верхнего бортика прилавка под грязные миски
-    this.drawBox(0.68, 1.072, -1.04, 0.58, 0.016, 0.24, [0.32, 0.2, 0.14], 0.08, null, 0.55);
+    // Деревянная подставка-столешница на ЛЕВОЙ (x = -0.68) части передней стойки (слева от котика!) под грязные миски
+    this.drawBox(-0.68, 1.072, -1.04, 0.58, 0.016, 0.24, [0.32, 0.2, 0.14], 0.08, null, 0.55);
 
     // ЛЕВАЯ СТОЛЕШНИЦА ВАРОЧНОГО ЦЕХА И МОЙКИ ПОСУДЫ (с настоящим глубоким сквозным вырезом под чашу раковины на z = 0.48..0.96!)
     // 1) Секция под варочной плитой (z от -1.13 до +0.48)
@@ -2503,41 +2503,41 @@ export class FirstPersonWebGLScene {
       { dx: 0.03 - 0.01, dy: 0.103, dz: -0.042 + 0.008, rot: [-0.24, 0.7, 0.27] }
     ];
 
-    const rightList = rt.dirtyShelfRight || [];
-    const shelfCenterX = 0.66;
+    const leftList = rt.dirtyShelfLeft || [];
+    const shelfCenterX = -0.68;
     const shelfBaseY = 1.078;
     const shelfCenterZ = -1.04;
-    for (let i = 0; i < rightList.length; i++) {
+    for (let i = 0; i < leftList.length; i++) {
       const slot = pyramidSlots[i % pyramidSlots.length];
       const extraTier = Math.floor(i / pyramidSlots.length) * 0.045;
       this.drawDirtyBowl3D(
         shelfCenterX + slot.dx,
         shelfBaseY + slot.dy + extraTier,
         shelfCenterZ + slot.dz,
-        rightList[i].broth,
+        leftList[i].broth,
         0.48,
         slot.rot
       );
     }
     if (
-      rightList.length > 0 &&
+      leftList.length > 0 &&
       rt.activeSector === 1 &&
       rt.cameraFocus === 'customer' &&
-      (rt.customerPanSide || 0) === 1
+      (rt.customerPanSide || 0) === -1
     ) {
-      // Хитбокс сбора грязных мисок активен ТОЛЬКО когда камера направлена на правую верхнюю полку!
-      this.registerHitbox('dirty_bowl_right', shelfCenterX, 1.15, shelfCenterZ, 108);
+      // Хитбокс сбора грязных мисок активен ТОЛЬКО когда камера направлена на левую верхнюю полку (слева от котика)!
+      this.registerHitbox('dirty_bowl_left', shelfCenterX, 1.15, shelfCenterZ, 108);
     }
 
-    // Анимация руки, забирающей верхнюю грязную миску с пирамиды в мойку
+    // Анимация руки, забирающей верхнюю грязную миску с левой полки в мойку
     if (this.collectDirtyAnim.active && this.collectDirtyAnim.bowl) {
       const p = Math.min(1, this.collectDirtyAnim.timer / this.collectDirtyAnim.duration);
       const s = p * p * (3 - 2 * p);
       const startX = shelfCenterX;
-      const targetX = -0.88;
+      const targetX = -0.94;
       const bx = startX + (targetX - startX) * s;
       const by = 1.14 + Math.sin(p * Math.PI) * 0.1 - s * 0.16;
-      const bz = -1.04 + s * 0.55;
+      const bz = -1.04 + s * 0.72;
       this.drawDirtyBowl3D(
         bx,
         by,
@@ -3695,89 +3695,7 @@ export class FirstPersonWebGLScene {
       this.registerHitbox('vessel_box', boxX, 1.0, boxZ, 78);
     }
 
-    // 3. КУРЬЕРСКИЙ ДРОН CYBER-EATS В ЛЕВОМ ВЕРХНЕМ УГЛУ (x = 0.72, y = 1.44, z = -0.46)
-    // Парит наверху слева над столешницей, не перекрывая стопки мисок и коробок!
-    const hasDelivery = Boolean(rt.activeDelivery);
-    const deliveringNow = this.droneDeliverAnim.active;
-    const padGlow = deliveringNow
-      ? 0.98
-      : hasDelivery
-        ? 0.55 + 0.35 * Math.sin(this.time * 6.0)
-        : 0.25;
-    const padCol = deliveringNow || hasDelivery ? [0.06, 0.96, 0.42] : [0.0, 0.92, 0.86];
-
-    const baseDroneX = 0.72;
-    const baseDroneY = 1.44;
-    const baseDroneZ = -0.46;
-
-    // Компактное голографическое кольцо-маяк точки ожидания дрона в левом верхнем углу
-    this.drawMesh('torus', baseDroneX, baseDroneY - 0.06, baseDroneZ, 0.19, 0.008, 0.19, padCol, padGlow * 0.8, null, 0.9);
-
-    let droneX = baseDroneX;
-    let droneY = baseDroneY + Math.sin(this.time * 4.2) * 0.026;
-    let droneZ = baseDroneZ;
-    const rotorSpin = this.time * (hasDelivery || deliveringNow ? 24 : 8);
-
-    if (deliveringNow) {
-      const p = Math.min(1, this.droneDeliverAnim.timer / this.droneDeliverAnim.duration);
-      const handPos = this.getLeftHandWorldPos();
-
-      if (p < 0.46) {
-        // Фаза 1: Вок-коробка поднимается из левой руки к дрону в левый верхний угол, её 4 клапана автоматически закрываются!
-        const t = p / 0.46;
-        const s = t * t * (3 - 2 * t);
-        const bx = handPos[0] + (baseDroneX - handPos[0]) * s;
-        const by = handPos[1] + (baseDroneY - 0.16 - handPos[1]) * s + Math.sin(t * Math.PI) * 0.05;
-        const bz = handPos[2] + (baseDroneZ - handPos[2]) * s;
-        const sealProg = Math.min(1, t * 1.15);
-        this.drawFilledVessel3D(bx, by, bz, { ...this.droneDeliverAnim.vessel, type: 'box' }, 0.6, sealProg);
-      } else {
-        // Фаза 2: Запечатанная вок-коробка захвачена лапами дрона, и дрон улетает в ночное небо!
-        const t = (p - 0.46) / 0.54;
-        const fly = t * t;
-        droneY = baseDroneY + fly * 0.85;
-        droneZ = baseDroneZ - fly * 1.85;
-        droneX = baseDroneX + fly * 0.22;
-        this.drawFilledVessel3D(
-          droneX,
-          droneY - 0.16,
-          droneZ,
-          { ...this.droneDeliverAnim.vessel, type: 'box' },
-          0.56,
-          1.0
-        );
-      }
-    }
-
-    // Отрисовываем 3D-квадрокоптер курьерской службы CyberEats в левом верхнем углу
-    const bodyCol = hasDelivery || deliveringNow ? [0.1, 0.24, 0.34] : [0.14, 0.18, 0.24];
-    const visorCol = hasDelivery || deliveringNow ? [0.06, 0.96, 0.42] : [0.0, 0.88, 0.82];
-    this.drawMesh('sphere', droneX, droneY, droneZ, 0.24, 0.1, 0.2, bodyCol, 0.22, null, 0.88);
-    this.drawMesh('sphere', droneX, droneY + 0.042, droneZ, 0.15, 0.055, 0.14, [0.22, 0.28, 0.38], 0.18, null, 0.92);
-    this.drawMesh('sphere', droneX, droneY - 0.005, droneZ + 0.098, 0.1, 0.05, 0.04, visorCol, 0.95);
-
-    // Нижние грузовые захваты-клешни для фиксации вок-коробки
-    this.drawBox(droneX - 0.07, droneY - 0.07, droneZ, 0.015, 0.065, 0.022, [0.68, 0.75, 0.84], 0.2, [0, 0, 0.15], 0.9);
-    this.drawBox(droneX + 0.07, droneY - 0.07, droneZ, 0.015, 0.065, 0.022, [0.68, 0.75, 0.84], 0.2, [0, 0, -0.15], 0.9);
-
-    // 4 луча квадрокоптера с защитными кольцами и вращающимися неоновыми винтами
-    const armOffsets = [
-      [-0.13, -0.11, [1.0, 0.18, 0.54]],
-      [0.13, -0.11, [0.0, 0.96, 0.83]],
-      [-0.13, 0.11, [0.0, 0.96, 0.83]],
-      [0.13, 0.11, [1.0, 0.18, 0.54]]
-    ];
-    for (const [ax, az, rCol] of armOffsets) {
-      this.drawBox(droneX + ax * 0.6, droneY + 0.01, droneZ + az * 0.6, 0.11, 0.015, 0.02, [0.32, 0.38, 0.46], 0.15, [0, Math.atan2(ax, az), 0]);
-      this.drawMesh('torus', droneX + ax, droneY + 0.024, droneZ + az, 0.1, 0.009, 0.1, rCol, hasDelivery ? 0.85 : 0.35);
-      this.drawBox(droneX + ax, droneY + 0.028, droneZ + az, 0.095, 0.008, 0.02, rCol, 0.92, [0, rotorSpin, 0]);
-    }
-
-    if (isRightSector) {
-      this.registerHitbox('courier_drone', droneX, droneY - 0.03, droneZ, 94);
-    }
-
-    // 5. ПРОФЕССИОНАЛЬНЫЙ БАРНЫЙ КРИО-ХОЛОДИЛЬНИК СО СТЕКЛЯННОЙ ВИТРИНОЙ (x = 0.89, z = +0.23)
+    // 3. ПРОФЕССИОНАЛЬНЫЙ БАРНЫЙ КРИО-ХОЛОДИЛЬНИК СО СТЕКЛЯННОЙ ВИТРИНОЙ (x = 0.89, z = +0.23)
     // Корпус из матовой нержавейки, верхний компрессорный отсек с решёткой радиатора и цифровым дисплеем «-4°C»,
     // внутренняя ледяная LED-подсветка, 3 стальные полки с гастроемкостями запасов и стеклянная дверца с ручкой!
     this.drawBox(0.9, 1.19, 0.23, 0.3, 0.66, 0.38, [0.16, 0.21, 0.28], 0.1, null, 0.82);
@@ -3906,9 +3824,79 @@ export class FirstPersonWebGLScene {
         0.92
       );
 
-      if (rt.activeSector === 1 && rt.cameraFocus === 'customer') {
+      if (rt.activeSector === 1 && rt.cameraFocus === 'customer' && (rt.customerPanSide || 0) === 0) {
         this.registerHitbox('customer_serve', cx, cy + 0.05, cz, 95);
       }
+    }
+
+    // 3. КУРЬЕРСКИЙ ДРОН-РОБОТ CYBER-EATS ЗА ПРИЛАВКОМ СПРАВА ОТ ПОСЕТИТЕЛЕЙ (БЕЗ ПЛАТФОРМЫ, ПАРИТ В ВОЗДУХЕ!)
+    const hasDelivery = Boolean(rt.activeDelivery);
+    const deliveringNow = this.droneDeliverAnim.active;
+    const baseDroneX = 0.78;
+    const baseDroneY = 1.38;
+    const baseDroneZ = -1.28;
+
+    let droneX = baseDroneX + Math.sin(this.time * 1.9) * 0.018;
+    let droneY = baseDroneY + Math.sin(this.time * 3.8) * 0.032;
+    let droneZ = baseDroneZ + Math.cos(this.time * 2.1) * 0.014;
+    const rotorSpin = this.time * (hasDelivery || deliveringNow ? 26 : 10);
+
+    if (deliveringNow) {
+      const p = Math.min(1, this.droneDeliverAnim.timer / this.droneDeliverAnim.duration);
+      const handPos = this.getLeftHandWorldPos();
+
+      if (p < 0.46) {
+        // Фаза 1: Вок-коробка поднимается из левой руки к парящему за прилавком дрону, её 4 клапана автоматически закрываются!
+        const t = p / 0.46;
+        const s = t * t * (3 - 2 * t);
+        const bx = handPos[0] + (baseDroneX - handPos[0]) * s;
+        const by = handPos[1] + (baseDroneY - 0.16 - handPos[1]) * s + Math.sin(t * Math.PI) * 0.06;
+        const bz = handPos[2] + (baseDroneZ - handPos[2]) * s;
+        const sealProg = Math.min(1, t * 1.15);
+        this.drawFilledVessel3D(bx, by, bz, { ...this.droneDeliverAnim.vessel, type: 'box' }, 0.6, sealProg);
+      } else {
+        // Фаза 2: Запечатанная вок-коробка захвачена лапами дрона, и дрон улетает в ночное небо переулка!
+        const t = (p - 0.46) / 0.54;
+        const fly = t * t;
+        droneY = baseDroneY + fly * 0.95;
+        droneZ = baseDroneZ - fly * 2.2;
+        droneX = baseDroneX + fly * 0.25;
+        this.drawFilledVessel3D(
+          droneX,
+          droneY - 0.16,
+          droneZ,
+          { ...this.droneDeliverAnim.vessel, type: 'box' },
+          0.56,
+          1.0
+        );
+      }
+    }
+
+    const bodyCol = hasDelivery || deliveringNow ? [0.1, 0.24, 0.34] : [0.14, 0.18, 0.24];
+    const visorCol = hasDelivery || deliveringNow ? [0.06, 0.96, 0.42] : [0.0, 0.88, 0.82];
+    this.drawMesh('sphere', droneX, droneY, droneZ, 0.24, 0.1, 0.2, bodyCol, 0.22, null, 0.88);
+    this.drawMesh('sphere', droneX, droneY + 0.042, droneZ, 0.15, 0.055, 0.14, [0.22, 0.28, 0.38], 0.18, null, 0.92);
+    this.drawMesh('sphere', droneX, droneY - 0.005, droneZ + 0.098, 0.1, 0.05, 0.04, visorCol, 0.95);
+
+    // Нижние грузовые захваты-клешни для фиксации вок-коробки
+    this.drawBox(droneX - 0.07, droneY - 0.07, droneZ, 0.015, 0.065, 0.022, [0.68, 0.75, 0.84], 0.2, [0, 0, 0.15], 0.9);
+    this.drawBox(droneX + 0.07, droneY - 0.07, droneZ, 0.015, 0.065, 0.022, [0.68, 0.75, 0.84], 0.2, [0, 0, -0.15], 0.9);
+
+    // 4 луча квадрокоптера с защитными кольцами и вращающимися неоновыми винтами
+    const armOffsets = [
+      [-0.13, -0.11, [1.0, 0.18, 0.54]],
+      [0.13, -0.11, [0.0, 0.96, 0.83]],
+      [-0.13, 0.11, [0.0, 0.96, 0.83]],
+      [0.13, 0.11, [1.0, 0.18, 0.54]]
+    ];
+    for (const [ax, az, rCol] of armOffsets) {
+      this.drawBox(droneX + ax * 0.6, droneY + 0.01, droneZ + az * 0.6, 0.11, 0.015, 0.02, [0.32, 0.38, 0.46], 0.15, [0, Math.atan2(ax, az), 0]);
+      this.drawMesh('torus', droneX + ax, droneY + 0.024, droneZ + az, 0.1, 0.009, 0.1, rCol, hasDelivery ? 0.85 : 0.35);
+      this.drawBox(droneX + ax, droneY + 0.028, droneZ + az, 0.095, 0.008, 0.02, rCol, 0.92, [0, rotorSpin, 0]);
+    }
+
+    if (rt.activeSector === 1 && rt.cameraFocus === 'customer' && (rt.customerPanSide || 0) >= 0) {
+      this.registerHitbox('courier_drone', droneX, droneY - 0.03, droneZ, 102);
     }
 
     if (gameState.persistent.inDebtCollector) {
