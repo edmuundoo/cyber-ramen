@@ -1,5 +1,5 @@
-import { GAME_CONFIG } from './config.js?v=62';
-import { gameState } from './state.js?v=62';
+import { GAME_CONFIG } from './config.js?v=63';
+import { gameState } from './state.js?v=63';
 import {
   createAlleyBackdropTexture,
   createBuildingFacadeTexture,
@@ -8,7 +8,7 @@ import {
   createKanjiSignTextures,
   createPedestrianTextures,
   AnimeCustomerTextureRenderer
-} from './art3d.js?v=62';
+} from './art3d.js?v=63';
 
 /**
  * Полноэкранный WebGL 3D движок от первого лица с процедурной высокодетализированной
@@ -1090,10 +1090,20 @@ export class FirstPersonWebGLScene {
           return;
         }
 
-        // Со стола (worktable): свайп ВВЕРХ (dy < 0) -> опускаемся ПОД ПРИЛАВОК к подносам и пакетам!
+        // Со стола (worktable): свайп ВВЕРХ (dy < 0) -> опускаемся ПОД ПРИЛАВОК к подносам!
         if (dy < 0 && gameState.runtime.activeSector === 1 && !this._startedOnCustomer && !this._startedUnderCounter) {
           gameState.runtime.cameraFocus = 'under_counter';
           gameState.runtime.underCounterSide = 0;
+          audio.playTapPop();
+          return;
+        }
+
+        // От холодильника справа (Сектор 2): свайп ВВЕРХ (dy < 0) -> опускаемся ПОД ХОЛОДИЛЬНИК к пакетам!
+        if (dy < 0 && gameState.runtime.activeSector === 2) {
+          gameState.runtime.activeSector = 1;
+          gameState.runtime.cameraFocus = 'under_counter';
+          gameState.runtime.underCounterSide = 1;
+          syncSectorHighlight(1);
           audio.playTapPop();
           return;
         }
@@ -1394,13 +1404,13 @@ export class FirstPersonWebGLScene {
     } else if (rt.cameraFocus === 'under_counter') {
       const underSide = rt.underCounterSide || 0;
       if (underSide === 1) {
-        // Под прилавком справа: пакеты для заказов с собой
-        this.camPosTarget = [0.18, 0.72, 0.42];
-        this.lookAtTarget = [0.28 + this.dragPanX * 0.35, 0.47 + this.dragPanY * 0.35, -0.44];
+        // Поворот направо внизу — ПОД ХОЛОДИЛЬНИКОМ: открытая полка с пакетами для заказов с собой!
+        this.camPosTarget = [0.04, 0.7, 0.27];
+        this.lookAtTarget = [0.8, 0.47 + this.dragPanY * 0.35, 0.27 - this.dragPanX * 0.35];
       } else {
-        // Под прилавком слева: стопка подносов
-        this.camPosTarget = [-0.14, 0.72, 0.42];
-        this.lookAtTarget = [-0.24 + this.dragPanX * 0.35, 0.44 + this.dragPanY * 0.35, -0.44];
+        // Под передним прилавком по центру: стопка больших японских подносов!
+        this.camPosTarget = [0.0, 0.72, 0.42];
+        this.lookAtTarget = [0.0 + this.dragPanX * 0.35, 0.45 + this.dragPanY * 0.35, -0.44];
       }
     } else {
       this.camPosTarget = [0.0, 1.78, 0.26];
@@ -2130,9 +2140,8 @@ export class FirstPersonWebGLScene {
     this.drawBox(0.82, 0.44, -0.54, 0.46, 0.82, 1.04, woodMain, 0.0);
     this.drawBox(0, 0.44, -0.92, 1.2, 0.82, 0.28, woodMain, 0.0);
     this.drawBox(0, 0.18, -0.42, 1.2, 0.28, 0.78, [0.14, 0.12, 0.14], 0.0);
-    // Внутренняя стальная полка под прилавком (y = 0.34), разделитель и тёплая LED-подсветка сверху ниши
+    // Внутренняя широкая стальная полка под прилавком (y = 0.34) для больших подносов и тёплая LED-подсветка сверху ниши
     this.drawBox(0, 0.34, -0.44, 1.18, 0.032, 0.68, [0.26, 0.3, 0.36], 0.08, null, 0.65);
-    this.drawBox(0.01, 0.56, -0.48, 0.025, 0.42, 0.56, [0.18, 0.21, 0.27], 0.05, null, 0.5);
     this.drawBox(0, 0.81, -0.22, 1.1, 0.014, 0.02, [0.98, 0.84, 0.56], 0.92);
 
     // Верхняя стальная столешница и неоновая полоса
@@ -2166,8 +2175,17 @@ export class FirstPersonWebGLScene {
     this.drawBox(-0.535, 0.86, 0.72, 0.19, 0.07, 0.48, [0.22, 0.26, 0.32], 0.05, null, 0.45);
     this.drawBox(-0.45, 0.9, 0.06, 0.03, 0.025, 2.32, [0.0, 0.96, 0.83], 0.65);
 
-    // ПРАВАЯ СТОЛЕШНИЦА СКЛАДА И УПАКОВКИ
-    this.drawBox(0.92, 0.44, -0.22, 0.92, 0.82, 1.75, woodMain, 0.0);
+    // ПРАВАЯ СТОЛЕШНИЦА СКЛАДА И УПАКОВКИ С ОТКРЫТОЙ ПОДСВЕЧЕННОЙ НИШЕЙ ПОД КРИО-ХОЛОДИЛЬНИКОМ (ДЛЯ ПАКЕТОВ С СОБОЙ!)
+    // 1) Сплошная передняя тумба под стойками мисок и коробок (z от -1.095 до -0.02, без пересечения с передней стойкой!)
+    this.drawBox(0.92, 0.44, -0.5575, 0.92, 0.82, 1.075, woodMain, 0.0);
+    // 2) Задняя стенка ниши за пакетами и крайняя правая боковина (z от +0.56 до +0.655)
+    this.drawBox(1.18, 0.44, 0.27, 0.4, 0.82, 0.58, woodMain, 0.0);
+    this.drawBox(0.92, 0.44, 0.6075, 0.92, 0.82, 0.095, woodMain, 0.0);
+    // 3) Нижний цоколь, внутренняя стальная полка (y = 0.34) и LED-подсветка ниши под холодильником (z = -0.02..+0.56)
+    this.drawBox(0.72, 0.18, 0.27, 0.52, 0.28, 0.58, [0.14, 0.12, 0.14], 0.0);
+    this.drawBox(0.74, 0.34, 0.27, 0.54, 0.032, 0.56, [0.26, 0.3, 0.36], 0.08, null, 0.65);
+    this.drawBox(0.52, 0.805, 0.27, 0.02, 0.014, 0.52, [0.98, 0.88, 0.62], 0.92);
+    // Верхняя правая столешница и неоновая полоса
     this.drawBox(0.92, 0.86, -0.22, 0.96, 0.07, 1.82, counterCol, 0.05, null, 0.45);
     this.drawBox(0.45, 0.9, -0.22, 0.03, 0.025, 1.76, trimCol, 0.65);
 
@@ -2314,21 +2332,21 @@ export class FirstPersonWebGLScene {
   // 3D-МОДЕЛИ ПОДНОСА, БУМАЖНОГО ПАКЕТА С СОБОЙ, ПАЛОЧЕК И НИШИ ПОД ПРИЛАВКОМ
   // =========================================================================
   draw3DRamenTray(x, y, z, s = 1.0, rot = null) {
-    const baseCol = [0.16, 0.08, 0.1];     // Тёмно-лаковый японский поднос «О-бон»
-    const rimCol = [0.68, 0.16, 0.22];     // Тонкая алая лаковая окантовка по краям подноса
+    const baseCol = [0.16, 0.08, 0.1];     // Тёмно-лаковый японский поднос «О-бон» (увеличенный!)
+    const rimCol = [0.68, 0.16, 0.22];     // Алая лаковая окантовка по краям подноса
     const innerCol = [0.11, 0.09, 0.13];   // Нескользящее матовое дно подноса
-    const tw = 0.44 * s;
-    const td = 0.29 * s;
-    const th = 0.012 * s;
-    const lipH = 0.022 * s;
+    const tw = 0.56 * s;
+    const td = 0.36 * s;
+    const th = 0.013 * s;
+    const lipH = 0.026 * s;
 
     this.drawBox(x, y + th * 0.5, z, tw, th, td, baseCol, 0.08, rot, 0.65);
-    this.drawBox(x, y + th + 0.001 * s, z, tw - 0.03 * s, 0.004 * s, td - 0.03 * s, innerCol, 0.04, rot, 0.35);
+    this.drawBox(x, y + th + 0.001 * s, z, tw - 0.034 * s, 0.004 * s, td - 0.034 * s, innerCol, 0.04, rot, 0.35);
     // 4 приподнятых бортика подноса
-    this.drawBox(x, y + lipH * 0.5, z - td * 0.48, tw, lipH, 0.016 * s, rimCol, 0.2, rot, 0.78);
-    this.drawBox(x, y + lipH * 0.5, z + td * 0.48, tw, lipH, 0.016 * s, rimCol, 0.2, rot, 0.78);
-    this.drawBox(x - tw * 0.48, y + lipH * 0.5, z, 0.016 * s, lipH, td, rimCol, 0.2, rot, 0.78);
-    this.drawBox(x + tw * 0.48, y + lipH * 0.5, z, 0.016 * s, lipH, td, rimCol, 0.2, rot, 0.78);
+    this.drawBox(x, y + lipH * 0.5, z - td * 0.48, tw, lipH, 0.018 * s, rimCol, 0.2, rot, 0.78);
+    this.drawBox(x, y + lipH * 0.5, z + td * 0.48, tw, lipH, 0.018 * s, rimCol, 0.2, rot, 0.78);
+    this.drawBox(x - tw * 0.48, y + lipH * 0.5, z, 0.018 * s, lipH, td, rimCol, 0.2, rot, 0.78);
+    this.drawBox(x + tw * 0.48, y + lipH * 0.5, z, 0.018 * s, lipH, td, rimCol, 0.2, rot, 0.78);
   }
 
   draw3DChopsticksPack(x, y, z, s = 1.0, rot = null) {
@@ -2349,15 +2367,25 @@ export class FirstPersonWebGLScene {
     const bh = 0.23 * s;
     const bd = 0.16 * s;
 
+    const ry = rot ? rot[1] || 0 : 0;
+    const cy = Math.cos(ry);
+    const sry = Math.sin(ry);
+    const isSideFacing = Math.abs(ry) > 0.7;
+    const wp = (lx, lz) => [x + lx * cy + lz * sry, z - lx * sry + lz * cy];
+
     // Основной объём стоячего крафтового пакета
     this.drawBox(x, y + bh * 0.5, z, bw, bh, bd, kraftCol, 0.1, rot, 0.22);
     // Боковые складки-фальцы пакета
-    this.drawBox(x - bw * 0.502, y + bh * 0.5, z, 0.008 * s, bh * 0.95, bd * 0.72, kraftDark, 0.06, rot, 0.2);
-    this.drawBox(x + bw * 0.502, y + bh * 0.5, z, 0.008 * s, bh * 0.95, bd * 0.72, kraftDark, 0.06, rot, 0.2);
+    const [flx, flz] = wp(-bw * 0.502, 0);
+    const [frx, frz] = wp(bw * 0.502, 0);
+    this.drawBox(flx, y + bh * 0.5, flz, 0.008 * s, bh * 0.95, bd * 0.72, kraftDark, 0.06, rot, 0.2);
+    this.drawBox(frx, y + bh * 0.5, frz, 0.008 * s, bh * 0.95, bd * 0.72, kraftDark, 0.06, rot, 0.2);
     // Фирменный принт на передней и задней стенках пакета
-    this.drawBox(x, y + bh * 0.55, z + bd * 0.505, bw * 0.82, 0.036 * s, 0.006 * s, redBrand, 0.38, rot, 0.4);
-    this.drawBox(x, y + bh * 0.36, z + bd * 0.505, bw * 0.46, 0.014 * s, 0.006 * s, cyanStamp, 0.78, rot, 0.5);
-    this.drawBox(x, y + bh * 0.55, z - bd * 0.505, bw * 0.82, 0.036 * s, 0.006 * s, redBrand, 0.38, rot, 0.4);
+    const [fpx, fpz] = wp(0, bd * 0.505);
+    const [bpx, bpz] = wp(0, -bd * 0.505);
+    this.drawBox(fpx, y + bh * 0.55, fpz, bw * 0.82, 0.036 * s, 0.006 * s, redBrand, 0.38, rot, 0.4);
+    this.drawBox(fpx, y + bh * 0.36, fpz, bw * 0.46, 0.014 * s, 0.006 * s, cyanStamp, 0.78, rot, 0.5);
+    this.drawBox(bpx, y + bh * 0.55, bpz, bw * 0.82, 0.036 * s, 0.006 * s, redBrand, 0.38, rot, 0.4);
 
     if (isCarried) {
       // Закрытый сложенный верх пакета, когда несём его клиенту
@@ -2372,55 +2400,65 @@ export class FirstPersonWebGLScene {
     }
 
     // Две скрученные бумажные ручки сверху пакета
-    this.drawMesh('torus', x, y + bh + 0.032 * s, z + bd * 0.3, 0.085 * s, 0.01 * s, 0.065 * s, kraftDark, 0.1, [Math.PI * 0.5, 0, 0], 0.25);
-    this.drawMesh('torus', x, y + bh + 0.032 * s, z - bd * 0.3, 0.085 * s, 0.01 * s, 0.065 * s, kraftDark, 0.1, [Math.PI * 0.5, 0, 0], 0.25);
+    const [h1x, h1z] = wp(0, bd * 0.3);
+    const [h2x, h2z] = wp(0, -bd * 0.3);
+    if (isSideFacing) {
+      this.drawMesh('torus', h1x, y + bh + 0.032 * s, h1z, 0.065 * s, 0.01 * s, 0.085 * s, kraftDark, 0.1, [0, 0, Math.PI * 0.5], 0.25);
+      this.drawMesh('torus', h2x, y + bh + 0.032 * s, h2z, 0.065 * s, 0.01 * s, 0.085 * s, kraftDark, 0.1, [0, 0, Math.PI * 0.5], 0.25);
+    } else {
+      this.drawMesh('torus', h1x, y + bh + 0.032 * s, h1z, 0.085 * s, 0.01 * s, 0.065 * s, kraftDark, 0.1, [Math.PI * 0.5, 0, 0], 0.25);
+      this.drawMesh('torus', h2x, y + bh + 0.032 * s, h2z, 0.085 * s, 0.01 * s, 0.065 * s, kraftDark, 0.1, [Math.PI * 0.5, 0, 0], 0.25);
+    }
 
     // Если в пакет положены палочки — их бумажный чехол аккуратно выглядывает из верхнего уголка!
     if (hasChopsticks) {
-      this.drawBox(x + bw * 0.28, y + bh + 0.03 * s, z, 0.022 * s, 0.11 * s, 0.01 * s, [0.95, 0.93, 0.88], 0.24, [0, 0, -0.22], 0.35);
-      this.drawBox(x + bw * 0.3, y + bh + 0.055 * s, z, 0.024 * s, 0.03 * s, 0.012 * s, redBrand, 0.45, [0, 0, -0.22], 0.45);
+      const [c1x, c1z] = wp(bw * 0.28, 0);
+      const [c2x, c2z] = wp(bw * 0.3, 0);
+      this.drawBox(c1x, y + bh + 0.03 * s, c1z, 0.022 * s, 0.11 * s, 0.01 * s, [0.95, 0.93, 0.88], 0.24, [0, ry, -0.22], 0.35);
+      this.drawBox(c2x, y + bh + 0.055 * s, c2z, 0.024 * s, 0.03 * s, 0.012 * s, redBrand, 0.45, [0, ry, -0.22], 0.45);
     }
   }
 
-  // НИША ПОД ПРИЛАВКОМ (Сектор 1, cameraFocus === 'under_counter'):
-  // - Слева (underCounterSide = 0): стопка японских подносов;
-  // - Справа (underCounterSide = 1): бумажные крафт-пакеты для заказов с собой!
+  // НИШИ ПОД ПРИЛАВКОМ И ПОД ХОЛОДИЛЬНИКОМ (cameraFocus === 'under_counter'):
+  // - Прямо под прилавком (underCounterSide = 0): стопка больших японских подносов;
+  // - Поворот направо под холодильник (underCounterSide = 1): бумажные крафт-пакеты для заказов с собой!
   drawUnderCounterStorage3D() {
     const rt = gameState.runtime;
     const isUnderCounter = rt.activeSector === 1 && rt.cameraFocus === 'under_counter';
     const underSide = rt.underCounterSide || 0;
     const a = rt.assembly || {};
 
-    // 1. СЛЕВА ПОД ПРИЛАВКОМ (x = -0.26, y = 0.358, z = -0.44): СТОПКА ИЗ 6 ПОДКЛАДНЫХ ПОДНОСОВ
-    const trayX = -0.26;
+    // 1. ПОД ПЕРЕДНИМ ПРИЛАВКОМ ПО ЦЕНТРУ (x = 0.0, y = 0.358, z = -0.44): СТОПКА БОЛЬШИХ ПОДНОСОВ
+    const trayX = 0.0;
     const trayY = 0.358;
     const trayZ = -0.44;
     const trayPulse = !a.hasTray ? 0.55 + 0.35 * Math.sin(this.time * 5.5) : 0.2;
-    this.drawBox(trayX, trayY - 0.002, trayZ + 0.22, 0.42, 0.01, 0.012, [0.0, 0.96, 0.83], trayPulse);
+    this.drawBox(trayX, trayY - 0.002, trayZ + 0.24, 0.58, 0.01, 0.012, [0.0, 0.96, 0.83], trayPulse);
 
     const visibleTrays = a.hasTray ? 5 : 6;
     for (let t = 0; t < visibleTrays; t++) {
-      this.draw3DRamenTray(trayX, trayY + t * 0.022, trayZ, 0.92);
+      this.draw3DRamenTray(trayX, trayY + t * 0.025, trayZ, 0.94);
     }
 
     if (isUnderCounter && underSide === 0) {
-      this.registerHitbox('under_tray_stack', trayX, trayY + 0.08, trayZ, 118);
+      this.registerHitbox('under_tray_stack', trayX, trayY + 0.09, trayZ, 124);
     }
 
-    // 2. СПРАВА ПОД ПРИЛАВКОМ (x = +0.28, y = 0.358, z = -0.44): СТОПКА БУМАЖНЫХ ПАКЕТОВ ДЛЯ ЗАКАЗОВ «С СОБОЙ»
-    const bagX = 0.28;
+    // 2. ВНИЗУ ПОД КРИО-ХОЛОДИЛЬНИКОМ СПРАВА (x = 0.78, y = 0.358, z = +0.27): БУМАЖНЫЕ ПАКЕТЫ «С СОБОЙ»
+    const bagX = 0.78;
     const bagY = 0.358;
-    const bagZ = -0.44;
+    const bagZ = 0.27;
     const bagPulse = !a.hasBag ? 0.55 + 0.35 * Math.sin(this.time * 5.5 + 1.0) : 0.2;
-    this.drawBox(bagX, bagY - 0.002, bagZ + 0.22, 0.42, 0.01, 0.012, [0.06, 0.96, 0.48], bagPulse);
+    this.drawBox(bagX - 0.26, bagY - 0.002, bagZ, 0.012, 0.01, 0.48, [0.06, 0.96, 0.48], bagPulse);
 
-    // Стоячие крафт-пакеты на правой полке под прилавком
-    this.draw3DTakeoutBag(bagX - 0.1, bagY, bagZ - 0.04, 0.94, false, false, false);
-    this.draw3DTakeoutBag(bagX + 0.11, bagY, bagZ - 0.03, 0.94, false, false, false);
-    this.draw3DTakeoutBag(bagX + 0.01, bagY, bagZ + 0.09, 0.96, false, false, false);
+    // Стоячие крафт-пакеты в открытой полке под холодильником (лицевой стороной к игроку!)
+    const bagRot = [0, -Math.PI * 0.5, 0];
+    this.draw3DTakeoutBag(bagX + 0.03, bagY, bagZ - 0.13, 0.94, false, false, false, bagRot);
+    this.draw3DTakeoutBag(bagX + 0.02, bagY, bagZ + 0.13, 0.94, false, false, false, bagRot);
+    this.draw3DTakeoutBag(bagX - 0.09, bagY, bagZ + 0.01, 0.96, false, false, false, bagRot);
 
     if (isUnderCounter && underSide === 1) {
-      this.registerHitbox('under_bag_stack', bagX, bagY + 0.12, bagZ, 118);
+      this.registerHitbox('under_bag_stack', bagX, bagY + 0.12, bagZ, 124);
     }
   }
 
