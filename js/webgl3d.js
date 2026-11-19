@@ -1,5 +1,5 @@
-import { GAME_CONFIG } from './config.js?v=54';
-import { gameState } from './state.js?v=54';
+import { GAME_CONFIG } from './config.js?v=55';
+import { gameState } from './state.js?v=55';
 import {
   createAlleyBackdropTexture,
   createBuildingFacadeTexture,
@@ -8,7 +8,7 @@ import {
   createKanjiSignTextures,
   createPedestrianTextures,
   AnimeCustomerTextureRenderer
-} from './art3d.js?v=54';
+} from './art3d.js?v=55';
 
 /**
  * Полноэкранный WebGL 3D движок от первого лица с процедурной высокодетализированной
@@ -3411,35 +3411,29 @@ export class FirstPersonWebGLScene {
       this.drawMesh('torus', spoutX, floorY + 0.012, spoutZ, splashR, 0.005, splashR, [0.65, 0.96, 1.0], 0.85);
     }
 
-    // Вспомогательная отрисовка протягивающейся от героя кибер-руки с предплечьем и перчаткой
+    // Вспомогательная отрисовка компактной кибер-перчатки с коротким манжетом (отдельно от тела, как при взятии тарелки и наливании поварёшкой!)
     const drawReachingArm = (hx, hy, hz, isLeftHand = true, extraYaw = 0, extraRoll = 0) => {
-      const originX = -0.34;
-      const originY = 1.16;
-      const originZ = isLeftHand ? 0.78 : 0.38;
       const yaw = 1.18 + extraYaw + (isLeftHand ? 0.15 : -0.15);
       const handRot = [0.16, yaw, extraRoll];
 
-      // Перчатка с неоновой бирюзовой полосой и большим пальцем
-      this.drawBox(hx, hy, hz, 0.074, 0.038, 0.128, [0.16, 0.14, 0.24], 0.24, handRot);
-      this.drawBox(hx, hy + 0.021, hz, 0.078, 0.012, 0.042, [0.0, 0.96, 0.83], 0.94, handRot);
+      // Ладонь кибер-перчатки с неоновой бирюзовой полосой и большим пальцем
+      this.drawBox(hx, hy, hz, 0.072, 0.036, 0.125, [0.16, 0.14, 0.24], 0.24, handRot);
+      this.drawBox(hx, hy + 0.02, hz, 0.076, 0.012, 0.042, [0.0, 0.96, 0.83], 0.94, handRot);
       const thumbZOff = isLeftHand ? -0.042 : 0.042;
-      this.drawBox(hx - 0.02, hy + 0.008, hz + thumbZOff, 0.032, 0.026, 0.052, [0.2, 0.18, 0.3], 0.25, handRot);
+      this.drawBox(hx - 0.02, hy + 0.008, hz + thumbZOff, 0.03, 0.024, 0.05, [0.2, 0.18, 0.3], 0.25, handRot);
 
-      // Предплечье, тянущееся от самого героя к кисти руки
-      const midX = (hx + originX) * 0.5;
-      const midY = (hy + originY) * 0.5;
-      const midZ = (hz + originZ) * 0.5;
-      const armLen = Math.hypot(hx - originX, hy - originY, hz - originZ);
-      const armYaw = Math.atan2(hx - originX, hz - originZ);
-      const armPitch = -Math.asin(Math.max(-0.9, Math.min(0.9, (hy - originY) / Math.max(0.1, armLen))));
-      this.drawBox(midX, midY, midZ, 0.078, 0.052, Math.max(0.14, armLen * 0.85), [0.11, 0.13, 0.2], 0.16, [armPitch, armYaw, 0]);
+      // Короткий фиксированный манжет запястья (без длинной тянущейся к телу руки!)
+      const cuffX = hx + 0.078;
+      const cuffY = hy - 0.016;
+      const cuffZ = hz + (isLeftHand ? 0.022 : -0.022);
+      this.drawBox(cuffX, cuffY, cuffZ, 0.078, 0.046, 0.125, [0.11, 0.13, 0.2], 0.16, handRot);
     };
 
     // 7. ДЕТАЛИЗИРОВАННАЯ 4-ФАЗНАЯ АНИМАЦИЯ МЫТЬЯ ОТ ПЕРВОГО ЛИЦА:
-    // - Фаза 1 (p < 0.22): От героя протягиваются обе руки в раковину — левая берёт грязную тарелку со дна, правая берёт губку;
+    // - Фаза 1 (p < 0.22): Компактные руки подхватывают грязную тарелку со дна раковины и губку с угла;
     // - Фаза 2 (0.22 <= p < 0.66): Левая рука держит тарелку под струёй воды, а правая рука моет её губкой с пышной белой пеной;
     // - Фаза 3 (0.66 <= p < 0.88): Тарелка сверкает чистотой — левая рука кладёт её СЛЕВА на площадку для чистой посуды;
-    // - Фаза 4 (p >= 0.88): Руки плавно возвращаются к герою!
+    // - Фаза 4 (p >= 0.88): Перчатки аккуратно отходят от площадки!
     if (isWashing) {
       const p = pWash;
       const sIdx = this.sinkWashAnim.sinkIndex ?? 0;
@@ -3456,8 +3450,8 @@ export class FirstPersonWebGLScene {
       const rIdx = this.sinkWashAnim.rackIndex ?? 0;
       const targetRackY = rackY + 0.016 + rIdx * 0.022;
 
-      const lhOrigin = [-0.36, 1.14, 0.78];
-      const rhOrigin = [-0.36, 1.14, 0.38];
+      const lhOrigin = [sinkX + 0.22, rimY + 0.05, sinkZ + 0.16];
+      const rhOrigin = [sinkX + 0.22, rimY + 0.05, sinkZ - 0.18];
 
       if (p < 0.22) {
         // ФАЗА 1: Протягиваем руки от себя, захватываем грязную тарелку со дна раковины и поднимаем под кран!
@@ -3588,7 +3582,7 @@ export class FirstPersonWebGLScene {
       const p = Math.min(1, this.rackPickupAnim.timer / this.rackPickupAnim.duration);
       const rIdx = this.rackPickupAnim.fromRackIdx || 0;
       const startY = rackY + 0.016 + rIdx * 0.022;
-      const lhOrigin = [-0.36, 1.14, 0.78];
+      const lhOrigin = [rackX + 0.18, startY + 0.04, rackZ - 0.08];
 
       if (p < 0.35) {
         const t = p / 0.35;
@@ -3604,9 +3598,9 @@ export class FirstPersonWebGLScene {
       } else {
         const t = (p - 0.35) / 0.65;
         const s = t * t * (3 - 2 * t);
-        const bx = rackX + (0.25 - rackX) * s;
-        const by = startY + 0.14 * Math.sin(t * Math.PI) + 0.08 * s;
-        const bz = rackZ + (0.15 - rackZ) * s;
+        const bx = rackX + 0.14 * s;
+        const by = startY + 0.08 * Math.sin(t * Math.PI) + 0.03 * s;
+        const bz = rackZ - 0.22 * s;
         this.drawMesh('bowl_lathe', bx, by, bz, 0.198 * (1 - s * 0.25), 0.074 * (1 - s * 0.25), 0.198 * (1 - s * 0.25), [0.16, 0.1, 0.24], 0.24, null, 0.95, 3);
         this.drawMesh('torus', bx, by + 0.064 * (1 - s * 0.25), bz, 0.194 * (1 - s * 0.25), 0.011, 0.194 * (1 - s * 0.25), [0.86, 0.22, 0.32], 0.35, null, 0.96);
         drawReachingArm(bx + 0.06, by + 0.01, bz + 0.03, true);
