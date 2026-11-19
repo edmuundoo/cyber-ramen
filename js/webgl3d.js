@@ -1,5 +1,5 @@
-import { GAME_CONFIG } from './config.js?v=72';
-import { gameState } from './state.js?v=72';
+import { GAME_CONFIG } from './config.js?v=73';
+import { gameState } from './state.js?v=73';
 import {
   createAlleyBackdropTexture,
   createBuildingFacadeTexture,
@@ -8,7 +8,7 @@ import {
   createKanjiSignTextures,
   createPedestrianTextures,
   AnimeCustomerTextureRenderer
-} from './art3d.js?v=72';
+} from './art3d.js?v=73';
 
 /**
  * Полноэкранный WebGL 3D движок от первого лица с процедурной высокодетализированной
@@ -4694,7 +4694,9 @@ export class FirstPersonWebGLScene {
     }
 
     if (isWarehouseInteract) {
-      this.registerHitbox('cryo_fridge', fFrontX + 0.12, 1.25, fZ, 98);
+      // Регистрируем хитбоксы и на самой ручке, и по всей плоскости дверцы холодильника — открывается с любого тапа!
+      this.registerHitbox('cryo_fridge', hx, doorMidY, hz, 96);
+      this.registerHitbox('cryo_fridge', fFrontX + 0.04, doorMidY, fZ + 0.05, 112);
     }
   }
 
