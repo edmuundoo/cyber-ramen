@@ -1,6 +1,6 @@
-import { GAME_CONFIG } from './config.js?v=84';
-import { gameState } from './state.js?v=84';
-import { audio } from './audio.js?v=84';
+import { GAME_CONFIG } from './config.js?v=85';
+import { gameState } from './state.js?v=85';
+import { audio } from './audio.js?v=85';
 
 export class KitchenSystem {
   constructor(callbacks) {
@@ -146,7 +146,9 @@ export class KitchenSystem {
     this.onToast(
       leftEmpty && !rightEmpty
         ? '🙌 Обе руки заняты! Тапните по пустой посуде слева, чтобы перелить, или верните пустую на склад ▶'
-        : '🙌 Обе руки заняты! Верните лишнюю пустую посуду обратно на склад справа ▶',
+        : !leftEmpty && !rightEmpty
+          ? '🙌 В обеих руках еда! Поставьте одну посуду на поднос или тапните по левой, чтобы перелить.'
+          : '🙌 Обе руки заняты! Верните лишнюю пустую посуду обратно на склад справа ▶',
       '#ffaa00'
     );
     return true;
@@ -166,14 +168,56 @@ export class KitchenSystem {
     if (hasRight) {
       const leftEmpty = this.isVesselEmptyOfFood(left);
       const rightEmpty = this.isVesselEmptyOfFood(right);
-      if (leftEmpty && !rightEmpty) {
+      if (!rightEmpty) {
+        const prevLeft = JSON.parse(JSON.stringify(left));
         const srcRight = JSON.parse(JSON.stringify(right));
         const targetType = left.type;
         const fromType = srcRight.type;
 
+        const bothHaveBroth = Boolean(prevLeft.broth && srcRight.broth);
+        const bothHaveNoodles = Boolean(prevLeft.noodleState && srcRight.noodleState);
+        const leftFull = Boolean(prevLeft.broth && prevLeft.noodleState);
+        const rightFull = Boolean(srcRight.broth && srcRight.noodleState);
+        const mergedToppings = [...(prevLeft.toppings || []), ...(srcRight.toppings || [])];
+        const topOverflow = Math.max(0, mergedToppings.length - 6);
+
+        // Определяем силу перелива через край:
+        // 0 — чисто (в пустую тару, или соединили лапшу с бульоном без переполнения);
+        // 1 — небольшой перелив (и там и там бульон, либо к полному блюду долили бульон/лапшу, либо >6 топпингов);
+        // 2 — мощный перелив (в обеих руках и бульон, и лапша -> заливаем стол бульоном и лапшой!).
+        let spillLevel = 0;
+        if (leftFull && rightFull) {
+          spillLevel = 2;
+        } else if (
+          bothHaveBroth ||
+          bothHaveNoodles ||
+          ((leftFull || rightFull) && !leftEmpty) ||
+          topOverflow > 0
+        ) {
+          spillLevel = 1;
+        }
+
+        // Если в обеих тарах была лапша — берём более проблемную проварку (over > under > aldente)
+        const noodleRank = { over: 3, under: 2, aldente: 1 };
+        let mergedNoodle = prevLeft.noodleState || srcRight.noodleState;
+        if (prevLeft.noodleState && srcRight.noodleState) {
+          mergedNoodle =
+            (noodleRank[prevLeft.noodleState] || 0) >= (noodleRank[srcRight.noodleState] || 0)
+              ? prevLeft.noodleState
+              : srcRight.noodleState;
+        }
+
+        const mergedBroth = prevLeft.broth || srcRight.broth;
+        const spillBroth = srcRight.broth || prevLeft.broth || 'tonkotsu';
+
         rt.activeVessel = {
-          ...srcRight,
-          type: targetType
+          type: targetType,
+          broth: mergedBroth,
+          noodleState: mergedNoodle,
+          toppings: mergedToppings.slice(0, 6),
+          tableAgeSec: Math.max(prevLeft.tableAgeSec || 0, srcRight.tableAgeSec || 0),
+          wasStagedOnTable: Boolean(prevLeft.wasStagedOnTable || srcRight.wasStagedOnTable),
+          overflowCount: (prevLeft.overflowCount || 0) + (srcRight.overflowCount || 0) + spillLevel + topOverflow
         };
         rt.rightHandVessel = null;
         rt.vesselHeldInLeft = true;
@@ -182,23 +226,59 @@ export class KitchenSystem {
           rt.dirtyInSink.push({ broth: srcRight.broth || 'tonkotsu' });
         }
 
-        audio.playSauceSizzle();
-        this.onToast(
-          fromType === 'bowl'
-            ? `📦 Перелито в ${targetType === 'box' ? 'коробку' : 'миску'}! Грязная миска ушла на мойку (в мойке: ${rt.dirtyInSink.length})`
-            : `🍜 Перелито в ${targetType === 'box' ? 'коробку' : 'миску'}!`,
-          '#00f5d4'
-        );
+        if (spillLevel > 0) {
+          if (!rt.tableSpill) {
+            rt.tableSpill = { level: 0, broth: spillBroth, hasNoodles: false };
+          }
+          const prevSpillLvl = rt.tableSpill.level || 0;
+          rt.tableSpill.level = Math.min(2, prevSpillLvl > 0 ? Math.max(prevSpillLvl + 1, spillLevel) : spillLevel);
+          rt.tableSpill.broth = spillBroth;
+          rt.tableSpill.hasNoodles = Boolean(
+            rt.tableSpill.hasNoodles || (spillLevel >= 2 && (prevLeft.noodleState || srcRight.noodleState))
+          );
+
+          // Если поднос уже стоит на столе — брызги сразу пачкают и его!
+          if (rt.assembly && rt.assembly.hasTray) {
+            rt.assembly.isDirtyTray = true;
+            rt.assembly.dirtyTrayBroth = spillBroth;
+          }
+
+          const wasteCost = spillLevel >= 2 ? 22 : 10;
+          rt.dailyStats.wastedFoodCost = (rt.dailyStats.wastedFoodCost || 0) + wasteCost;
+          rt.dailyStats.penalties += wasteCost;
+
+          audio.playSauceSizzle();
+          audio.playPenaltyBuzz();
+          this.onToast(
+            spillLevel >= 2
+              ? `💦 МОЩНЫЙ ПЕРЕЛИВ! Бульон с лапшой залил столешницу (-¥${wasteCost})! Вытрите стол тряпкой 🧽 перед подачей!`
+              : `💦 Перелив через край! Бульон пролился на стол (-¥${wasteCost}) — вытрите лужу тряпкой 🧽!`,
+            '#ff385c'
+          );
+        } else {
+          audio.playSauceSizzle();
+          this.onToast(
+            fromType === 'bowl'
+              ? `📦 Перелито в ${targetType === 'box' ? 'коробку' : 'миску'}! Грязная миска ушла на мойку (в мойке: ${rt.dirtyInSink.length})`
+              : `🍜 Перелито в ${targetType === 'box' ? 'коробку' : 'миску'}!`,
+            '#00f5d4'
+          );
+        }
+
         this.renderAllKitchen();
         return {
           action: 'pour_right_to_left',
           fromType,
           toType: targetType,
-          vessel: JSON.parse(JSON.stringify(rt.activeVessel))
+          vessel: JSON.parse(JSON.stringify(rt.activeVessel)),
+          prevLeft,
+          rightSource: srcRight,
+          spillLevel,
+          spillBroth
         };
       }
       audio.playTapPop();
-      this.onToast('😄 В обеих руках пустая посуда — переливать нечего! Верните лишнюю на склад ▶', '#ffaa00');
+      this.onToast('😄 В правой руке пустая посуда — переливать нечего! Верните лишнюю на склад ▶', '#ffaa00');
       return null;
     }
 
@@ -443,6 +523,14 @@ export class KitchenSystem {
         );
         this.renderAllKitchen();
         return { action: 'return_left_and_handoff_back', leftType: type, rightVessel: restored };
+      }
+
+      if (!leftEmpty && !rightEmpty) {
+        audio.playPenaltyBuzz();
+        this.onToast(
+          '🙌 В обеих руках еда! Поставьте одну посуду на поднос или тапните по левой, чтобы перелить.',
+          '#ffaa00'
+        );
       }
 
       return false;
@@ -841,10 +929,62 @@ export class KitchenSystem {
     rt.assembly.hasTray = true;
     rt.cameraFocus = 'worktable';
     rt.underCounterSide = 0;
-    audio.playTapPop();
-    this.onToast('🍱 Поднос поставлен на стол! Ставьте на него блюдо и кладите палочки.', '#00f5d4');
+
+    // Если на рабочей поверхности осталась невытертая лужа бульона -> поднос сразу пачкается!
+    if (rt.tableSpill && rt.tableSpill.level > 0) {
+      rt.assembly.isDirtyTray = true;
+      rt.assembly.dirtyTrayBroth = rt.tableSpill.broth || 'tonkotsu';
+      audio.playPenaltyBuzz();
+      this.onToast(
+        '💦 Поднос поставлен прямо на грязную лужу и испачкался! Вытрите стол и поднос тряпкой 🧽 перед подачей!',
+        '#ff385c'
+      );
+    } else {
+      rt.assembly.isDirtyTray = false;
+      rt.assembly.dirtyTrayBroth = null;
+      audio.playTapPop();
+      this.onToast('🍱 Поднос поставлен на стол! Ставьте на него блюдо и кладите палочки.', '#00f5d4');
+    }
     this.renderAllKitchen();
     return true;
+  }
+
+  // Вытереть пролитый бульон на столешнице (и грязный поднос, если он стоит в луже) кухонной тряпкой!
+  wipeTableSpill() {
+    if (this.blockIfBothHandsBusy()) return null;
+    const rt = gameState.runtime;
+    const spill = rt.tableSpill || { level: 0, broth: 'tonkotsu', hasNoodles: false };
+    const hasSpill = (spill.level || 0) > 0;
+    const hasDirtyTray = Boolean(rt.assembly && rt.assembly.hasTray && rt.assembly.isDirtyTray);
+
+    if (!hasSpill && !hasDirtyTray) {
+      audio.playTapPop();
+      this.onToast('✨ Рабочая поверхность идеально чистая!', '#00f5d4');
+      return null;
+    }
+
+    const res = {
+      prevLevel: Math.max(1, spill.level || 0),
+      hadTray: hasDirtyTray,
+      broth: spill.broth || rt.assembly?.dirtyTrayBroth || 'tonkotsu',
+      hasNoodles: Boolean(spill.hasNoodles)
+    };
+
+    rt.tableSpill = { level: 0, broth: 'tonkotsu', hasNoodles: false };
+    if (rt.assembly) {
+      rt.assembly.isDirtyTray = false;
+      rt.assembly.dirtyTrayBroth = null;
+    }
+
+    audio.playTapPop();
+    this.onToast(
+      hasDirtyTray
+        ? '🧽 Столешница и поднос чисто вытерты тряпкой!'
+        : '🧽 Лужа на столе вытерта тряпкой — теперь можно ставить поднос!',
+      '#10f56c'
+    );
+    this.renderAllKitchen();
+    return res;
   }
 
   // Достать бумажный пакет для заказа «с собой» из-под прилавка (ставит пакет на стол или прямо на поднос с перекладыванием!)
@@ -1042,6 +1182,33 @@ export class KitchenSystem {
       };
     }
 
+    // 3В. В левой руке НАПОЛНЕННОЕ блюдо, и на подносе (без пакета) тоже стоит НАПОЛНЕННОЕ блюдо ->
+    //     ПРАВОЙ РУКОЙ поднимаем блюдо с подноса! Теперь в обеих руках еда:
+    //     - тап по левой -> переливание из правой в левую (возможен перелив через край и лужа на столе!);
+    //     - тап по подносу -> правая рука ставит блюдо обратно на поднос!
+    if (
+      hasHand &&
+      !hasRight &&
+      a.vessel &&
+      !a.hasBag &&
+      !this.isVesselEmptyOfFood(handV) &&
+      !this.isVesselEmptyOfFood(a.vessel)
+    ) {
+      const lifted = JSON.parse(JSON.stringify(a.vessel));
+      rt.rightHandVessel = lifted;
+      a.vessel = null;
+      audio.playTapPop();
+      this.onToast(
+        `🙌 ${lifted.type === 'bowl' ? '🍜 Миска' : '📦 Коробка'} с подноса взята в правую руку! Тапните по левой, чтобы перелить (осторожно — может перелиться!), или тапните по подносу, чтобы вернуть.`,
+        '#ffaa00'
+      );
+      this.renderAllKitchen();
+      return {
+        action: 'pickup_tray_right',
+        vessel: lifted
+      };
+    }
+
     if (hasHand && a.vessel) {
       audio.playPenaltyBuzz();
       this.onToast('На подносе уже стоит посуда! Сначала отдайте заказ или освободите место.', '#ffaa00');
@@ -1137,8 +1304,20 @@ export class KitchenSystem {
       gameState.persistent.rating = Math.max(1.0, +(gameState.persistent.rating - 0.15).toFixed(2));
     }
 
+    // 4. Если поднос поставили на лужу или забрызгали переливом и отдали ГРЯЗНЫМ — мощный штраф к рейтингу и 0 чаевых!
+    const dirtyTrayPenalty = Boolean(a.isDirtyTray && !servingBag);
+    if (dirtyTrayPenalty) {
+      penaltyNote = true;
+      evalRes.isPerfect = false;
+      evalRes.multiplier = Math.max(0.35, evalRes.multiplier * 0.72);
+      evalRes.notes.push('💦 Грязный поднос (-0.25★, без чаевых)');
+      rt.dailyStats.badReviews = (rt.dailyStats.badReviews || 0) + 1;
+      gameState.persistent.rating = Math.max(1.0, +(gameState.persistent.rating - 0.25).toFixed(2));
+      audio.speakCustomerOrder('Фу! Поднос весь в бульоне!', cust.id);
+    }
+
     // Небольшой бонус за положенные палочки Варибаси
-    const chopstickBonus = a.hasChopsticks && !wrongBagForDineIn ? 6 : 0;
+    const chopstickBonus = a.hasChopsticks && !wrongBagForDineIn && !dirtyTrayPenalty ? 6 : 0;
     if (a.hasChopsticks) {
       evalRes.notes.push('🥢 Палочки');
     }
@@ -1174,7 +1353,7 @@ export class KitchenSystem {
     let rawTip = Math.round(
       basePay * 0.35 * speedFactor * district.tipMultiplier * (evalRes.isPerfect ? 1.35 : 0.7)
     );
-    if (evalRes.multiplier < 0.75 || wrongBagForDineIn) rawTip = 0;
+    if (evalRes.multiplier < 0.75 || wrongBagForDineIn || dirtyTrayPenalty) rawTip = 0;
 
     const totalEarned = basePay + rawTip;
     gameState.persistent.money += totalEarned;
@@ -1188,10 +1367,12 @@ export class KitchenSystem {
     const qualityTag = evalRes.notes.join(', ');
     const vesselIcon = servingBag ? '🛍️' : '🍱';
     this.onToast(
-      wrongBagForDineIn
-        ? `⚠️ Отдано в пакете вместо подноса: +¥${basePay}, чаевые ¥0, рейтинг -0.15★`
-        : `${vesselIcon} Подано: +¥${basePay} и чаевые +¥${rawTip} [${qualityTag}]`,
-      penaltyNote ? '#ffaa00' : evalRes.isPerfect ? '#10f56c' : '#00f5d4'
+      dirtyTrayPenalty
+        ? `🤢 Отдан ГРЯЗНЫЙ поднос: +¥${basePay}, чаевые ¥0, рейтинг -0.25★!`
+        : wrongBagForDineIn
+          ? `⚠️ Отдано в пакете вместо подноса: +¥${basePay}, чаевые ¥0, рейтинг -0.15★`
+          : `${vesselIcon} Подано: +¥${basePay} и чаевые +¥${rawTip} [${qualityTag}]`,
+      dirtyTrayPenalty ? '#ff385c' : penaltyNote ? '#ffaa00' : evalRes.isPerfect ? '#10f56c' : '#00f5d4'
     );
 
     // Закон сохранения 10 керамических мисок:
@@ -1219,6 +1400,8 @@ export class KitchenSystem {
     } else {
       a.hasTray = false;
       a.hasBag = false;
+      a.isDirtyTray = false;
+      a.dirtyTrayBroth = null;
       a.vessel = null;
       a.hasChopsticks = false;
       a.drink = null;

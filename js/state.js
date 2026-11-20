@@ -1,4 +1,4 @@
-import { GAME_CONFIG } from './config.js?v=84';
+import { GAME_CONFIG } from './config.js?v=85';
 
 const BASE_SAVE_KEY = 'CR_NIGHT_YATAI_SAVE_V1';
 
@@ -112,13 +112,21 @@ export function createShiftRuntimeState() {
     },
     // Посуда, которая сейчас находится в ПРАВОЙ РУКЕ повара (при двуручном переливании / подъёме с подноса / парных пустых тарелках!)
     rightHandVessel: null,
-    // Зона сборки заказа в центре столешницы (поднос / пакет, поставленная миска или коробка, палочки, будущие напитки)
+    // Зона сборки заказа в центре столешницы (поднос / пакет, поставленная миска или коробка, палочки, напитки)
     assembly: {
       hasTray: false,
       hasBag: false,
+      isDirtyTray: false,
+      dirtyTrayBroth: null,
       vessel: null,
       hasChopsticks: false,
       drink: null
+    },
+    // Лужа пролитого бульона на рабочей поверхности столешницы (level: 0 = чисто, 1 = небольшой перелив, 2 = мощный потоп с лапшой!)
+    tableSpill: {
+      level: 0,
+      broth: 'tonkotsu',
+      hasNoodles: false
     },
     tableSlots: [null, null, null],
     sealerSlot: null,     // { vessel, sealed: false, inAirlock: false }

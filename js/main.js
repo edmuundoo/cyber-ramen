@@ -1,16 +1,16 @@
-import { GAME_CONFIG } from './config.js?v=84';
-import { gameState, createShiftRuntimeState } from './state.js?v=84';
-import { audio } from './audio.js?v=84';
+import { GAME_CONFIG } from './config.js?v=85';
+import { gameState, createShiftRuntimeState } from './state.js?v=85';
+import { audio } from './audio.js?v=85';
 import {
   buildCustomerPortraitSVG,
   buildCourierDroneSVG,
   generateAppleTouchIcon
-} from './renderer.js?v=84';
-import { FirstPersonWebGLScene } from './webgl3d.js?v=84';
-import { CustomerAndDeliverySystem } from './customers.js?v=84';
-import { KitchenSystem } from './kitchen.js?v=84';
-import { EconomySystem } from './economy.js?v=84';
-import { TutorialSystem } from './tutorial.js?v=84';
+} from './renderer.js?v=85';
+import { FirstPersonWebGLScene } from './webgl3d.js?v=85';
+import { CustomerAndDeliverySystem } from './customers.js?v=85';
+import { KitchenSystem } from './kitchen.js?v=85';
+import { EconomySystem } from './economy.js?v=85';
+import { TutorialSystem } from './tutorial.js?v=85';
 
 class CyberRamenApp {
   constructor() {
@@ -183,6 +183,14 @@ class CyberRamenApp {
       return;
     }
 
+    if (hitId === 'table_spill' || hitId === 'kitchen_cloth') {
+      const wiped = this.kitchenSystem.wipeTableSpill();
+      if (wiped) {
+        this.scene3D.triggerWipeSpillAnim(wiped);
+      }
+      return;
+    }
+
     if (hitId === 'table_chopsticks') {
       const ok = this.kitchenSystem.addChopsticksToAssembly();
       if (ok) {
@@ -340,7 +348,7 @@ class CyberRamenApp {
 
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker
-        .register('./sw.js?v=84', { updateViaCache: 'none' })
+        .register('./sw.js?v=85', { updateViaCache: 'none' })
         .then((reg) => reg.update())
         .catch(() => {});
     }

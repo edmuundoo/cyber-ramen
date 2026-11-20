@@ -1,5 +1,5 @@
-import { GAME_CONFIG } from './config.js?v=84';
-import { gameState } from './state.js?v=84';
+import { GAME_CONFIG } from './config.js?v=85';
+import { gameState } from './state.js?v=85';
 import {
   createAlleyBackdropTexture,
   createBuildingFacadeTexture,
@@ -9,7 +9,7 @@ import {
   createWallMenuSignTexture,
   createPedestrianTextures,
   AnimeCustomerTextureRenderer
-} from './art3d.js?v=84';
+} from './art3d.js?v=85';
 
 /**
  * Полноэкранный WebGL 3D движок от первого лица с процедурной высокодетализированной
@@ -162,6 +162,15 @@ export class FirstPersonWebGLScene {
     this.dualStanceT = 0; // 0 = одна рука, 1 = естественная асимметричная стойка двумя руками
     this.fridgeDoorHandAnim = { active: false, action: 'open', timer: 0, duration: 0.56 };
     this.fridgeRestockAnim = { active: false, toppingId: 'egg', timer: 0, duration: 0.58 };
+    this.wipeSpillAnim = {
+      active: false,
+      timer: 0,
+      duration: 0.82,
+      prevLevel: 1,
+      hadTray: false,
+      broth: 'tonkotsu',
+      hasNoodles: false
+    };
     this.servePushAnim = { active: false, timer: 0, duration: 0.46, servedBag: false };
     this.centerPlaceFromRight = 0;
     this.existingShiftProgress = 0;
@@ -405,6 +414,10 @@ export class FirstPersonWebGLScene {
     d.type = data.type || data.grabType || data.leftType || 'bowl';
     const srcV = data.vessel || data.rightVessel || null;
     d.vessel = srcV ? { ...srcV, toppings: [...(srcV.toppings || [])] } : null;
+    d.prevLeft = data.prevLeft ? { ...data.prevLeft, toppings: [...(data.prevLeft.toppings || [])] } : null;
+    d.rightSource = data.rightSource ? { ...data.rightSource, toppings: [...(data.rightSource.toppings || [])] } : null;
+    d.spillLevel = data.spillLevel || 0;
+    d.spillBroth = data.spillBroth || 'tonkotsu';
 
     if (mode === 'pickup_tray_right') {
       d.duration = 0.54;
@@ -480,6 +493,16 @@ export class FirstPersonWebGLScene {
     this.fridgeRestockAnim.toppingId = toppingId;
     this.fridgeRestockAnim.timer = 0;
     this.fridgeRestockAnim.duration = 0.58;
+  }
+
+  triggerWipeSpillAnim(res = {}) {
+    this.wipeSpillAnim.active = true;
+    this.wipeSpillAnim.timer = 0;
+    this.wipeSpillAnim.duration = 0.82;
+    this.wipeSpillAnim.prevLevel = res.prevLevel || 1;
+    this.wipeSpillAnim.hadTray = Boolean(res.hadTray);
+    this.wipeSpillAnim.broth = res.broth || 'tonkotsu';
+    this.wipeSpillAnim.hasNoodles = Boolean(res.hasNoodles);
   }
 
   triggerDrinkPlaceAnim(drinkId = 'cola', intoBag = false) {
@@ -1556,6 +1579,12 @@ export class FirstPersonWebGLScene {
         this.fridgeRestockAnim.active = false;
       }
     }
+    if (this.wipeSpillAnim.active) {
+      this.wipeSpillAnim.timer += dt;
+      if (this.wipeSpillAnim.timer >= this.wipeSpillAnim.duration) {
+        this.wipeSpillAnim.active = false;
+      }
+    }
     if (this.servePushAnim.active) {
       this.servePushAnim.timer += dt;
       if (this.servePushAnim.timer >= this.servePushAnim.duration) {
@@ -2618,7 +2647,7 @@ export class FirstPersonWebGLScene {
   // =========================================================================
   // 3D-МОДЕЛИ ПОДНОСА, БУМАЖНОГО ПАКЕТА С СОБОЙ, ПАЛОЧЕК И НИШИ ПОД ПРИЛАВКОМ
   // =========================================================================
-  draw3DRamenTray(x, y, z, s = 1.0, rot = null) {
+  draw3DRamenTray(x, y, z, s = 1.0, rot = null, isDirty = false, dirtyBroth = 'tonkotsu') {
     const baseCol = [0.16, 0.08, 0.1];     // Тёмно-лаковый японский поднос «О-бон»
     const rimCol = [0.68, 0.16, 0.22];     // Алая лаковая окантовка по краям подноса
     const innerCol = [0.11, 0.09, 0.13];   // Нескользящее матовое дно подноса
@@ -2634,6 +2663,23 @@ export class FirstPersonWebGLScene {
     this.drawBox(x, y + lipH * 0.5, z + td * 0.48, tw, lipH, 0.019 * s, rimCol, 0.2, rot, 0.78);
     this.drawBox(x - tw * 0.48, y + lipH * 0.5, z, 0.019 * s, lipH, td, rimCol, 0.2, rot, 0.78);
     this.drawBox(x + tw * 0.48, y + lipH * 0.5, z, 0.019 * s, lipH, td, rimCol, 0.2, rot, 0.78);
+
+    // Если поднос испачкан пролитым бульоном — рисуем глянцевые грязные разводы и капли прямо на подносе!
+    if (isDirty) {
+      const bMap = {
+        tonkotsu: [0.88, 0.68, 0.36],
+        chili_broth: [0.92, 0.18, 0.16],
+        miso_mushroom: [0.64, 0.22, 0.84]
+      };
+      const sc = bMap[dirtyBroth] || bMap.tonkotsu;
+      const stainY = y + th + 0.005 * s;
+      this.drawMesh('cylinder', x + 0.04 * s, stainY, z + 0.04 * s, 0.14 * s, 0.003 * s, 0.095 * s, sc, 0.32, rot, 0.96, 4);
+      this.drawMesh('cylinder', x - 0.12 * s, stainY, z + 0.09 * s, 0.1 * s, 0.003 * s, 0.075 * s, sc, 0.28, rot, 0.96, 4);
+      this.drawMesh('cylinder', x + 0.17 * s, stainY, z - 0.06 * s, 0.07 * s, 0.003 * s, 0.06 * s, sc, 0.28, rot, 0.96, 4);
+      this.drawMesh('cylinder', x - 0.02 * s, stainY, z - 0.09 * s, 0.055 * s, 0.003 * s, 0.045 * s, sc, 0.3, rot, 0.96, 4);
+      // Потёк бульона на переднем бортике подноса
+      this.drawBox(x + 0.05 * s, y + lipH * 0.85, z + td * 0.48, 0.09 * s, 0.008 * s, 0.024 * s, sc, 0.35, rot, 0.95);
+    }
   }
 
   draw3DChopsticksPack(x, y, z, s = 1.0, rot = null) {
@@ -2917,18 +2963,122 @@ export class FirstPersonWebGLScene {
       this.drawFilledVessel3D(tx, ty, tz, this.trashTossAnim.vessel, shrink);
     }
 
-    // 1. ЦЕНТРАЛЬНАЯ ЗОНА СБОРКИ ЗАКАЗА (БОЛЬШОЙ ПОДНОС / ПАКЕТ + МИСКА/КОРОБКА + ПАЛОЧКИ)
+    // 1. ЦЕНТРАЛЬНАЯ ЗОНА СБОРКИ ЗАКАЗА (БОЛЬШОЙ ПОДНОС / ПАКЕТ + МИСКА/КОРОБКА + ПАЛОЧКИ + ЛУЖА И ТРЯПКА)
     const asmX = 0.0;
     const asmY = 0.902;
     const asmZ = -0.24;
 
+    // 1А. ПРОЛИТАЯ ЛУЖА БУЛЬОНА НА РАБОЧЕЙ ПОВЕРХНОСТИ (level 1 = небольшой перелив, level 2 = мощный потоп с лапшой!)
+    const spill = rt.tableSpill || { level: 0, broth: 'tonkotsu', hasNoodles: false };
+    const wipeActive = this.wipeSpillAnim.active;
+    const wipeP = wipeActive ? Math.min(1, this.wipeSpillAnim.timer / this.wipeSpillAnim.duration) : 0;
+    const visibleSpillLevel =
+      spill.level > 0 ? spill.level : wipeActive && wipeP < 0.85 ? this.wipeSpillAnim.prevLevel : 0;
+    const spillScale = wipeActive ? Math.max(0.05, 1.0 - Math.max(0, (wipeP - 0.15) / 0.7)) : 1.0;
+
+    if (visibleSpillLevel > 0) {
+      const spillBrothId = spill.level > 0 ? spill.broth : this.wipeSpillAnim.broth;
+      const spillHasNoodles = spill.level > 0 ? Boolean(spill.hasNoodles) : Boolean(this.wipeSpillAnim.hasNoodles);
+      const bMap = {
+        tonkotsu: [0.9, 0.7, 0.38],
+        chili_broth: [0.94, 0.16, 0.18],
+        miso_mushroom: [0.66, 0.2, 0.88]
+      };
+      const sCol = bMap[spillBrothId] || bMap.tonkotsu;
+      const sy = asmY + 0.0025;
+      const big = visibleSpillLevel >= 2;
+      const k = (big ? 1.38 : 0.92) * spillScale;
+
+      // Основное глянцевое пятно лужи + боковые растекшиеся лепестки
+      this.drawMesh('cylinder', asmX - 0.04, sy, asmZ + 0.02, 0.24 * k, 0.003, 0.17 * k, sCol, 0.34, null, 0.98, 4);
+      this.drawMesh('cylinder', asmX + 0.11 * k, sy, asmZ - 0.03, 0.16 * k, 0.003, 0.13 * k, sCol, 0.3, null, 0.98, 4);
+      this.drawMesh('cylinder', asmX - 0.15 * k, sy, asmZ - 0.05, 0.13 * k, 0.003, 0.11 * k, sCol, 0.3, null, 0.98, 4);
+      // Капли-брызги вокруг лужи
+      const drops = [
+        [-0.26, 0.09, 0.045],
+        [0.24, 0.08, 0.042],
+        [0.18, -0.14, 0.036],
+        [-0.22, -0.13, 0.038]
+      ];
+      if (big) {
+        drops.push([-0.32, -0.02, 0.05], [0.3, -0.04, 0.048], [0.05, 0.16, 0.055], [-0.1, 0.15, 0.044]);
+      }
+      for (const [dx, dz, dr] of drops) {
+        this.drawMesh('cylinder', asmX + dx * spillScale, sy, asmZ + dz * spillScale, dr * spillScale, 0.003, dr * 0.82 * spillScale, sCol, 0.36, null, 0.98, 4);
+      }
+      // Вывалившиеся нити лапши при мощном переливе (level 2)!
+      if (spillHasNoodles && spillScale > 0.25) {
+        this.drawMesh('wavy_noodle', asmX - 0.06, sy + 0.006, asmZ + 0.05, 0.11 * spillScale, 0.012, 0.09 * spillScale, [1.0, 0.84, 0.3], 0.22, [0, 0.6, 0]);
+        this.drawMesh('wavy_noodle', asmX + 0.12, sy + 0.006, asmZ - 0.02, 0.095 * spillScale, 0.012, 0.08 * spillScale, [1.0, 0.84, 0.3], 0.22, [0, -0.9, 0]);
+      }
+
+      if (isCenterWorktable && !a.hasTray && !a.hasBag && spill.level > 0) {
+        this.registerHitbox('table_spill', asmX, asmY + 0.02, asmZ, 94);
+      }
+    }
+
+    // 1Б. ЯПОНСКАЯ КУХОННАЯ ТРЯПОЧКА «ФУКИН» НА ЛЕВОМ КРАЮ СТОЛЕШНИЦЫ (ДЛЯ ПРОТИРАНИЯ ЛУЖ И ГРЯЗНОГО ПОДНОСА!)
+    const clothX = -0.49;
+    const clothY = asmY + 0.009;
+    const clothZ = -0.22;
+    const needsWipe = spill.level > 0 || Boolean(a.hasTray && a.isDirtyTray);
+    const clothGlow = needsWipe ? 0.42 + 0.38 * Math.sin(this.time * 7.5) : 0.12;
+    if (!wipeActive) {
+      // Аккуратно сложенная в два слоя бело-бирюзовая кухонная салфетка «Фукин»
+      this.drawBox(clothX, clothY, clothZ, 0.135, 0.014, 0.155, [0.84, 0.92, 0.96], clothGlow, [0, 0.18, 0], 0.25);
+      this.drawBox(clothX + 0.006, clothY + 0.011, clothZ - 0.004, 0.122, 0.009, 0.142, [0.92, 0.96, 1.0], clothGlow * 0.9, [0, 0.14, 0], 0.22);
+      // Традиционная синяя полоска на японском полотенце + неоновая кайма при загрязнении
+      this.drawBox(clothX + 0.006, clothY + 0.016, clothZ - 0.004, 0.124, 0.003, 0.028, needsWipe ? [0.0, 0.96, 0.86] : [0.18, 0.56, 0.86], needsWipe ? 0.85 : 0.32, [0, 0.14, 0]);
+    }
+    if (isCenterWorktable) {
+      this.registerHitbox('kitchen_cloth', clothX, clothY + 0.025, clothZ, needsWipe ? 76 : 56);
+    }
+
     // Если поднос на столе (и мы НЕ держим сам поднос перед клиентом — если держим пакет, то чистый поднос ОСТАЁТСЯ на столе!)
+    const trayDirtyVisual = Boolean(
+      a.isDirtyTray || (wipeActive && this.wipeSpillAnim.hadTray && wipeP < 0.72)
+    );
+    const trayDirtyBroth = a.dirtyTrayBroth || this.wipeSpillAnim.broth || 'tonkotsu';
     const showStaticTray =
       a.hasTray &&
       !this.trayPlaceAnim.active &&
       !(isCarryingOrder && !a.hasBag);
     if (showStaticTray) {
-      this.draw3DRamenTray(asmX, asmY, asmZ, 1.0);
+      this.draw3DRamenTray(asmX, asmY, asmZ, 1.0, null, trayDirtyVisual, trayDirtyBroth);
+    }
+
+    // Анимация энергичного вытирания стола и подноса ПРАВОЙ РУКОЙ С КУХОННОЙ ТРЯПКОЙ!
+    if (wipeActive) {
+      let wx, wy, wz, wYaw;
+      const wipeSurfaceY = this.wipeSpillAnim.hadTray ? asmY + 0.024 : asmY + 0.014;
+      if (wipeP < 0.16) {
+        const t = wipeP / 0.16;
+        const s = t * t * (3 - 2 * t);
+        wx = clothX + (asmX - 0.16 - clothX) * s;
+        wy = clothY + (wipeSurfaceY - clothY) * s + Math.sin(t * Math.PI) * 0.06;
+        wz = clothZ + (asmZ + 0.06 - clothZ) * s;
+        wYaw = 0.18 * (1 - s);
+      } else if (wipeP < 0.84) {
+        const t = (wipeP - 0.16) / 0.68;
+        // 3 энергичных зигзагообразных прохода тряпкой по всей луже и подносу!
+        wx = asmX + Math.sin(t * Math.PI * 5.0) * 0.22;
+        wy = wipeSurfaceY + Math.abs(Math.cos(t * Math.PI * 5.0)) * 0.008;
+        wz = asmZ + 0.08 - t * 0.16 + Math.cos(t * Math.PI * 5.0) * 0.04;
+        wYaw = Math.cos(t * Math.PI * 5.0) * 0.28;
+      } else {
+        const t = (wipeP - 0.84) / 0.16;
+        const s = t * t * (3 - 2 * t);
+        wx = asmX + (clothX - asmX) * s;
+        wy = wipeSurfaceY + (clothY - wipeSurfaceY) * s + Math.sin(t * Math.PI) * 0.055;
+        wz = asmZ - 0.08 + (clothZ - (asmZ - 0.08)) * s;
+        wYaw = 0.18 * s;
+      }
+      // Сжатая в руке тряпка + правая кибер-перчатка сверху
+      this.drawBox(wx, wy, wz, 0.13, 0.018, 0.125, [0.88, 0.95, 0.98], 0.4, [0, wYaw, 0], 0.25);
+      this.drawBox(wx, wy + 0.01, wz, 0.12, 0.004, 0.028, [0.0, 0.96, 0.86], 0.72, [0, wYaw, 0]);
+      this.drawBox(wx + 0.03, wy + 0.034, wz + 0.045, 0.072, 0.034, 0.125, [0.16, 0.14, 0.24], 0.22, [0.16, 0.24 + wYaw * 0.5, -0.14]);
+      this.drawBox(wx + 0.03, wy + 0.053, wz + 0.045, 0.076, 0.011, 0.038, [0.0, 0.96, 0.83], 0.95, [0.16, 0.24 + wYaw * 0.5, -0.14]);
+      this.drawBox(wx + 0.08, wy + 0.018, wz + 0.13, 0.078, 0.046, 0.135, [0.11, 0.13, 0.2], 0.15, [0.16, 0.24 + wYaw * 0.5, -0.14]);
     }
 
     // Анимация выкладывания подноса из-под прилавка на столешницу:
@@ -2944,7 +3094,8 @@ export class FirstPersonWebGLScene {
       const trayRot = oneHand
         ? [0.22 * (1 - s), -0.16 * (1 - s), 0.11 * (1 - s)]
         : [0.22 * (1 - s), 0, 0];
-      this.draw3DRamenTray(tx, ty, tz, 0.92 + 0.08 * s, trayRot);
+      const stainedOnLanding = Boolean(a.isDirtyTray && p > 0.72);
+      this.draw3DRamenTray(tx, ty, tz, 0.92 + 0.08 * s, trayRot, stainedOnLanding, a.dirtyTrayBroth || 'tonkotsu');
 
       if (oneHand) {
         // Только ПРАВАЯ кибер-перчатка достаёт поднос за правый бортик и плавно кладёт его на стол!
@@ -5323,12 +5474,15 @@ export class FirstPersonWebGLScene {
       }
 
       if (mode === 'pour_right_to_left') {
-        // Переливание из правой руки в пустую в левой + увод грязной миски на мойку!
+        // Переливание из правой руки в левую (в пустую ИЛИ уже наполненную — с 3D-переливом через край!) + увод грязной миски на мойку!
         const fromType = d.fromType || 'bowl';
         const toType = d.toType || v.type || 'box';
         const fullNew = d.vessel || v;
         const emptyNew = { type: toType, broth: null, noodleState: null, toppings: [], overflowCount: 0 };
-        const fullOld = { ...fullNew, type: fromType };
+        const beforeLeft = d.prevLeft || emptyNew;
+        const fullOld = d.rightSource || { ...fullNew, type: fromType };
+        const spillLvl = d.spillLevel || 0;
+        const spillBrothId = d.spillBroth || fullNew.broth || 'tonkotsu';
         const pourTargetX = basePos[0] + R[0] * 0.105 + F[0] * 0.015;
         const pourTargetY = basePos[1] + 0.165;
         const pourTargetZ = basePos[2] + R[2] * 0.105 + F[2] * 0.015;
@@ -5336,7 +5490,7 @@ export class FirstPersonWebGLScene {
         if (p < 0.22) {
           const t = p / 0.22;
           const s = t * t * (3 - 2 * t);
-          this.drawFilledVessel3D(basePos[0], basePos[1], basePos[2], emptyNew, 0.64, false);
+          this.drawFilledVessel3D(basePos[0], basePos[1], basePos[2], beforeLeft, 0.64, false);
           drawLeftGloveAt(basePos[0], basePos[1], basePos[2]);
           const rx = rightHoldX + (pourTargetX - rightHoldX) * s;
           const ry = rightHoldY + (pourTargetY - rightHoldY) * s;
@@ -5348,12 +5502,12 @@ export class FirstPersonWebGLScene {
         if (p < 0.78) {
           const t = (p - 0.22) / 0.56;
           const pourCurve = Math.sin(t * Math.PI);
-          const leftHasFood = t >= 0.42;
-          this.drawFilledVessel3D(basePos[0], basePos[1], basePos[2], leftHasFood ? fullNew : emptyNew, 0.64, false);
+          const leftMerged = t >= 0.42;
+          this.drawFilledVessel3D(basePos[0], basePos[1], basePos[2], leftMerged ? fullNew : beforeLeft, 0.64, false);
           drawLeftGloveAt(basePos[0], basePos[1], basePos[2]);
           const tiltZ = 0.78 * pourCurve;
           if (fromType === 'bowl') {
-            this.drawDirtyBowl3D(pourTargetX, pourTargetY, pourTargetZ, fullNew.broth || 'tonkotsu', 0.54, [0.15 * pourCurve, yawAngle, tiltZ]);
+            this.drawDirtyBowl3D(pourTargetX, pourTargetY, pourTargetZ, spillBrothId, 0.54, [0.15 * pourCurve, yawAngle, tiltZ]);
           } else {
             this.drawFilledVessel3D(pourTargetX, pourTargetY, pourTargetZ, t < 0.5 ? fullOld : { ...emptyNew, type: fromType }, 0.56, false);
           }
@@ -5365,16 +5519,52 @@ export class FirstPersonWebGLScene {
               chili_broth: [0.95, 0.18, 0.2],
               miso_mushroom: [0.68, 0.18, 0.92]
             };
-            const bCol = bMap[fullNew.broth] || bMap.tonkotsu;
+            const bCol = bMap[spillBrothId] || bMap.tonkotsu;
             const streamX = (pourTargetX + basePos[0]) * 0.5;
             const streamZ = (pourTargetZ + basePos[2]) * 0.5;
             const streamTopY = pourTargetY + 0.02;
             const streamBotY = basePos[1] + 0.065;
             const streamH = Math.max(0.04, streamTopY - streamBotY);
             this.drawMesh('cylinder', streamX, (streamTopY + streamBotY) * 0.5, streamZ, 0.024, streamH, 0.024, bCol, 0.86, null, 0.95, 4);
-            if (fullNew.noodleState) {
+            if (fullOld.noodleState || fullNew.noodleState) {
               const nFrac = ((t - 0.12) / 0.76) % 1.0;
               this.drawMesh('wavy_noodle', streamX, streamTopY - nFrac * streamH, streamZ, 0.095, 0.022, 0.12, [1.0, 0.84, 0.28], 0.32, [0.4, this.time * 5, 0.3]);
+            }
+
+            // 3D-ЭФФЕКТ ПЕРЕЛИВАНИЯ ЧЕРЕЗ КРАЯ ЛЕВОЙ МИСКИ / КОРОБКИ ВНИЗ НА СТОЛ!
+            if (spillLvl > 0 && t > 0.28) {
+              const spT = (t - 0.28) / 0.6;
+              const dropCount = spillLvl >= 2 ? 10 : 5;
+              const spread = spillLvl >= 2 ? 0.115 : 0.085;
+              for (let k = 0; k < dropCount; k++) {
+                const ang = (k / dropCount) * Math.PI * 2 + 0.4;
+                const phase = (spT * 1.45 + (k % 3) * 0.24) % 1.0;
+                const dist = 0.055 + phase * spread;
+                const dropX = basePos[0] + Math.cos(ang) * dist;
+                const dropZ = basePos[2] + Math.sin(ang) * dist;
+                const dropY = basePos[1] + 0.052 - phase * phase * (spillLvl >= 2 ? 0.24 : 0.15) + Math.sin(phase * Math.PI) * 0.022;
+                const dr = (spillLvl >= 2 ? 0.019 : 0.013) * (1 - phase * 0.3);
+                this.drawMesh('sphere', dropX, dropY, dropZ, dr, dr * 1.35, dr, bCol, 0.78, null, 0.96);
+              }
+              if (spillLvl >= 2) {
+                // При мощном переливе (бульон+лапша в обеих руках) через край летят ещё и нити лапши!
+                for (let nk = 0; nk < 2; nk++) {
+                  const nPhase = (spT * 1.15 + nk * 0.45) % 1.0;
+                  const side = nk === 0 ? -1 : 1;
+                  this.drawMesh(
+                    'wavy_noodle',
+                    basePos[0] + R[0] * (0.068 * side) + F[0] * (0.04 * nPhase),
+                    basePos[1] + 0.048 - nPhase * nPhase * 0.22,
+                    basePos[2] + R[2] * (0.068 * side) + F[2] * (0.04 * nPhase),
+                    0.075,
+                    0.016,
+                    0.085,
+                    [1.0, 0.84, 0.28],
+                    0.35,
+                    [0.5 + nPhase * 2, yawAngle + side, 0.4 * side]
+                  );
+                }
+              }
             }
           }
           return;
@@ -6011,7 +6201,7 @@ export class FirstPersonWebGLScene {
     const hasRightVessel = Boolean(rightV && rightV.type);
     const leftEmpty = !v.broth && !v.noodleState && (!v.toppings || v.toppings.length === 0);
     const rightEmpty = !hasRightVessel || (!rightV.broth && !rightV.noodleState && (!rightV.toppings || rightV.toppings.length === 0));
-    const canPourNow = hasRightVessel && leftEmpty && !rightEmpty;
+    const canPourNow = hasRightVessel && !rightEmpty;
     const leftGlow = canPourNow ? 0.65 + 0.35 * Math.sin(this.time * 7.5) : 0.92;
     drawLeftGloveAt(handAnchorX, handAnchorY, handAnchorZ, leftGlow);
 
@@ -6414,7 +6604,7 @@ export class FirstPersonWebGLScene {
     } else {
       // Поднимаемся к клиенту с собранным ПОДНОСОМ (блюдо слева, банка напитка и палочки справа!)
       const ts = 0.82 * fadeScale;
-      this.draw3DRamenTray(cx, cy, cz, ts);
+      this.draw3DRamenTray(cx, cy, cz, ts, null, Boolean(a.isDirtyTray), a.dirtyTrayBroth || 'tonkotsu');
       if (a.vessel) {
         this.drawFilledVessel3D(
           cx - R[0] * 0.13 * ts,
