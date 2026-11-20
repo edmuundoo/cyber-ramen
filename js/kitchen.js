@@ -1,6 +1,6 @@
-import { GAME_CONFIG } from './config.js?v=77';
-import { gameState } from './state.js?v=77';
-import { audio } from './audio.js?v=77';
+import { GAME_CONFIG } from './config.js?v=78';
+import { gameState } from './state.js?v=78';
+import { audio } from './audio.js?v=78';
 
 export class KitchenSystem {
   constructor(callbacks) {
@@ -753,6 +753,47 @@ export class KitchenSystem {
       );
       this.renderAllKitchen();
       return { action: 'pickup', vessel: picked, fromBag: a.hasBag };
+    }
+
+    // 3. В левой руке пустая коробка/миска, а на подносе (без пакета) стоит наполненная миска/коробка другого типа ->
+    //    ПРАВОЙ РУКОЙ БЕРЁМ МИСКУ С ПОДНОСА И ПЕРЕЛИВАЕМ РАМЕН В КОРОБКУ В ЛЕВОЙ РУКЕ! МИСКА УХОДИТ НА МОЙКУ!
+    if (
+      hasHand &&
+      a.vessel &&
+      !a.hasBag &&
+      this.isVesselEmptyOfFood(handV) &&
+      !this.isVesselEmptyOfFood(a.vessel) &&
+      handV.type !== a.vessel.type
+    ) {
+      const srcVessel = JSON.parse(JSON.stringify(a.vessel));
+      const targetType = handV.type;
+      const fromType = srcVessel.type;
+
+      rt.activeVessel = {
+        ...srcVessel,
+        type: targetType
+      };
+      rt.vesselHeldInLeft = true;
+      a.vessel = null;
+
+      if (fromType === 'bowl') {
+        rt.dirtyInSink.push({ broth: srcVessel.broth || 'tonkotsu' });
+      }
+
+      audio.playSauceSizzle();
+      this.onToast(
+        fromType === 'bowl'
+          ? `📦 Перелито из миски в коробку! Грязная миска ушла на мойку (в мойке: ${rt.dirtyInSink.length})`
+          : '🍜 Перелито из коробки в чистую миску!',
+        '#00f5d4'
+      );
+      this.renderAllKitchen();
+      return {
+        action: 'pour_from_tray',
+        fromType,
+        toType: targetType,
+        vessel: JSON.parse(JSON.stringify(rt.activeVessel))
+      };
     }
 
     if (hasHand && a.vessel) {

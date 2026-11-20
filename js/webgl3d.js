@@ -1,5 +1,5 @@
-import { GAME_CONFIG } from './config.js?v=77';
-import { gameState } from './state.js?v=77';
+import { GAME_CONFIG } from './config.js?v=78';
+import { gameState } from './state.js?v=78';
 import {
   createAlleyBackdropTexture,
   createBuildingFacadeTexture,
@@ -9,7 +9,7 @@ import {
   createWallMenuSignTexture,
   createPedestrianTextures,
   AnimeCustomerTextureRenderer
-} from './art3d.js?v=77';
+} from './art3d.js?v=78';
 
 /**
  * Полноэкранный WebGL 3D движок от первого лица с процедурной высокодетализированной
@@ -347,11 +347,28 @@ export class FirstPersonWebGLScene {
   }
 
   triggerDirectHandPourAnim(fromType = 'bowl', toType = 'box', vessel = null) {
+    this.rightGrabAnim.active = false;
     this.handPourAnim.active = true;
+    this.handPourAnim.fromTray = false;
     this.handPourAnim.fromType = fromType;
     this.handPourAnim.toType = toType;
     this.handPourAnim.timer = 0;
     this.handPourAnim.duration = 1.48;
+    this.handPourAnim.vessel = vessel
+      ? { ...vessel, toppings: [...(vessel.toppings || [])] }
+      : { type: toType, broth: 'tonkotsu', noodleState: 'aldente', toppings: [] };
+    this.heldVesselAppear = 1.0;
+    this.vesselBounce = 0.85;
+  }
+
+  triggerTrayToHandPourAnim(fromType = 'bowl', toType = 'box', vessel = null) {
+    this.rightGrabAnim.active = false;
+    this.handPourAnim.active = true;
+    this.handPourAnim.fromTray = true;
+    this.handPourAnim.fromType = fromType;
+    this.handPourAnim.toType = toType;
+    this.handPourAnim.timer = 0;
+    this.handPourAnim.duration = 1.24;
     this.handPourAnim.vessel = vessel
       ? { ...vessel, toppings: [...(vessel.toppings || [])] }
       : { type: toType, broth: 'tonkotsu', noodleState: 'aldente', toppings: [] };
@@ -4408,6 +4425,7 @@ export class FirstPersonWebGLScene {
     // Отрисовываем точное количество оставшихся чистых мисок (от 10 до 0: взял одну -> стало 9, вернул -> снова 10!)
     const pourBowlNotGrabbedYet =
       this.handPourAnim.active &&
+      !this.handPourAnim.fromTray &&
       this.handPourAnim.toType === 'bowl' &&
       this.handPourAnim.timer / this.handPourAnim.duration < 0.22;
     const returningBowlNotLandedYet =
@@ -4473,6 +4491,7 @@ export class FirstPersonWebGLScene {
         this.rightReturnAnim.type === 'box' &&
         this.rightReturnAnim.timer / this.rightReturnAnim.duration < 0.72) ||
       (this.handPourAnim.active &&
+        !this.handPourAnim.fromTray &&
         this.handPourAnim.toType === 'box' &&
         this.handPourAnim.timer / this.handPourAnim.duration >= 0.22);
     const boxStackCount = grabbingBox ? 2 : 3;
@@ -5109,6 +5128,146 @@ export class FirstPersonWebGLScene {
         toppings: v.toppings || [],
         overflowCount: v.overflowCount || 0
       };
+
+      // ВАРИАНТ Б: ПЕРЕЛИВАНИЕ С ПОДНОСА В КОРОБКУ В ЛЕВОЙ РУКЕ!
+      // 1) p < 0.26: Коробка в левой руке, миска стоит на подносе (-0.13, 0.918, -0.24), правая рука тянется к миске;
+      // 2) 0.26..0.44: Правая рука поднимает миску с подноса вверх-вправо к коробке в левой руке;
+      // 3) 0.44..0.80: Правая рука наклоняет миску и переливает бульон + лапшу в коробку в левой руке;
+      // 4) p >= 0.80: Полная коробка в левой руке, а опустевшая грязная миска уходит в правой руке налево на мойку!
+      if (this.handPourAnim.fromTray) {
+        const trayX = -0.13;
+        const trayY = 0.918;
+        const trayZ = -0.24;
+        const pourTargetX = basePos[0] + R[0] * 0.105 + F[0] * 0.015;
+        const pourTargetY = basePos[1] + 0.165;
+        const pourTargetZ = basePos[2] + R[2] * 0.105 + F[2] * 0.015;
+        const rightStartX = rightHoldX + R[0] * 0.06;
+        const rightStartY = rightHoldY - 0.12;
+        const rightStartZ = rightHoldZ + R[2] * 0.06;
+
+        if (p < 0.26) {
+          const t = p / 0.26;
+          const s = t * t * (3 - 2 * t);
+          this.drawFilledVessel3D(basePos[0], basePos[1], basePos[2], emptyNewVessel, 0.64, false);
+          drawLeftGloveAt(basePos[0], basePos[1], basePos[2]);
+          this.drawFilledVessel3D(trayX, trayY, trayZ, fullOldVessel, 0.76, false);
+          const rx = rightStartX + (trayX - rightStartX) * s;
+          const ry = rightStartY + (trayY + 0.02 - rightStartY) * s + Math.sin(t * Math.PI) * 0.06;
+          const rz = rightStartZ + (trayZ - rightStartZ) * s;
+          drawRightGloveAt(rx, ry, rz);
+          return;
+        }
+
+        if (p < 0.44) {
+          const t = (p - 0.26) / 0.18;
+          const s = t * t * (3 - 2 * t);
+          this.drawFilledVessel3D(basePos[0], basePos[1], basePos[2], emptyNewVessel, 0.64, false);
+          drawLeftGloveAt(basePos[0], basePos[1], basePos[2]);
+          const rx = trayX + (pourTargetX - trayX) * s;
+          const ry = trayY + (pourTargetY - trayY) * s + Math.sin(t * Math.PI) * 0.06;
+          const rz = trayZ + (pourTargetZ - trayZ) * s;
+          const sc = 0.76 + (0.6 - 0.76) * s;
+          this.drawFilledVessel3D(rx, ry, rz, fullOldVessel, sc, false);
+          drawRightGloveAt(rx, ry, rz);
+          return;
+        }
+
+        if (p < 0.8) {
+          const t = (p - 0.44) / 0.36;
+          const pourCurve = Math.sin(t * Math.PI);
+          const leftHasFood = t >= 0.42;
+          this.drawFilledVessel3D(
+            basePos[0],
+            basePos[1],
+            basePos[2],
+            leftHasFood ? fullNewVessel : emptyNewVessel,
+            0.64,
+            false
+          );
+          drawLeftGloveAt(basePos[0], basePos[1], basePos[2]);
+
+          const tiltZ = 0.78 * pourCurve;
+          if (fromType === 'bowl') {
+            this.drawDirtyBowl3D(
+              pourTargetX,
+              pourTargetY,
+              pourTargetZ,
+              v.broth || 'tonkotsu',
+              0.54,
+              [0.15 * pourCurve, yawAngle, tiltZ]
+            );
+          } else {
+            this.drawFilledVessel3D(
+              pourTargetX,
+              pourTargetY,
+              pourTargetZ,
+              t < 0.5 ? fullOldVessel : { ...emptyNewVessel, type: fromType },
+              0.56,
+              false
+            );
+          }
+          drawRightGloveAt(pourTargetX, pourTargetY, pourTargetZ, tiltZ * 0.65);
+
+          if (t > 0.12 && t < 0.88) {
+            const bMap = {
+              tonkotsu: [0.92, 0.74, 0.44],
+              chili_broth: [0.95, 0.18, 0.2],
+              miso_mushroom: [0.68, 0.18, 0.92]
+            };
+            const bCol = bMap[v.broth] || bMap.tonkotsu;
+            const streamX = (pourTargetX + basePos[0]) * 0.5;
+            const streamZ = (pourTargetZ + basePos[2]) * 0.5;
+            const streamTopY = pourTargetY + 0.02;
+            const streamBotY = basePos[1] + 0.065;
+            const streamH = Math.max(0.04, streamTopY - streamBotY);
+            this.drawMesh(
+              'cylinder',
+              streamX,
+              (streamTopY + streamBotY) * 0.5,
+              streamZ,
+              0.024,
+              streamH,
+              0.024,
+              bCol,
+              0.86,
+              null,
+              0.95,
+              4
+            );
+            if (v.noodleState) {
+              const nFrac = ((t - 0.12) / 0.76) % 1.0;
+              this.drawMesh(
+                'wavy_noodle',
+                streamX,
+                streamTopY - nFrac * streamH,
+                streamZ,
+                0.095,
+                0.022,
+                0.12,
+                [1.0, 0.84, 0.28],
+                0.32,
+                [0.4, this.time * 5, 0.3]
+              );
+            }
+          }
+          return;
+        }
+
+        // Фаза 4 (p >= 0.80): Полная коробка остаётся в левой руке, а грязная миска уходит налево на мойку!
+        const t = (p - 0.8) / 0.2;
+        const s = t * t * (3 - 2 * t);
+        this.drawFilledVessel3D(basePos[0], basePos[1], basePos[2], fullNewVessel, 0.64, false);
+        drawLeftGloveAt(basePos[0], basePos[1], basePos[2]);
+
+        const awayX = pourTargetX - R[0] * 0.48 * s;
+        const awayY = pourTargetY - 0.18 * s;
+        const awayZ = pourTargetZ - R[2] * 0.48 * s - F[2] * 0.1 * s;
+        if (fromType === 'bowl') {
+          this.drawDirtyBowl3D(awayX, awayY, awayZ, v.broth || 'tonkotsu', 0.52 * (1 - s * 0.3), [0.1, yawAngle, 0.2]);
+        }
+        drawRightGloveAt(awayX, awayY, awayZ);
+        return;
+      }
 
       if (p < 0.22) {
         // ФАЗА 1: Перекладываем наполненную миску из левой руки в правую руку!

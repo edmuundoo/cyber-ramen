@@ -1,16 +1,16 @@
-import { GAME_CONFIG } from './config.js?v=77';
-import { gameState, createShiftRuntimeState } from './state.js?v=77';
-import { audio } from './audio.js?v=77';
+import { GAME_CONFIG } from './config.js?v=78';
+import { gameState, createShiftRuntimeState } from './state.js?v=78';
+import { audio } from './audio.js?v=78';
 import {
   buildCustomerPortraitSVG,
   buildCourierDroneSVG,
   generateAppleTouchIcon
-} from './renderer.js?v=77';
-import { FirstPersonWebGLScene } from './webgl3d.js?v=77';
-import { CustomerAndDeliverySystem } from './customers.js?v=77';
-import { KitchenSystem } from './kitchen.js?v=77';
-import { EconomySystem } from './economy.js?v=77';
-import { TutorialSystem } from './tutorial.js?v=77';
+} from './renderer.js?v=78';
+import { FirstPersonWebGLScene } from './webgl3d.js?v=78';
+import { CustomerAndDeliverySystem } from './customers.js?v=78';
+import { KitchenSystem } from './kitchen.js?v=78';
+import { EconomySystem } from './economy.js?v=78';
+import { TutorialSystem } from './tutorial.js?v=78';
 
 class CyberRamenApp {
   constructor() {
@@ -162,7 +162,11 @@ class CyberRamenApp {
     if (hitId === 'assembly_zone' || hitId === 'center_vessel' || hitId.startsWith('table_slot_')) {
       const res = this.kitchenSystem.handleAssemblyZoneTap();
       if (res) {
-        this.scene3D.triggerAssemblyVesselAnim(res);
+        if (res.action === 'pour_from_tray') {
+          this.scene3D.triggerTrayToHandPourAnim(res.fromType, res.toType, res.vessel);
+        } else {
+          this.scene3D.triggerAssemblyVesselAnim(res);
+        }
       }
       return;
     }
@@ -323,7 +327,7 @@ class CyberRamenApp {
 
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker
-        .register('./sw.js?v=77', { updateViaCache: 'none' })
+        .register('./sw.js?v=78', { updateViaCache: 'none' })
         .then((reg) => reg.update())
         .catch(() => {});
     }

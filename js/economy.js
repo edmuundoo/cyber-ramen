@@ -1,6 +1,6 @@
-import { GAME_CONFIG } from './config.js?v=77';
-import { gameState } from './state.js?v=77';
-import { audio } from './audio.js?v=77';
+import { GAME_CONFIG } from './config.js?v=78';
+import { gameState } from './state.js?v=78';
+import { audio } from './audio.js?v=78';
 
 export class EconomySystem {
   constructor(onToast, onStartNextDay) {
