@@ -1,6 +1,6 @@
-import { GAME_CONFIG } from './config.js?v=78';
-import { gameState } from './state.js?v=78';
-import { audio } from './audio.js?v=78';
+import { GAME_CONFIG } from './config.js?v=79';
+import { gameState } from './state.js?v=79';
+import { audio } from './audio.js?v=79';
 
 export class KitchenSystem {
   constructor(callbacks) {
@@ -132,7 +132,103 @@ export class KitchenSystem {
     return !v.broth && !v.noodleState && (!v.toppings || v.toppings.length === 0);
   }
 
+  areBothHandsBusy() {
+    const rt = gameState.runtime;
+    return Boolean(rt.activeVessel && rt.activeVessel.type && rt.rightHandVessel && rt.rightHandVessel.type);
+  }
+
+  blockIfBothHandsBusy() {
+    if (!this.areBothHandsBusy()) return false;
+    const rt = gameState.runtime;
+    const leftEmpty = this.isVesselEmptyOfFood(rt.activeVessel);
+    const rightEmpty = this.isVesselEmptyOfFood(rt.rightHandVessel);
+    audio.playPenaltyBuzz();
+    this.onToast(
+      leftEmpty && !rightEmpty
+        ? '🙌 Обе руки заняты! Тапните по пустой посуде слева, чтобы перелить, или верните пустую на склад ▶'
+        : '🙌 Обе руки заняты! Верните лишнюю пустую посуду обратно на склад справа ▶',
+      '#ffaa00'
+    );
+    return true;
+  }
+
+  // Тап прямо по пустой посуде в ЛЕВОЙ руке:
+  // 1) Если обе руки заняты (левая пустая, правая с едой) -> ПЕРЕЛИВАЕМ из правой руки в левую (грязная миска уходит на мойку)!
+  // 2) Если в Секторе 2 в левой руке одна пустая посуда (правая свободна) -> возвращаем её в стопку!
+  handleHeldLeftVesselTap() {
+    const rt = gameState.runtime;
+    const left = rt.activeVessel;
+    const right = rt.rightHandVessel;
+    const hasLeft = Boolean(left && left.type);
+    const hasRight = Boolean(right && right.type);
+    if (!hasLeft) return null;
+
+    if (hasRight) {
+      const leftEmpty = this.isVesselEmptyOfFood(left);
+      const rightEmpty = this.isVesselEmptyOfFood(right);
+      if (leftEmpty && !rightEmpty) {
+        const srcRight = JSON.parse(JSON.stringify(right));
+        const targetType = left.type;
+        const fromType = srcRight.type;
+
+        rt.activeVessel = {
+          ...srcRight,
+          type: targetType
+        };
+        rt.rightHandVessel = null;
+        rt.vesselHeldInLeft = true;
+
+        if (fromType === 'bowl') {
+          rt.dirtyInSink.push({ broth: srcRight.broth || 'tonkotsu' });
+        }
+
+        audio.playSauceSizzle();
+        this.onToast(
+          fromType === 'bowl'
+            ? `📦 Перелито в ${targetType === 'box' ? 'коробку' : 'миску'}! Грязная миска ушла на мойку (в мойке: ${rt.dirtyInSink.length})`
+            : `🍜 Перелито в ${targetType === 'box' ? 'коробку' : 'миску'}!`,
+          '#00f5d4'
+        );
+        this.renderAllKitchen();
+        return {
+          action: 'pour_right_to_left',
+          fromType,
+          toType: targetType,
+          vessel: JSON.parse(JSON.stringify(rt.activeVessel))
+        };
+      }
+      audio.playTapPop();
+      this.onToast('😄 В обеих руках пустая посуда — переливать нечего! Верните лишнюю на склад ▶', '#ffaa00');
+      return null;
+    }
+
+    // Если правая рука свободна, левая держит пустую посуду и мы на складе (Сектор 2) -> возвращаем пустую в стопку!
+    if (rt.activeSector === 2 && this.isVesselEmptyOfFood(left)) {
+      const prevType = left.type;
+      if (prevType === 'bowl') {
+        rt.cleanBowls = Math.min(rt.maxCleanBowls || 10, (rt.cleanBowls ?? 0) + 1);
+      } else if (prevType === 'box') {
+        rt.dailyStats.restockSpent = Math.max(0, (rt.dailyStats.restockSpent || 0) - 8);
+      }
+      rt.activeVessel = this.createEmptyVessel(null);
+      rt.vesselHeldInLeft = false;
+      rt.sauceModeArmed = false;
+      audio.playTapPop();
+      this.onToast(
+        prevType === 'bowl'
+          ? `🍜 Пустая миска возвращена в стопку (чистых: ${rt.cleanBowls}/10)`
+          : '📦 Пустая вок-коробка возвращена в стопку (+¥8)',
+        '#00f5d4'
+      );
+      this.renderAllKitchen();
+      return { action: 'return_left_empty', type: prevType };
+    }
+
+    return null;
+  }
+
   handleBasketAction(index) {
+    if (this.blockIfBothHandsBusy()) return;
     const rt = gameState.runtime;
     const unlocked = gameState.getUnlockedBasketCount();
     if (index >= unlocked) return;
@@ -232,6 +328,7 @@ export class KitchenSystem {
   }
 
   selectBroth(brothId) {
+    if (this.blockIfBothHandsBusy()) return;
     const unlocked = gameState.getUnlockedBroths();
     if (!unlocked.includes(brothId)) return;
 
@@ -261,79 +358,171 @@ export class KitchenSystem {
 
   setVesselType(type) {
     const rt = gameState.runtime;
+    const left = rt.activeVessel;
+    const right = rt.rightHandVessel;
+    const hasLeft = Boolean(left && left.type);
+    const hasRight = Boolean(right && right.type);
+    const leftEmpty = !hasLeft || this.isVesselEmptyOfFood(left);
+    const rightEmpty = !hasRight || this.isVesselEmptyOfFood(right);
 
-    // Если в левой руке уже есть наполненная миска, а игрок тапает на коробку (или наоборот) —
-    // БЕРЁМ ПРАВОЙ РУКОЙ КОРОБКУ, ЛЕВОЙ РУКОЙ ПЕРЕЛИВАЕМ РАМЕН ПРЯМО В КОРОБКУ, А ГРЯЗНАЯ МИСКА УХОДИТ В РАКОВИНУ!
-    if (rt.activeVessel && rt.activeVessel.type && !this.isVesselEmptyOfFood(rt.activeVessel)) {
-      if (rt.activeVessel.type === type) {
-        audio.playPenaltyBuzz();
-        this.onToast(
-          type === 'bowl'
-            ? 'В левой руке уже наполненная миска! Тапните на 📦 Коробку, чтобы перелить заказ «с собой»!'
-            : 'В левой руке уже наполненная вок-коробка!',
-          '#ffaa00'
-        );
+    // =========================================================================
+    // ВЕТКА 1: ОБЕ РУКИ ЗАНЯТЫ (hasLeft && hasRight)
+    // =========================================================================
+    if (hasLeft && hasRight) {
+      // 1А. В обеих руках ТОЛЬКО ПУСТАЯ посуда (например, 2 пустые тарелки «для прикола и реалистичности»):
+      // Тап по стопке возвращает правой рукой пустую обратно в стопку, оставляя в левой пустую!
+      if (leftEmpty && rightEmpty) {
+        if (right.type === type) {
+          if (type === 'bowl') {
+            rt.cleanBowls = Math.min(rt.maxCleanBowls || 10, (rt.cleanBowls ?? 0) + 1);
+          } else if (type === 'box') {
+            rt.dailyStats.restockSpent = Math.max(0, (rt.dailyStats.restockSpent || 0) - 8);
+          }
+          rt.rightHandVessel = null;
+          audio.playTapPop();
+          this.onToast(
+            type === 'bowl'
+              ? `🍜 Пустая миска из правой руки возвращена в стопку (чистых: ${rt.cleanBowls}/10)`
+              : '📦 Пустая коробка из правой руки возвращена в стопку (+¥8)',
+            '#00f5d4'
+          );
+          this.renderAllKitchen();
+          return { action: 'return_stack_right', type };
+        }
+        if (left.type === type) {
+          if (type === 'bowl') {
+            rt.cleanBowls = Math.min(rt.maxCleanBowls || 10, (rt.cleanBowls ?? 0) + 1);
+          } else if (type === 'box') {
+            rt.dailyStats.restockSpent = Math.max(0, (rt.dailyStats.restockSpent || 0) - 8);
+          }
+          const moved = JSON.parse(JSON.stringify(right));
+          rt.activeVessel = moved;
+          rt.rightHandVessel = null;
+          audio.playTapPop();
+          this.onToast(
+            type === 'bowl'
+              ? `🍜 Пустая миска возвращена в стопку (чистых: ${rt.cleanBowls}/10)`
+              : '📦 Пустая коробка возвращена в стопку (+¥8)',
+            '#00f5d4'
+          );
+          this.renderAllKitchen();
+          return { action: 'return_left_and_handoff_back', leftType: type, rightVessel: moved };
+        }
         return false;
       }
 
-      if (type === 'box' && rt.activeVessel.type === 'bowl') {
-        // Правой рукой берём вок-коробку (-¥8), левой переливаем из миски в коробку, грязная миска уходит в раковину!
-        rt.dailyStats.restockSpent = (rt.dailyStats.restockSpent || 0) + 8;
-        rt.dirtyInSink.push({ broth: rt.activeVessel.broth || 'tonkotsu' });
-        rt.activeVessel = {
-          ...rt.activeVessel,
-          type: 'box'
-        };
+      // 1Б. В левой ПУСТАЯ, в правой ПОЛНАЯ (с едой):
+      // Тап по стопке того же типа, что в левой руке -> кладём чистую пустую из левой руки обратно в стопку
+      // и перекладываем полную посуду из правой руки обратно в левую!
+      if (leftEmpty && !rightEmpty) {
+        if (left.type !== type) {
+          audio.playPenaltyBuzz();
+          this.onToast(
+            left.type === 'bowl'
+              ? 'Сначала верните пустую 🍜 миску в стопку мисок (или тапните по ней слева, чтобы перелить)!'
+              : 'Сначала верните пустую 📦 коробку в стопку коробок (или тапните по ней слева, чтобы перелить)!',
+            '#ffaa00'
+          );
+          return false;
+        }
+        if (type === 'bowl') {
+          rt.cleanBowls = Math.min(rt.maxCleanBowls || 10, (rt.cleanBowls ?? 0) + 1);
+        } else if (type === 'box') {
+          rt.dailyStats.restockSpent = Math.max(0, (rt.dailyStats.restockSpent || 0) - 8);
+        }
+        const restored = JSON.parse(JSON.stringify(right));
+        rt.activeVessel = restored;
+        rt.rightHandVessel = null;
         rt.vesselHeldInLeft = true;
-        audio.playSauceSizzle();
+        audio.playTapPop();
         this.onToast(
-          `📦 Перелито в вок-коробку (-¥8)! Грязная миска отправлена в раковину (в мойке: ${rt.dirtyInSink.length})`,
+          type === 'bowl'
+            ? `🍜 Пустая миска возвращена (${rt.cleanBowls}/10), рамен переложен обратно в левую руку!`
+            : '📦 Пустая коробка возвращена (+¥8), рамен переложен обратно в левую руку!',
           '#00f5d4'
         );
         this.renderAllKitchen();
-        return 'poured_to_box';
+        return { action: 'return_left_and_handoff_back', leftType: type, rightVessel: restored };
       }
 
-      if (type === 'bowl' && rt.activeVessel.type === 'box') {
+      return false;
+    }
+
+    // =========================================================================
+    // ВЕТКА 2: В ЛЕВОЙ РУКЕ ПОЛНАЯ (С ЕДОЙ), ПРАВАЯ СВОБОДНА
+    // -> Перекладываем полную в ПРАВУЮ руку и берём чистую пустую (type) в ЛЕВУЮ!
+    //    Переливание НЕ происходит сразу — только по тапу по пустой посуде в левой руке!
+    // =========================================================================
+    if (hasLeft && !leftEmpty && !hasRight) {
+      if (type === 'bowl') {
         if ((rt.cleanBowls ?? 10) <= 0) {
           audio.playPenaltyBuzz();
           this.onToast('🍽️ Чистые миски закончились (0/10)! Помойте посуду в раковине слева!', '#ff385c');
           return false;
         }
         rt.cleanBowls = Math.max(0, (rt.cleanBowls ?? 10) - 1);
-        rt.activeVessel = {
-          ...rt.activeVessel,
-          type: 'bowl'
-        };
-        rt.vesselHeldInLeft = true;
-        audio.playSauceSizzle();
-        this.onToast(`🍜 Перелито из коробки в чистую миску (осталось чистых: ${rt.cleanBowls}/10)`, '#00f5d4');
-        this.renderAllKitchen();
-        return 'poured_to_bowl';
+      } else if (type === 'box') {
+        rt.dailyStats.restockSpent = (rt.dailyStats.restockSpent || 0) + 8;
       }
+
+      const fullMoved = JSON.parse(JSON.stringify(left));
+      rt.rightHandVessel = fullMoved;
+      rt.activeVessel = this.createEmptyVessel(type);
+      rt.vesselHeldInLeft = true;
+      rt.sauceModeArmed = false;
+      audio.playTapPop();
+      this.onToast(
+        type === 'box'
+          ? '🙌 Рамен в правой, 📦 пустая коробка в левой (-¥8)! Тапните по коробке слева, чтобы перелить (или верните в стопку).'
+          : `🙌 Рамен в правой, 🍜 чистая миска в левой (${rt.cleanBowls}/10)! Тапните по миске слева, чтобы перелить (или верните в стопку).`,
+        '#00f5d4'
+      );
+      this.renderAllKitchen();
+      return { action: 'handoff_and_grab_left', grabType: type, rightVessel: fullMoved };
     }
 
-    // Если в левой руке пустая посуда того же типа — ВОЗВРАЩАЕМ её обратно в стопку!
-    if (rt.activeVessel && rt.activeVessel.type === type && this.isVesselEmptyOfFood(rt.activeVessel)) {
+    // =========================================================================
+    // ВЕТКА 3: В ЛЕВОЙ РУКЕ ПУСТАЯ, ПРАВАЯ СВОБОДНА
+    // -> Правой рукой берём ВТОРУЮ пустую посуду со стопки (в обеих руках пустые!)
+    //    (Если стопка мисок 0/10 и в левой миска — возвращаем её обратно в стопку!)
+    // =========================================================================
+    if (hasLeft && leftEmpty && !hasRight) {
       if (type === 'bowl') {
-        rt.cleanBowls = Math.min(rt.maxCleanBowls || 10, (rt.cleanBowls ?? 0) + 1);
+        if ((rt.cleanBowls ?? 10) <= 0) {
+          if (left.type === 'bowl') {
+            rt.cleanBowls = 1;
+            rt.activeVessel = this.createEmptyVessel(null);
+            rt.vesselHeldInLeft = false;
+            audio.playTapPop();
+            this.onToast('🍜 Пустая миска возвращена в стопку (чистых: 1/10)', '#00f5d4');
+            this.renderAllKitchen();
+            return { action: 'return_left_empty', type: 'bowl' };
+          }
+          audio.playPenaltyBuzz();
+          this.onToast('🍽️ Чистые миски закончились (0/10)! Помойте посуду в раковине слева!', '#ff385c');
+          return false;
+        }
+        rt.cleanBowls = Math.max(0, (rt.cleanBowls ?? 10) - 1);
       } else if (type === 'box') {
-        rt.dailyStats.restockSpent = Math.max(0, (rt.dailyStats.restockSpent || 0) - 8);
+        rt.dailyStats.restockSpent = (rt.dailyStats.restockSpent || 0) + 8;
       }
-      rt.activeVessel = this.createEmptyVessel(null);
-      rt.vesselHeldInLeft = false;
+
+      rt.rightHandVessel = this.createEmptyVessel(type);
       rt.sauceModeArmed = false;
       audio.playTapPop();
       this.onToast(
         type === 'bowl'
-          ? `🍜 Пустая миска возвращена в стопку (чистых: ${rt.cleanBowls}/10)`
-          : '📦 Пустая вок-коробка возвращена в стопку (+¥8)',
+          ? `😄 Взята вторая пустая миска в правую руку (${rt.cleanBowls}/10)! Тапните по стопке, чтобы положить обратно.`
+          : '😄 Взята пустая коробка в правую руку (-¥8)! Тапните по стопке, чтобы положить обратно.',
         '#00f5d4'
       );
       this.renderAllKitchen();
-      return type === 'bowl' ? 'returned_bowl' : 'returned_box';
+      return { action: 'grab_stack_right', type };
     }
 
+    // =========================================================================
+    // ВЕТКА 4: ОБЕ РУКИ СВОБОДНЫ -> берём чистую посуду в левую руку
+    // =========================================================================
     if (type === 'bowl') {
       if ((rt.cleanBowls ?? 10) <= 0) {
         audio.playPenaltyBuzz();
@@ -343,17 +532,8 @@ export class KitchenSystem {
         );
         return false;
       }
-      // Если в руке была пустая коробка и игрок меняет её на миску — возвращаем ¥8 за пустую коробку!
-      if (rt.activeVessel && rt.activeVessel.type === 'box' && this.isVesselEmptyOfFood(rt.activeVessel)) {
-        rt.dailyStats.restockSpent = Math.max(0, (rt.dailyStats.restockSpent || 0) - 8);
-      }
       rt.cleanBowls = Math.max(0, (rt.cleanBowls ?? 10) - 1);
     } else if (type === 'box') {
-      // Если в руке была пустая чистая миска и игрок меняет её на коробку — возвращаем чистую миску обратно в стопку
-      if (rt.activeVessel && rt.activeVessel.type === 'bowl' && this.isVesselEmptyOfFood(rt.activeVessel)) {
-        rt.cleanBowls = Math.min(rt.maxCleanBowls || 10, (rt.cleanBowls ?? 0) + 1);
-      }
-      // Картонные вок-коробочки всегда доступны, но стоят ¥8 за штуку
       rt.dailyStats.restockSpent = (rt.dailyStats.restockSpent || 0) + 8;
     }
 
@@ -368,7 +548,7 @@ export class KitchenSystem {
       type === 'bowl' ? '#00f5d4' : '#ffaa00'
     );
     this.renderAllKitchen();
-    return true;
+    return { action: 'grab_stack_left', type };
   }
 
   // Взаимодействие с одним из 3 слотов на центральном столе (поставить / взять / перелить!)
@@ -496,6 +676,7 @@ export class KitchenSystem {
 
   // Выбрасывание в мусорку ТОЛЬКО того, что сейчас находится в левой руке!
   disposeHeldVesselToTrash() {
+    if (this.blockIfBothHandsBusy()) return null;
     const rt = gameState.runtime;
     if (!rt.activeVessel || !rt.activeVessel.type) {
       audio.playPenaltyBuzz();
@@ -552,6 +733,7 @@ export class KitchenSystem {
   }
 
   handleToppingTap(toppingId) {
+    if (this.blockIfBothHandsBusy()) return;
     const rt = gameState.runtime;
     if (!rt.activeVessel.type) {
       audio.playPenaltyBuzz();
@@ -601,6 +783,7 @@ export class KitchenSystem {
   }
 
   applyChiliSauce() {
+    if (this.blockIfBothHandsBusy()) return;
     const rt = gameState.runtime;
     const stock = gameState.persistent.trayStock.chili ?? 0;
     if (stock <= 0) {
@@ -630,6 +813,7 @@ export class KitchenSystem {
 
   // Достать поднос из-под прилавка и поставить на центральную столешницу
   takeTrayFromUnderCounter() {
+    if (this.blockIfBothHandsBusy()) return false;
     const rt = gameState.runtime;
     if (!rt.assembly) {
       rt.assembly = { hasTray: false, hasBag: false, vessel: null, hasChopsticks: false, drink: null };
@@ -651,6 +835,7 @@ export class KitchenSystem {
 
   // Достать бумажный пакет для заказа «с собой» из-под прилавка (ставит пакет на стол или прямо на поднос с перекладыванием!)
   takeBagFromUnderCounter() {
+    if (this.blockIfBothHandsBusy()) return null;
     const rt = gameState.runtime;
     if (!rt.assembly) {
       rt.assembly = { hasTray: false, hasBag: false, vessel: null, hasChopsticks: false, drink: null };
@@ -704,11 +889,38 @@ export class KitchenSystem {
     }
     const a = rt.assembly;
     const handV = rt.activeVessel;
+    const rightV = rt.rightHandVessel;
     const hasHand = Boolean(handV && handV.type);
+    const hasRight = Boolean(rightV && rightV.type);
 
     if (!a.hasTray && !a.hasBag) {
       audio.playPenaltyBuzz();
       this.onToast('Свайпните вверх ↑ под прилавок, чтобы достать 🍱 Поднос или 🛍️ Пакет!', '#ffaa00');
+      return null;
+    }
+
+    // 0. Если ОБЕ РУКИ ЗАНЯТЫ и место на подносе свободно -> ставим посуду из ПРАВОЙ руки на поднос (освобождая правую руку!)
+    if (hasHand && hasRight) {
+      if (!a.vessel) {
+        if (a.hasBag && rightV.type !== 'box') {
+          audio.playPenaltyBuzz();
+          this.onToast('🚫 Тарелку нельзя положить в пакет — только 📦 Вок-коробку!', '#ff385c');
+          return null;
+        }
+        const placedRight = JSON.parse(JSON.stringify(rightV));
+        a.vessel = placedRight;
+        rt.rightHandVessel = null;
+        audio.playTapPop();
+        this.onToast(
+          a.hasBag
+            ? `${placedRight.type === 'box' ? '📦 Коробка' : '🍜 Миска'} из правой руки положена в пакет!`
+            : `${placedRight.type === 'box' ? '📦 Коробка' : '🍜 Миска'} из правой руки поставлена обратно на поднос!`,
+          '#00f5d4'
+        );
+        this.renderAllKitchen();
+        return { action: 'place', vessel: placedRight, intoBag: a.hasBag };
+      }
+      this.blockIfBothHandsBusy();
       return null;
     }
 
@@ -755,44 +967,29 @@ export class KitchenSystem {
       return { action: 'pickup', vessel: picked, fromBag: a.hasBag };
     }
 
-    // 3. В левой руке пустая коробка/миска, а на подносе (без пакета) стоит наполненная миска/коробка другого типа ->
-    //    ПРАВОЙ РУКОЙ БЕРЁМ МИСКУ С ПОДНОСА И ПЕРЕЛИВАЕМ РАМЕН В КОРОБКУ В ЛЕВОЙ РУКЕ! МИСКА УХОДИТ НА МОЙКУ!
+    // 3. В левой руке ПУСТАЯ миска/коробка, а на подносе (без пакета) стоит НАПОЛНЕННАЯ миска/коробка ->
+    //    ПРАВОЙ РУКОЙ ПОДНИМАЕМ НАПОЛНЕННУЮ ТАРЕЛКУ С ПОДНОСА И ДЕРЖИМ В ОБЕИХ РУКАХ!
+    //    (Дальше тап по пустой слева -> перелить, либо повернуть на склад -> вернуть пустую в стопку!)
     if (
       hasHand &&
+      !hasRight &&
       a.vessel &&
       !a.hasBag &&
       this.isVesselEmptyOfFood(handV) &&
-      !this.isVesselEmptyOfFood(a.vessel) &&
-      handV.type !== a.vessel.type
+      !this.isVesselEmptyOfFood(a.vessel)
     ) {
-      const srcVessel = JSON.parse(JSON.stringify(a.vessel));
-      const targetType = handV.type;
-      const fromType = srcVessel.type;
-
-      rt.activeVessel = {
-        ...srcVessel,
-        type: targetType
-      };
-      rt.vesselHeldInLeft = true;
+      const lifted = JSON.parse(JSON.stringify(a.vessel));
+      rt.rightHandVessel = lifted;
       a.vessel = null;
-
-      if (fromType === 'bowl') {
-        rt.dirtyInSink.push({ broth: srcVessel.broth || 'tonkotsu' });
-      }
-
-      audio.playSauceSizzle();
+      audio.playTapPop();
       this.onToast(
-        fromType === 'bowl'
-          ? `📦 Перелито из миски в коробку! Грязная миска ушла на мойку (в мойке: ${rt.dirtyInSink.length})`
-          : '🍜 Перелито из коробки в чистую миску!',
+        `🙌 ${lifted.type === 'bowl' ? '🍜 Миска' : '📦 Коробка'} с подноса в правой руке! Тапните по пустой слева, чтобы перелить (или верните пустую на склад ▶)`,
         '#00f5d4'
       );
       this.renderAllKitchen();
       return {
-        action: 'pour_from_tray',
-        fromType,
-        toType: targetType,
-        vessel: JSON.parse(JSON.stringify(rt.activeVessel))
+        action: 'pickup_tray_right',
+        vessel: lifted
       };
     }
 
@@ -807,6 +1004,7 @@ export class KitchenSystem {
 
   // Положить бамбуковые палочки Варибаси на поднос или в пакет
   addChopsticksToAssembly() {
+    if (this.blockIfBothHandsBusy()) return false;
     const rt = gameState.runtime;
     if (!rt.assembly || (!rt.assembly.hasTray && !rt.assembly.hasBag)) {
       audio.playPenaltyBuzz();
@@ -989,6 +1187,7 @@ export class KitchenSystem {
 
   // Забрать одну грязную миску с левой или правой верхней полки прилавка (1 тап = 1 миска уходит в мойку!)
   collectDirtyBowlFromShelf(side = 'left') {
+    if (this.blockIfBothHandsBusy()) return null;
     const rt = gameState.runtime;
     const shelf = side === 'right' ? rt.dirtyShelfRight : rt.dirtyShelfLeft;
     if (!shelf || shelf.length === 0) {
@@ -1009,6 +1208,7 @@ export class KitchenSystem {
   // Помыть одну грязную миску в раковине (Сектор -1, левее плиты):
   // Руки протягиваются к миске, моют её губкой и кладут слева на площадку для чистой посуды (washedOnRack)!
   washOneBowlInSink() {
+    if (this.blockIfBothHandsBusy()) return null;
     const rt = gameState.runtime;
     if (!rt.dirtyInSink || rt.dirtyInSink.length === 0) {
       audio.playTapPop();
@@ -1042,6 +1242,7 @@ export class KitchenSystem {
 
   // Забрать уже вымытую чистую миску с площадки слева от раковины (только тогда она попадает в стопку с чистой посудой!)
   collectCleanBowlFromRack() {
+    if (this.blockIfBothHandsBusy()) return null;
     const rt = gameState.runtime;
     if (!rt.washedOnRack || rt.washedOnRack <= 0) {
       return null;
@@ -1065,6 +1266,7 @@ export class KitchenSystem {
 
   // Автоматическое закрывание вок-коробочки и мгновенная передача дрону-курьеру при тапе по дрону!
   deliverBoxToCourierDrone() {
+    if (this.blockIfBothHandsBusy()) return null;
     const rt = gameState.runtime;
     const del = rt.activeDelivery;
     if (!del) {
@@ -1164,6 +1366,7 @@ export class KitchenSystem {
 
   // Пополнить ОДИН выбранный контейнер на столе по тапу на него внутри открытого Крио-Холодильника!
   restockSingleTopping(toppingId) {
+    if (this.blockIfBothHandsBusy()) return false;
     const cfg = GAME_CONFIG.TOPPINGS[toppingId];
     if (!cfg) return false;
     const unlocked = gameState.getUnlockedToppings();
@@ -1198,6 +1401,7 @@ export class KitchenSystem {
 
   // Взять охлаждённую жестяную банку с верхней полки холодильника и выставить на поднос или убрать в пакет!
   addDrinkToAssembly(drinkId) {
+    if (this.blockIfBothHandsBusy()) return null;
     const rt = gameState.runtime;
     const cfg = GAME_CONFIG.DRINKS?.[drinkId];
     if (!cfg) return null;

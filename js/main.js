@@ -1,16 +1,16 @@
-import { GAME_CONFIG } from './config.js?v=78';
-import { gameState, createShiftRuntimeState } from './state.js?v=78';
-import { audio } from './audio.js?v=78';
+import { GAME_CONFIG } from './config.js?v=79';
+import { gameState, createShiftRuntimeState } from './state.js?v=79';
+import { audio } from './audio.js?v=79';
 import {
   buildCustomerPortraitSVG,
   buildCourierDroneSVG,
   generateAppleTouchIcon
-} from './renderer.js?v=78';
-import { FirstPersonWebGLScene } from './webgl3d.js?v=78';
-import { CustomerAndDeliverySystem } from './customers.js?v=78';
-import { KitchenSystem } from './kitchen.js?v=78';
-import { EconomySystem } from './economy.js?v=78';
-import { TutorialSystem } from './tutorial.js?v=78';
+} from './renderer.js?v=79';
+import { FirstPersonWebGLScene } from './webgl3d.js?v=79';
+import { CustomerAndDeliverySystem } from './customers.js?v=79';
+import { KitchenSystem } from './kitchen.js?v=79';
+import { EconomySystem } from './economy.js?v=79';
+import { TutorialSystem } from './tutorial.js?v=79';
 
 class CyberRamenApp {
   constructor() {
@@ -159,11 +159,23 @@ class CyberRamenApp {
       return;
     }
 
+    if (hitId === 'held_left_vessel') {
+      const res = this.kitchenSystem.handleHeldLeftVesselTap();
+      if (res) {
+        if (res.action === 'pour_right_to_left') {
+          this.scene3D.triggerDualHandAnim('pour_right_to_left', res);
+        } else if (res.action === 'return_left_empty') {
+          this.scene3D.triggerRightStackReturnAnim(res.type);
+        }
+      }
+      return;
+    }
+
     if (hitId === 'assembly_zone' || hitId === 'center_vessel' || hitId.startsWith('table_slot_')) {
       const res = this.kitchenSystem.handleAssemblyZoneTap();
       if (res) {
-        if (res.action === 'pour_from_tray') {
-          this.scene3D.triggerTrayToHandPourAnim(res.fromType, res.toType, res.vessel);
+        if (res.action === 'pickup_tray_right') {
+          this.scene3D.triggerDualHandAnim('pickup_tray_right', res);
         } else {
           this.scene3D.triggerAssemblyVesselAnim(res);
         }
@@ -260,6 +272,7 @@ class CyberRamenApp {
     }
 
     if (hitId === 'cryo_fridge') {
+      if (this.kitchenSystem.blockIfBothHandsBusy()) return;
       if (!gameState.runtime.fridgeOpen) {
         gameState.runtime.fridgeOpen = true;
         this.scene3D.triggerFridgeDoorAnim('open');
@@ -327,7 +340,7 @@ class CyberRamenApp {
 
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker
-        .register('./sw.js?v=78', { updateViaCache: 'none' })
+        .register('./sw.js?v=79', { updateViaCache: 'none' })
         .then((reg) => reg.update())
         .catch(() => {});
     }
@@ -460,16 +473,17 @@ class CyberRamenApp {
   startVesselPickupSequence(type) {
     const res = this.kitchenSystem.setVesselType(type);
     if (!res) return;
-    if (res === 'returned_bowl' || res === 'returned_box') {
-      this.scene3D.triggerRightStackReturnAnim(type);
-    } else if (res === 'poured_to_box' || res === 'poured_to_bowl') {
-      this.scene3D.triggerDirectHandPourAnim(
-        res === 'poured_to_box' ? 'bowl' : 'box',
-        type,
-        gameState.runtime.activeVessel
-      );
-    } else {
-      this.scene3D.triggerRightStackGrabAnim(type);
+    if (res.action === 'return_left_empty') {
+      this.scene3D.triggerRightStackReturnAnim(res.type);
+    } else if (res.action === 'grab_stack_left') {
+      this.scene3D.triggerRightStackGrabAnim(res.type);
+    } else if (
+      res.action === 'grab_stack_right' ||
+      res.action === 'return_stack_right' ||
+      res.action === 'handoff_and_grab_left' ||
+      res.action === 'return_left_and_handoff_back'
+    ) {
+      this.scene3D.triggerDualHandAnim(res.action, res);
     }
   }
 

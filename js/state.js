@@ -1,4 +1,4 @@
-import { GAME_CONFIG } from './config.js?v=78';
+import { GAME_CONFIG } from './config.js?v=79';
 
 const BASE_SAVE_KEY = 'CR_NIGHT_YATAI_SAVE_V1';
 
@@ -110,6 +110,8 @@ export function createShiftRuntimeState() {
       wasStagedOnTable: false,
       overflowCount: 0    // перелив через край (перевод продуктов)
     },
+    // Посуда, которая сейчас находится в ПРАВОЙ РУКЕ повара (при двуручном переливании / подъёме с подноса / парных пустых тарелках!)
+    rightHandVessel: null,
     // Зона сборки заказа в центре столешницы (поднос / пакет, поставленная миска или коробка, палочки, будущие напитки)
     assembly: {
       hasTray: false,

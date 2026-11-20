@@ -1,5 +1,5 @@
-import { GAME_CONFIG } from './config.js?v=78';
-import { gameState } from './state.js?v=78';
+import { GAME_CONFIG } from './config.js?v=79';
+import { gameState } from './state.js?v=79';
 import {
   createAlleyBackdropTexture,
   createBuildingFacadeTexture,
@@ -9,7 +9,7 @@ import {
   createWallMenuSignTexture,
   createPedestrianTextures,
   AnimeCustomerTextureRenderer
-} from './art3d.js?v=78';
+} from './art3d.js?v=79';
 
 /**
  * Полноэкранный WebGL 3D движок от первого лица с процедурной высокодетализированной
@@ -112,6 +112,17 @@ export class FirstPersonWebGLScene {
       timer: 0,
       duration: 1.48,
       vessel: null
+    };
+    this.dualHandAnim = {
+      active: false,
+      mode: 'pickup_tray_right',
+      timer: 0,
+      duration: 0.6,
+      fromType: 'bowl',
+      toType: 'box',
+      type: 'bowl',
+      vessel: null,
+      targetIdx: 0
     };
     this.toppingAnim = {
       active: false,
@@ -374,6 +385,43 @@ export class FirstPersonWebGLScene {
       : { type: toType, broth: 'tonkotsu', noodleState: 'aldente', toppings: [] };
     this.heldVesselAppear = 1.0;
     this.vesselBounce = 0.85;
+  }
+
+  triggerDualHandAnim(mode, data = {}) {
+    this.rightGrabAnim.active = false;
+    this.rightReturnAnim.active = false;
+    this.handPourAnim.active = false;
+    const rt = gameState.runtime;
+    const d = this.dualHandAnim;
+    d.active = true;
+    d.mode = mode;
+    d.timer = 0;
+    d.fromType = data.fromType || 'bowl';
+    d.toType = data.toType || 'box';
+    d.type = data.type || data.grabType || data.leftType || 'bowl';
+    const srcV = data.vessel || data.rightVessel || null;
+    d.vessel = srcV ? { ...srcV, toppings: [...(srcV.toppings || [])] } : null;
+
+    if (mode === 'pickup_tray_right') {
+      d.duration = 0.54;
+    } else if (mode === 'pour_right_to_left') {
+      d.duration = 0.96;
+    } else if (mode === 'handoff_and_grab_left') {
+      d.duration = 0.88;
+      d.targetIdx = Math.max(0, Math.min(9, rt.cleanBowls ?? 0));
+    } else if (mode === 'return_left_and_handoff_back') {
+      d.duration = 0.82;
+      d.targetIdx = Math.max(0, Math.min(9, (rt.cleanBowls ?? 1) - 1));
+    } else if (mode === 'grab_stack_right') {
+      d.duration = 0.52;
+      d.targetIdx = Math.max(0, Math.min(9, rt.cleanBowls ?? 0));
+    } else if (mode === 'return_stack_right') {
+      d.duration = 0.48;
+      d.targetIdx = Math.max(0, Math.min(9, (rt.cleanBowls ?? 1) - 1));
+    } else {
+      d.duration = 0.56;
+    }
+    this.vesselBounce = 0.65;
   }
 
   triggerSinkWashAnim(bowl = null) {
@@ -1433,6 +1481,12 @@ export class FirstPersonWebGLScene {
       this.handPourAnim.timer += dt;
       if (this.handPourAnim.timer >= this.handPourAnim.duration) {
         this.handPourAnim.active = false;
+      }
+    }
+    if (this.dualHandAnim.active) {
+      this.dualHandAnim.timer += dt;
+      if (this.dualHandAnim.timer >= this.dualHandAnim.duration) {
+        this.dualHandAnim.active = false;
       }
     }
     if (this.toppingAnim.active) {
@@ -4423,15 +4477,24 @@ export class FirstPersonWebGLScene {
     }
 
     // Отрисовываем точное количество оставшихся чистых мисок (от 10 до 0: взял одну -> стало 9, вернул -> снова 10!)
+    const dualP = this.dualHandAnim.active ? this.dualHandAnim.timer / this.dualHandAnim.duration : 1;
     const pourBowlNotGrabbedYet =
-      this.handPourAnim.active &&
-      !this.handPourAnim.fromTray &&
-      this.handPourAnim.toType === 'bowl' &&
-      this.handPourAnim.timer / this.handPourAnim.duration < 0.22;
+      (this.handPourAnim.active &&
+        !this.handPourAnim.fromTray &&
+        this.handPourAnim.toType === 'bowl' &&
+        this.handPourAnim.timer / this.handPourAnim.duration < 0.22) ||
+      (this.dualHandAnim.active &&
+        this.dualHandAnim.type === 'bowl' &&
+        ((this.dualHandAnim.mode === 'handoff_and_grab_left' && dualP < 0.55) ||
+          (this.dualHandAnim.mode === 'grab_stack_right' && dualP < 0.34)));
     const returningBowlNotLandedYet =
-      this.rightReturnAnim.active &&
-      this.rightReturnAnim.type === 'bowl' &&
-      this.rightReturnAnim.timer / this.rightReturnAnim.duration < 0.72;
+      (this.rightReturnAnim.active &&
+        this.rightReturnAnim.type === 'bowl' &&
+        this.rightReturnAnim.timer / this.rightReturnAnim.duration < 0.72) ||
+      (this.dualHandAnim.active &&
+        this.dualHandAnim.type === 'bowl' &&
+        ((this.dualHandAnim.mode === 'return_stack_right' && dualP < 0.72) ||
+          (this.dualHandAnim.mode === 'return_left_and_handoff_back' && dualP < 0.44)));
     const cleanCount = Math.max(
       0,
       Math.min(
@@ -4493,7 +4556,13 @@ export class FirstPersonWebGLScene {
       (this.handPourAnim.active &&
         !this.handPourAnim.fromTray &&
         this.handPourAnim.toType === 'box' &&
-        this.handPourAnim.timer / this.handPourAnim.duration >= 0.22);
+        this.handPourAnim.timer / this.handPourAnim.duration >= 0.22) ||
+      (this.dualHandAnim.active &&
+        this.dualHandAnim.type === 'box' &&
+        ((this.dualHandAnim.mode === 'handoff_and_grab_left' && dualP >= 0.55) ||
+          (this.dualHandAnim.mode === 'grab_stack_right' && dualP >= 0.34) ||
+          (this.dualHandAnim.mode === 'return_stack_right' && dualP < 0.72) ||
+          (this.dualHandAnim.mode === 'return_left_and_handoff_back' && dualP < 0.44)));
     const boxStackCount = grabbingBox ? 2 : 3;
     for (let k = 0; k < boxStackCount; k++) {
       const by = 0.914 + k * 0.042;
@@ -5024,6 +5093,314 @@ export class FirstPersonWebGLScene {
     const { F, R, U } = this.getCameraBasis();
     const yawAngle = Math.atan2(-F[0], -F[2]);
 
+    // Вспомогательные функции отрисовки кибер-перчаток обеих рук (левая и правая)
+    const drawRightGloveAt = (rx, ry, rz, extraRoll = 0) => {
+      const rhX = rx + R[0] * 0.088 - F[0] * 0.054;
+      const rhY = ry - 0.034;
+      const rhZ = rz + R[2] * 0.088 - F[2] * 0.054;
+      const rhRot = [0.06, yawAngle + 0.34, -0.12 + extraRoll];
+      this.drawBox(rhX, rhY, rhZ, 0.074, 0.034, 0.13, [0.16, 0.14, 0.24], 0.22, rhRot);
+      this.drawBox(rhX, rhY + 0.018, rhZ, 0.078, 0.011, 0.04, [0.0, 0.96, 0.83], 0.92, rhRot);
+      this.drawBox(
+        rx + R[0] * 0.12 - F[0] * 0.02,
+        ry + 0.022,
+        rz + R[2] * 0.12 - F[2] * 0.02,
+        0.024,
+        0.024,
+        0.048,
+        [0.2, 0.18, 0.3],
+        0.25,
+        [0.08, yawAngle + 0.15, -0.24 + extraRoll]
+      );
+      this.drawBox(
+        rhX + R[0] * 0.055 - F[0] * 0.082,
+        rhY - 0.024,
+        rhZ + R[2] * 0.055 - F[2] * 0.082,
+        0.08,
+        0.048,
+        0.135,
+        [0.11, 0.13, 0.2],
+        0.15,
+        rhRot
+      );
+    };
+
+    const drawLeftGloveAt = (lx, ly, lz, pulseGlow = 0.92) => {
+      const lhX = lx - R[0] * 0.092 - F[0] * 0.056;
+      const lhY = ly - 0.036;
+      const lhZ = lz - R[2] * 0.092 - F[2] * 0.056;
+      const lhRot = [0.06, yawAngle - 0.34, 0.12];
+      this.drawBox(lhX, lhY, lhZ, 0.074, 0.034, 0.13, [0.16, 0.14, 0.24], 0.22, lhRot);
+      this.drawBox(lhX, lhY + 0.018, lhZ, 0.078, 0.011, 0.04, [0.0, 0.96, 0.83], pulseGlow, lhRot);
+      this.drawBox(
+        lx - R[0] * 0.124 - F[0] * 0.022,
+        ly + 0.022,
+        lz - R[2] * 0.124 - F[2] * 0.022,
+        0.024,
+        0.024,
+        0.048,
+        [0.2, 0.18, 0.3],
+        0.25,
+        [0.08, yawAngle - 0.15, 0.24]
+      );
+      this.drawBox(
+        lhX - R[0] * 0.055 - F[0] * 0.082,
+        lhY - 0.024,
+        lhZ - R[2] * 0.055 - F[2] * 0.082,
+        0.08,
+        0.048,
+        0.135,
+        [0.11, 0.13, 0.2],
+        0.15,
+        lhRot
+      );
+    };
+
+    const rightHoldX = basePos[0] + R[0] * 0.24 + F[0] * 0.015;
+    const rightHoldY = basePos[1] + U[1] * 0.005;
+    const rightHoldZ = basePos[2] + R[2] * 0.24 + F[2] * 0.015;
+
+    // =========================================================================
+    // ЕДИНАЯ ДВУРУЧНАЯ СИСТЕМА АНИМАЦИЙ (this.dualHandAnim):
+    // - pickup_tray_right: правая рука поднимает наполненную тарелку с подноса (держим обе!)
+    // - pour_right_to_left: переливаем из правой руки в пустую в левой (по тапу на пустую!), грязная миска на мойку!
+    // - handoff_and_grab_left: полная из левой переходит в правую, а левая берёт чистую пустую со стопки!
+    // - return_left_and_handoff_back: левая возвращает пустую в стопку, правая перекладывает полную обратно в левую!
+    // - grab_stack_right: левая держит пустую, правая берёт вторую пустую со стопки!
+    // - return_stack_right: левая держит пустую, правая возвращает свою пустую обратно в стопку!
+    // =========================================================================
+    if (this.dualHandAnim.active) {
+      const d = this.dualHandAnim;
+      const p = Math.min(1, d.timer / d.duration);
+      const mode = d.mode;
+      const stackX = 0.84;
+      const isBox = d.type === 'box';
+      const stackY = isBox ? 0.998 : 0.918 + (d.targetIdx || 0) * 0.02;
+      const stackZ = isBox ? -0.5 : -0.22;
+      const stackScale = isBox ? 0.6 : 0.48;
+      const rightStartX = rightHoldX + R[0] * 0.06;
+      const rightStartY = rightHoldY - 0.14;
+      const rightStartZ = rightHoldZ + R[2] * 0.06;
+
+      if (mode === 'pickup_tray_right') {
+        // Левая держит пустую; правая вылетает к миске на подносе (-0.13, 0.918, -0.24) и поднимает её в правую руку!
+        this.drawFilledVessel3D(basePos[0], basePos[1], basePos[2], v, 0.64, false);
+        drawLeftGloveAt(basePos[0], basePos[1], basePos[2]);
+        const trayX = -0.13;
+        const trayY = 0.918;
+        const trayZ = -0.24;
+        const liftedV = d.vessel || rt.rightHandVessel;
+        if (p < 0.4) {
+          const t = p / 0.4;
+          const s = t * t * (3 - 2 * t);
+          if (liftedV) this.drawFilledVessel3D(trayX, trayY, trayZ, liftedV, 0.76, false);
+          drawRightGloveAt(
+            rightStartX + (trayX - rightStartX) * s,
+            rightStartY + (trayY + 0.02 - rightStartY) * s + Math.sin(t * Math.PI) * 0.05,
+            rightStartZ + (trayZ - rightStartZ) * s
+          );
+        } else {
+          const t = (p - 0.4) / 0.6;
+          const s = t * t * (3 - 2 * t);
+          const rx = trayX + (rightHoldX - trayX) * s;
+          const ry = trayY + (rightHoldY - trayY) * s + Math.sin(t * Math.PI) * 0.075;
+          const rz = trayZ + (rightHoldZ - trayZ) * s;
+          const sc = 0.76 + (0.62 - 0.76) * s;
+          if (liftedV) this.drawFilledVessel3D(rx, ry, rz, liftedV, sc, false);
+          drawRightGloveAt(rx, ry, rz);
+        }
+        return;
+      }
+
+      if (mode === 'pour_right_to_left') {
+        // Переливание из правой руки в пустую в левой + увод грязной миски на мойку!
+        const fromType = d.fromType || 'bowl';
+        const toType = d.toType || v.type || 'box';
+        const fullNew = d.vessel || v;
+        const emptyNew = { type: toType, broth: null, noodleState: null, toppings: [], overflowCount: 0 };
+        const fullOld = { ...fullNew, type: fromType };
+        const pourTargetX = basePos[0] + R[0] * 0.105 + F[0] * 0.015;
+        const pourTargetY = basePos[1] + 0.165;
+        const pourTargetZ = basePos[2] + R[2] * 0.105 + F[2] * 0.015;
+
+        if (p < 0.22) {
+          const t = p / 0.22;
+          const s = t * t * (3 - 2 * t);
+          this.drawFilledVessel3D(basePos[0], basePos[1], basePos[2], emptyNew, 0.64, false);
+          drawLeftGloveAt(basePos[0], basePos[1], basePos[2]);
+          const rx = rightHoldX + (pourTargetX - rightHoldX) * s;
+          const ry = rightHoldY + (pourTargetY - rightHoldY) * s;
+          const rz = rightHoldZ + (pourTargetZ - rightHoldZ) * s;
+          this.drawFilledVessel3D(rx, ry, rz, fullOld, 0.6, false);
+          drawRightGloveAt(rx, ry, rz);
+          return;
+        }
+        if (p < 0.78) {
+          const t = (p - 0.22) / 0.56;
+          const pourCurve = Math.sin(t * Math.PI);
+          const leftHasFood = t >= 0.42;
+          this.drawFilledVessel3D(basePos[0], basePos[1], basePos[2], leftHasFood ? fullNew : emptyNew, 0.64, false);
+          drawLeftGloveAt(basePos[0], basePos[1], basePos[2]);
+          const tiltZ = 0.78 * pourCurve;
+          if (fromType === 'bowl') {
+            this.drawDirtyBowl3D(pourTargetX, pourTargetY, pourTargetZ, fullNew.broth || 'tonkotsu', 0.54, [0.15 * pourCurve, yawAngle, tiltZ]);
+          } else {
+            this.drawFilledVessel3D(pourTargetX, pourTargetY, pourTargetZ, t < 0.5 ? fullOld : { ...emptyNew, type: fromType }, 0.56, false);
+          }
+          drawRightGloveAt(pourTargetX, pourTargetY, pourTargetZ, tiltZ * 0.65);
+
+          if (t > 0.12 && t < 0.88) {
+            const bMap = {
+              tonkotsu: [0.92, 0.74, 0.44],
+              chili_broth: [0.95, 0.18, 0.2],
+              miso_mushroom: [0.68, 0.18, 0.92]
+            };
+            const bCol = bMap[fullNew.broth] || bMap.tonkotsu;
+            const streamX = (pourTargetX + basePos[0]) * 0.5;
+            const streamZ = (pourTargetZ + basePos[2]) * 0.5;
+            const streamTopY = pourTargetY + 0.02;
+            const streamBotY = basePos[1] + 0.065;
+            const streamH = Math.max(0.04, streamTopY - streamBotY);
+            this.drawMesh('cylinder', streamX, (streamTopY + streamBotY) * 0.5, streamZ, 0.024, streamH, 0.024, bCol, 0.86, null, 0.95, 4);
+            if (fullNew.noodleState) {
+              const nFrac = ((t - 0.12) / 0.76) % 1.0;
+              this.drawMesh('wavy_noodle', streamX, streamTopY - nFrac * streamH, streamZ, 0.095, 0.022, 0.12, [1.0, 0.84, 0.28], 0.32, [0.4, this.time * 5, 0.3]);
+            }
+          }
+          return;
+        }
+        // Уводим опустевшую грязную миску налево на мойку!
+        const t = (p - 0.78) / 0.22;
+        const s = t * t * (3 - 2 * t);
+        this.drawFilledVessel3D(basePos[0], basePos[1], basePos[2], fullNew, 0.64, false);
+        drawLeftGloveAt(basePos[0], basePos[1], basePos[2]);
+        const awayX = pourTargetX - R[0] * 0.48 * s;
+        const awayY = pourTargetY - 0.18 * s;
+        const awayZ = pourTargetZ - R[2] * 0.48 * s - F[2] * 0.1 * s;
+        if (fromType === 'bowl') {
+          this.drawDirtyBowl3D(awayX, awayY, awayZ, fullNew.broth || 'tonkotsu', 0.52 * (1 - s * 0.3), [0.1, yawAngle, 0.2]);
+        }
+        drawRightGloveAt(awayX, awayY, awayZ);
+        return;
+      }
+
+      if (mode === 'handoff_and_grab_left') {
+        // 1) p < 0.36: полная посуда перекладывается из ЛЕВОЙ руки в ПРАВУЮ;
+        // 2) p >= 0.36: правая держит полную, а левая берёт пустую чистую посуду со стопки!
+        const fullV = d.vessel || rt.rightHandVessel;
+        const emptyLeft = { type: d.type, broth: null, noodleState: null, toppings: [], overflowCount: 0 };
+        if (p < 0.36) {
+          const t = p / 0.36;
+          const s = t * t * (3 - 2 * t);
+          const arc = Math.sin(t * Math.PI) * 0.045;
+          const bx = basePos[0] + (rightHoldX - basePos[0]) * s;
+          const by = basePos[1] + (rightHoldY - basePos[1]) * s + arc;
+          const bz = basePos[2] + (rightHoldZ - basePos[2]) * s;
+          if (fullV) this.drawFilledVessel3D(bx, by, bz, fullV, 0.62, false);
+          const lFollow = t < 0.55 ? s : 1 - (t - 0.55) / 0.45;
+          drawLeftGloveAt(basePos[0] + (rightHoldX - basePos[0]) * 0.45 * lFollow, basePos[1] + arc * lFollow, basePos[2] + (rightHoldZ - basePos[2]) * 0.45 * lFollow);
+          drawRightGloveAt(rightHoldX + (bx - rightHoldX) * (1 - s * 0.3), by, rightHoldZ + (bz - rightHoldZ) * (1 - s * 0.3));
+          return;
+        }
+        if (fullV) this.drawFilledVessel3D(rightHoldX, rightHoldY, rightHoldZ, fullV, 0.62, false);
+        drawRightGloveAt(rightHoldX, rightHoldY, rightHoldZ);
+        const pGrab = (p - 0.36) / 0.64;
+        if (pGrab < 0.3) {
+          const t = pGrab / 0.3;
+          const s = t * t * (3 - 2 * t);
+          drawLeftGloveAt(basePos[0] + (stackX - basePos[0]) * s, basePos[1] + (stackY - basePos[1]) * s + Math.sin(t * Math.PI) * 0.04, basePos[2] + (stackZ - basePos[2]) * s);
+        } else {
+          const t = (pGrab - 0.3) / 0.7;
+          const s = t * t * (3 - 2 * t);
+          const lx = stackX + (basePos[0] - stackX) * s;
+          const ly = stackY + (basePos[1] - stackY) * s + Math.sin(t * Math.PI) * 0.085;
+          const lz = stackZ + (basePos[2] - stackZ) * s;
+          this.drawFilledVessel3D(lx, ly, lz, emptyLeft, stackScale + (0.64 - stackScale) * s, false);
+          drawLeftGloveAt(lx, ly, lz);
+        }
+        return;
+      }
+
+      if (mode === 'return_left_and_handoff_back') {
+        // 1) p < 0.54: левая возвращает чистую пустую обратно на стопку, правая держит полную;
+        // 2) p >= 0.54: правая перекладывает полную обратно в освободившуюся левую руку!
+        const fullV = d.vessel || v;
+        const emptyLeft = { type: d.type, broth: null, noodleState: null, toppings: [], overflowCount: 0 };
+        if (p < 0.54) {
+          if (fullV) this.drawFilledVessel3D(rightHoldX, rightHoldY, rightHoldZ, fullV, 0.62, false);
+          drawRightGloveAt(rightHoldX, rightHoldY, rightHoldZ);
+          const t = p / 0.54;
+          if (t < 0.82) {
+            const u = t / 0.82;
+            const s = u * u * (3 - 2 * u);
+            const lx = basePos[0] + (stackX - basePos[0]) * s;
+            const ly = basePos[1] + (stackY - basePos[1]) * s + Math.sin(u * Math.PI) * 0.08;
+            const lz = basePos[2] + (stackZ - basePos[2]) * s;
+            this.drawFilledVessel3D(lx, ly, lz, emptyLeft, 0.64 + (stackScale - 0.64) * s, false);
+            drawLeftGloveAt(lx, ly, lz);
+          } else {
+            const u = (t - 0.82) / 0.18;
+            const s = u * u * (3 - 2 * u);
+            drawLeftGloveAt(stackX + (basePos[0] - stackX) * s, stackY + (basePos[1] - stackY) * s, stackZ + (basePos[2] - stackZ) * s);
+          }
+          return;
+        }
+        const t = (p - 0.54) / 0.46;
+        const s = t * t * (3 - 2 * t);
+        const arc = Math.sin(t * Math.PI) * 0.045;
+        const bx = rightHoldX + (basePos[0] - rightHoldX) * s;
+        const by = rightHoldY + (basePos[1] - rightHoldY) * s + arc;
+        const bz = rightHoldZ + (basePos[2] - rightHoldZ) * s;
+        if (fullV) this.drawFilledVessel3D(bx, by, bz, fullV, 0.62 + 0.02 * s, false);
+        drawLeftGloveAt(basePos[0] + (bx - basePos[0]) * (1 - s * 0.3), by, basePos[2] + (bz - basePos[2]) * (1 - s * 0.3));
+        const rFollow = t < 0.55 ? s : 1 - (t - 0.55) / 0.45;
+        drawRightGloveAt(rightHoldX + (basePos[0] - rightHoldX) * 0.4 * rFollow, rightHoldY + arc * rFollow - 0.1 * Math.max(0, t - 0.55), rightHoldZ + (basePos[2] - rightHoldZ) * 0.4 * rFollow);
+        return;
+      }
+
+      if (mode === 'grab_stack_right') {
+        // Левая держит свою пустую, правая берёт вторую пустую со стопки!
+        this.drawFilledVessel3D(basePos[0], basePos[1], basePos[2], v, 0.64, false);
+        drawLeftGloveAt(basePos[0], basePos[1], basePos[2]);
+        const emptyRight = { type: d.type, broth: null, noodleState: null, toppings: [], overflowCount: 0 };
+        if (p < 0.34) {
+          const t = p / 0.34;
+          const s = t * t * (3 - 2 * t);
+          drawRightGloveAt(rightStartX + (stackX - rightStartX) * s, rightStartY + (stackY - rightStartY) * s + Math.sin(t * Math.PI) * 0.04, rightStartZ + (stackZ - rightStartZ) * s);
+        } else {
+          const t = (p - 0.34) / 0.66;
+          const s = t * t * (3 - 2 * t);
+          const rx = stackX + (rightHoldX - stackX) * s;
+          const ry = stackY + (rightHoldY - stackY) * s + Math.sin(t * Math.PI) * 0.08;
+          const rz = stackZ + (rightHoldZ - stackZ) * s;
+          this.drawFilledVessel3D(rx, ry, rz, emptyRight, stackScale + (0.62 - stackScale) * s, false);
+          drawRightGloveAt(rx, ry, rz);
+        }
+        return;
+      }
+
+      if (mode === 'return_stack_right') {
+        // Левая держит свою пустую, правая возвращает свою пустую обратно в стопку!
+        this.drawFilledVessel3D(basePos[0], basePos[1], basePos[2], v, 0.64, false);
+        drawLeftGloveAt(basePos[0], basePos[1], basePos[2]);
+        const emptyRight = { type: d.type, broth: null, noodleState: null, toppings: [], overflowCount: 0 };
+        if (p < 0.72) {
+          const t = p / 0.72;
+          const s = t * t * (3 - 2 * t);
+          const rx = rightHoldX + (stackX - rightHoldX) * s;
+          const ry = rightHoldY + (stackY - rightHoldY) * s + Math.sin(t * Math.PI) * 0.08;
+          const rz = rightHoldZ + (stackZ - rightHoldZ) * s;
+          this.drawFilledVessel3D(rx, ry, rz, emptyRight, 0.62 + (stackScale - 0.62) * s, false);
+          drawRightGloveAt(rx, ry, rz);
+        } else {
+          const t = (p - 0.72) / 0.28;
+          const s = t * t * (3 - 2 * t);
+          drawRightGloveAt(stackX + (rightStartX - stackX) * s, stackY + (rightStartY - stackY) * s, stackZ + (rightStartZ - stackZ) * s);
+        }
+        return;
+      }
+    }
+
     // СПЕЦИАЛЬНАЯ 4-ФАЗНАЯ АНИМАЦИЯ ПЕРЕЛИВАНИЯ БЕЗ СТОЛА (МИСКА -> КОРОБКА):
     // 1) p < 0.22: Герой перекладывает миску с едой из левой руки в правую руку;
     // 2) 0.22 <= p < 0.56: Освободившаяся левая рука стандартной анимацией берёт коробку со стопки к себе;
@@ -5519,40 +5896,30 @@ export class FirstPersonWebGLScene {
 
     this.drawFilledVessel3D(hx, hy, hz, heldView, vesselScale, false);
 
-    // ЛЕВАЯ РУКА ПОВАРА: расположена строго ПОД донышком (hy - 0.036) и снаружи левой стенки,
-    // чтобы перчатка и пальцы никогда не просвечивали сквозь внутреннее дно миски или коробки!
-    const lhX = handAnchorX - R[0] * 0.092 - F[0] * 0.056;
-    const lhY = handAnchorY - 0.036;
-    const lhZ = handAnchorZ - R[2] * 0.092 - F[2] * 0.056;
-    const lhRot = [0.06, yawAngle - 0.34, 0.12];
+    // ЛЕВАЯ РУКА ПОВАРА + ИНТЕРАКТИВНЫЙ ХИТБОКС ДЛЯ ПЕРЕЛИВАНИЯ (ИЛИ ВОЗВРАТА ПУСТОЙ НА СКЛАДЕ)
+    const rightV = rt.rightHandVessel;
+    const hasRightVessel = Boolean(rightV && rightV.type);
+    const leftEmpty = !v.broth && !v.noodleState && (!v.toppings || v.toppings.length === 0);
+    const rightEmpty = !hasRightVessel || (!rightV.broth && !rightV.noodleState && (!rightV.toppings || rightV.toppings.length === 0));
+    const canPourNow = hasRightVessel && leftEmpty && !rightEmpty;
+    const leftGlow = canPourNow ? 0.65 + 0.35 * Math.sin(this.time * 7.5) : 0.92;
+    drawLeftGloveAt(handAnchorX, handAnchorY, handAnchorZ, leftGlow);
 
-    // Ладонь левой кибер-перчатки и светящийся бирюзовый индикатор (ниже уровня дна посуды)
-    this.drawBox(lhX, lhY, lhZ, 0.074, 0.034, 0.13, [0.16, 0.14, 0.24], 0.22, lhRot);
-    this.drawBox(lhX, lhY + 0.018, lhZ, 0.078, 0.011, 0.04, [0.0, 0.96, 0.83], 0.92, lhRot);
-    // Большой палец левой руки снаружи левого бортика миски/коробки (без пересечения внутренней чаши!)
-    this.drawBox(
-      handAnchorX - R[0] * 0.124 - F[0] * 0.022,
-      handAnchorY + 0.022,
-      handAnchorZ - R[2] * 0.124 - F[2] * 0.022,
-      0.024,
-      0.024,
-      0.048,
-      [0.2, 0.18, 0.3],
-      0.25,
-      [0.08, yawAngle - 0.15, 0.24]
-    );
-    // Предплечье левой руки, уходящее к левому плечу героя
-    this.drawBox(
-      lhX - R[0] * 0.055 - F[0] * 0.082,
-      lhY - 0.024,
-      lhZ - R[2] * 0.055 - F[2] * 0.082,
-      0.08,
-      0.048,
-      0.135,
-      [0.11, 0.13, 0.2],
-      0.15,
-      lhRot
-    );
+    // Если в ПРАВОЙ руке тоже находится посуда — рисуем её и правую кибер-перчатку прямо рядом!
+    if (hasRightVessel) {
+      this.drawFilledVessel3D(rightHoldX, rightHoldY, rightHoldZ, rightV, 0.62, false);
+      drawRightGloveAt(rightHoldX, rightHoldY, rightHoldZ);
+    }
+
+    // Регистрируем хитбокс на пустой посуде в ЛЕВОЙ руке:
+    // 1) Когда в правой руке еда -> тап по пустой в левой ПЕРЕЛИВАЕТ из правой в левую!
+    // 2) Когда на складе (Сектор 2, холодильник закрыт) в левой одна пустая посуда -> тап по ней возвращает её в стопку!
+    if (
+      canPourNow ||
+      (!hasRightVessel && leftEmpty && rt.activeSector === 2 && !rt.fridgeOpen)
+    ) {
+      this.registerHitbox('held_left_vessel', hx, hy + 0.04, hz, canPourNow ? 96 : 74);
+    }
 
     // ПРАВАЯ РУКА С КУЛИНАРНЫМИ ПАЛОЧКАМИ «МОРИБАСИ»: НАКЛАДЫВАЕМ ИНГРЕДИЕНТЫ ИЗ ЛОТКОВ В ВЫДВИНУТУЮ МИСКУ/КОРОБКУ!
     if (this.toppingAnim.active && rt.activeSector === 1 && rt.cameraFocus === 'worktable') {
