@@ -1,5 +1,5 @@
-import { GAME_CONFIG } from './config.js?v=85';
-import { gameState } from './state.js?v=85';
+import { GAME_CONFIG } from './config.js?v=86';
+import { gameState } from './state.js?v=86';
 import {
   createAlleyBackdropTexture,
   createBuildingFacadeTexture,
@@ -9,7 +9,7 @@ import {
   createWallMenuSignTexture,
   createPedestrianTextures,
   AnimeCustomerTextureRenderer
-} from './art3d.js?v=85';
+} from './art3d.js?v=86';
 
 /**
  * Полноэкранный WebGL 3D движок от первого лица с процедурной высокодетализированной
@@ -1369,20 +1369,32 @@ export class FirstPersonWebGLScene {
     const sx = clientX - rect.left;
     const sy = clientY - rect.top;
 
-    let bestId = null;
-    let bestScore = Infinity;
+    let bestPrimaryId = null;
+    let bestPrimaryScore = Infinity;
+    let bestPeriphId = null;
+    let bestPeriphScore = Infinity;
 
     for (const box of this.interactables) {
       const pt = this.projectWorldToScreen(box.cx, box.cy, box.cz);
       if (!pt) continue;
+      if (box.isPeripheral) {
+        if (pt.x < 0 || pt.x > this.width || pt.y < 0 || pt.y > this.height) continue;
+      }
 
       const d = Math.hypot(sx - pt.x, sy - pt.y);
-      if (d <= box.screenRadius && d < bestScore) {
-        bestScore = d;
-        bestId = box.id;
+      if (d <= box.screenRadius) {
+        if (box.isPeripheral) {
+          if (d < bestPeriphScore) {
+            bestPeriphScore = d;
+            bestPeriphId = box.id;
+          }
+        } else if (d < bestPrimaryScore) {
+          bestPrimaryScore = d;
+          bestPrimaryId = box.id;
+        }
       }
     }
-    return bestId;
+    return bestPrimaryId || bestPeriphId;
   }
 
   projectWorldToScreen(wx, wy, wz) {
@@ -1403,12 +1415,23 @@ export class FirstPersonWebGLScene {
     };
   }
 
-  registerHitbox(id, cx, cy, cz, screenRadius = 56) {
+  isWideCenterPeek() {
+    const rt = gameState.runtime;
+    return (
+      rt.activeSector === 1 &&
+      rt.cameraFocus === 'worktable' &&
+      !rt.carryingAssembly &&
+      (this.currentAspect || 0.56) >= 0.85
+    );
+  }
+
+  registerHitbox(id, cx, cy, cz, screenRadius = 56, isPeripheral = false) {
     this.interactables.push({
       id,
       cx,
       cy,
       cz,
+      isPeripheral,
       screenRadius: screenRadius * (this.uiScale || 1.0)
     });
   }
@@ -2457,6 +2480,8 @@ export class FirstPersonWebGLScene {
     this.drawTexturedQuad(this.texWallMenuSign, signX + 0.008, signY, signZ, signW, signH, 0.92, [0, Math.PI * 0.5, 0]);
     if (gameState.runtime.activeSector === 0) {
       this.registerHitbox('wall_menu_board', signX + 0.02, signY, signZ, 118);
+    } else if (this.isWideCenterPeek()) {
+      this.registerHitbox('wall_menu_board', signX + 0.02, signY, signZ, 88, true);
     }
 
     // ПРАВАЯ СТОЛЕШНИЦА СКЛАДА И УПАКОВКИ С ОТКРЫТОЙ ПОДСВЕЧЕННОЙ НИШЕЙ ПОД КРИО-ХОЛОДИЛЬНИКОМ (ДЛЯ ПАКЕТОВ С СОБОЙ!)
@@ -3751,6 +3776,8 @@ export class FirstPersonWebGLScene {
 
         if (rt.activeSector === 0) {
           this.registerHitbox(`basket_${i}`, bx, 1.05, bz, 72);
+        } else if (this.isWideCenterPeek()) {
+          this.registerHitbox(`basket_${i}`, bx, 1.05, bz, 56, true);
         }
       } else {
         // Неактивное гнездо закрыто стальной заглушкой
@@ -3894,6 +3921,8 @@ export class FirstPersonWebGLScene {
 
         if (rt.activeSector === 0) {
           this.registerHitbox(`broth_${bId}`, px, 1.06, pz, 76);
+        } else if (this.isWideCenterPeek()) {
+          this.registerHitbox(`broth_${bId}`, px, 1.06, pz, 58, true);
         }
       } else {
         // Если бульон ещё не открыт апгрейдом — кастрюля накрыта стальной крышкой с ручкой (как дальняя кастрюля на скриншоте!)
@@ -4672,6 +4701,7 @@ export class FirstPersonWebGLScene {
 
     const isFridgeInteract = isRightSector && Boolean(rt.fridgeOpen) && this.fridgeDoorOpenT > 0.45;
     const isWarehouseInteract = isRightSector && !rt.fridgeOpen;
+    const isWideWarehousePeek = !isRightSector && !rt.fridgeOpen && this.isWideCenterPeek();
 
     // 1. ДИСПЕНСЕР КЕРАМИЧЕСКИХ МИСОК «ДОНБУРИ» (ВСЕ 10 ЧИСТЫХ МИСОК В СТОПКЕ: 10 -> 9 -> 8 -> ... -> 0)
     const bowlX = 0.84;
@@ -4726,6 +4756,8 @@ export class FirstPersonWebGLScene {
 
     if (isWarehouseInteract) {
       this.registerHitbox('vessel_bowl', bowlX, 1.01, bowlZ, 82);
+    } else if (isWideWarehousePeek) {
+      this.registerHitbox('vessel_bowl', bowlX, 1.01, bowlZ, 62, true);
     }
 
     // 1Б. ИНТЕРАКТИВНЫЙ СТАКАНЧИК С ПАЛОЧКАМИ «ВАРИБАСИ» В ЗОНЕ МИСОК И КОРОБОК (x = 0.60, z = -0.36)
@@ -4744,6 +4776,8 @@ export class FirstPersonWebGLScene {
     }
     if (isWarehouseInteract) {
       this.registerHitbox('table_chopsticks', chopX, chopY + 0.095, chopZ, 70);
+    } else if (isWideWarehousePeek) {
+      this.registerHitbox('table_chopsticks', chopX, chopY + 0.095, chopZ, 54, true);
     }
 
     // 2. ДИСПЕНСЕР ОТКРЫТЫХ КАРТОННЫХ КОРОБОЧЕК ДЛЯ ВОКА ВДОЛЬ ПРАВОЙ СТЕНКИ (x = 0.84, z = -0.50)
@@ -4780,6 +4814,8 @@ export class FirstPersonWebGLScene {
 
     if (isWarehouseInteract) {
       this.registerHitbox('vessel_box', boxX, 1.0, boxZ, 78);
+    } else if (isWideWarehousePeek) {
+      this.registerHitbox('vessel_box', boxX, 1.0, boxZ, 60, true);
     }
 
     // 3. ПРЕМИАЛЬНЫЙ ПОЛЫЙ 3D КРИО-ХОЛОДИЛЬНИК С ПРОЗРАЧНОЙ СТЕКЛЯННОЙ ВИТРИНОЙ И ОТКРЫВАЮЩЕЙСЯ ДВЕРЦЕЙ!
@@ -5033,6 +5069,9 @@ export class FirstPersonWebGLScene {
       // Регистрируем хитбоксы и на самой ручке, и по всей плоскости дверцы холодильника — открывается с любого тапа!
       this.registerHitbox('cryo_fridge', hx, doorMidY, hz, 96);
       this.registerHitbox('cryo_fridge', fFrontX + 0.04, doorMidY, fZ + 0.05, 112);
+    } else if (isWideWarehousePeek) {
+      this.registerHitbox('cryo_fridge', hx, doorMidY, hz, 74, true);
+      this.registerHitbox('cryo_fridge', fFrontX + 0.04, doorMidY, fZ + 0.05, 86, true);
     }
   }
 

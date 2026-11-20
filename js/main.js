@@ -1,16 +1,16 @@
-import { GAME_CONFIG } from './config.js?v=85';
-import { gameState, createShiftRuntimeState } from './state.js?v=85';
-import { audio } from './audio.js?v=85';
+import { GAME_CONFIG } from './config.js?v=86';
+import { gameState, createShiftRuntimeState } from './state.js?v=86';
+import { audio } from './audio.js?v=86';
 import {
   buildCustomerPortraitSVG,
   buildCourierDroneSVG,
   generateAppleTouchIcon
-} from './renderer.js?v=85';
-import { FirstPersonWebGLScene } from './webgl3d.js?v=85';
-import { CustomerAndDeliverySystem } from './customers.js?v=85';
-import { KitchenSystem } from './kitchen.js?v=85';
-import { EconomySystem } from './economy.js?v=85';
-import { TutorialSystem } from './tutorial.js?v=85';
+} from './renderer.js?v=86';
+import { FirstPersonWebGLScene } from './webgl3d.js?v=86';
+import { CustomerAndDeliverySystem } from './customers.js?v=86';
+import { KitchenSystem } from './kitchen.js?v=86';
+import { EconomySystem } from './economy.js?v=86';
+import { TutorialSystem } from './tutorial.js?v=86';
 
 class CyberRamenApp {
   constructor() {
@@ -122,8 +122,34 @@ class CyberRamenApp {
     }
   }
 
-  handle3DObjectPicked(hitId) {
+  handle3DObjectPicked(hitId, skipAutoTurn = false) {
     if (!hitId) return;
+
+    // На широком экране из центрального ракурса (Сектор 1) можно тапать прямо по видимым объектам
+    // плиты слева (Сектор 0) или склада справа (Сектор 2): камера плавно поворачивается, а затем запускается 3D-анимация!
+    const rtNow = gameState.runtime;
+    if (!skipAutoTurn && rtNow.activeSector === 1 && rtNow.cameraFocus === 'worktable') {
+      let targetSector = null;
+      if (hitId.startsWith('basket_') || hitId.startsWith('broth_') || hitId === 'wall_menu_board') {
+        targetSector = 0;
+      } else if (hitId === 'vessel_bowl' || hitId === 'vessel_box' || hitId === 'cryo_fridge') {
+        targetSector = 2;
+      }
+      if (targetSector !== null) {
+        if (this.pendingAutoTurnTimer) {
+          clearTimeout(this.pendingAutoTurnTimer);
+          this.pendingAutoTurnTimer = null;
+        }
+        this.switchSector(targetSector);
+        this.pendingAutoTurnTimer = setTimeout(() => {
+          this.pendingAutoTurnTimer = null;
+          if (gameState.runtime.activeSector === targetSector) {
+            this.handle3DObjectPicked(hitId, true);
+          }
+        }, 170);
+        return;
+      }
+    }
 
     if (hitId.startsWith('basket_')) {
       const idx = Number(hitId.replace('basket_', ''));
@@ -348,7 +374,7 @@ class CyberRamenApp {
 
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker
-        .register('./sw.js?v=85', { updateViaCache: 'none' })
+        .register('./sw.js?v=86', { updateViaCache: 'none' })
         .then((reg) => reg.update())
         .catch(() => {});
     }
