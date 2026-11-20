@@ -1,5 +1,5 @@
-import { GAME_CONFIG } from './config.js?v=80';
-import { gameState } from './state.js?v=80';
+import { GAME_CONFIG } from './config.js?v=81';
+import { gameState } from './state.js?v=81';
 import {
   createAlleyBackdropTexture,
   createBuildingFacadeTexture,
@@ -9,7 +9,7 @@ import {
   createWallMenuSignTexture,
   createPedestrianTextures,
   AnimeCustomerTextureRenderer
-} from './art3d.js?v=80';
+} from './art3d.js?v=81';
 
 /**
  * Полноэкранный WebGL 3D движок от первого лица с процедурной высокодетализированной
@@ -283,6 +283,7 @@ export class FirstPersonWebGLScene {
 
   triggerRightStackGrabAnim(type = 'bowl') {
     this.rightReturnAnim.active = false;
+    this.dualHandAnim.active = false;
     this.rightGrabAnim.active = true;
     this.rightGrabAnim.type = type;
     this.rightGrabAnim.timer = 0;
@@ -293,6 +294,7 @@ export class FirstPersonWebGLScene {
 
   triggerRightStackReturnAnim(type = 'bowl') {
     this.rightGrabAnim.active = false;
+    this.dualHandAnim.active = false;
     this.rightReturnAnim.active = true;
     this.rightReturnAnim.type = type;
     this.rightReturnAnim.timer = 0;

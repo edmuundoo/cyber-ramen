@@ -1,6 +1,6 @@
-import { GAME_CONFIG } from './config.js?v=80';
-import { gameState } from './state.js?v=80';
-import { audio } from './audio.js?v=80';
+import { GAME_CONFIG } from './config.js?v=81';
+import { gameState } from './state.js?v=81';
+import { audio } from './audio.js?v=81';
 
 export class KitchenSystem {
   constructor(callbacks) {
@@ -981,23 +981,27 @@ export class KitchenSystem {
       return { action: 'pickup', vessel: picked, fromBag: a.hasBag };
     }
 
-    // 3. В левой руке ПУСТАЯ миска/коробка, а на подносе (без пакета) стоит НАПОЛНЕННАЯ миска/коробка ->
-    //    ПРАВОЙ РУКОЙ ПОДНИМАЕМ НАПОЛНЕННУЮ ТАРЕЛКУ С ПОДНОСА И ДЕРЖИМ В ОБЕИХ РУКАХ!
-    //    (Дальше тап по пустой слева -> перелить, либо повернуть на склад -> вернуть пустую в стопку!)
+    // 3. В левой руке ПУСТАЯ миска/коробка, а на подносе (без пакета) стоит посуда (НАПОЛНЕННАЯ или ПУСТАЯ) ->
+    //    ПРАВОЙ РУКОЙ ПОДНИМАЕМ ПОСУДУ С ПОДНОСА И ДЕРЖИМ В ОБЕИХ РУКАХ!
+    //    - Если поднятая с едой: тап по пустой слева -> перелить, либо на склад -> вернуть пустую в стопку.
+    //    - Если поднятая тоже пустая (единственный способ получить 2 одинаковые пустые миски/коробки в обеих руках):
+    //      можно поставить одну обратно на поднос, либо на складе двумя тапами вернуть обе в стопку!
     if (
       hasHand &&
       !hasRight &&
       a.vessel &&
       !a.hasBag &&
-      this.isVesselEmptyOfFood(handV) &&
-      !this.isVesselEmptyOfFood(a.vessel)
+      this.isVesselEmptyOfFood(handV)
     ) {
       const lifted = JSON.parse(JSON.stringify(a.vessel));
+      const liftedIsEmpty = this.isVesselEmptyOfFood(lifted);
       rt.rightHandVessel = lifted;
       a.vessel = null;
       audio.playTapPop();
       this.onToast(
-        `🙌 ${lifted.type === 'bowl' ? '🍜 Миска' : '📦 Коробка'} с подноса в правой руке! Тапните по пустой слева, чтобы перелить (или верните пустую на склад ▶)`,
+        liftedIsEmpty
+          ? `🙌 Пустая ${lifted.type === 'bowl' ? '🍜 миска' : '📦 коробка'} с подноса в правой руке! Поставьте обратно на поднос или верните обе на склад ▶`
+          : `🙌 ${lifted.type === 'bowl' ? '🍜 Миска' : '📦 Коробка'} с подноса в правой руке! Тапните по пустой слева, чтобы перелить (или верните пустую на склад ▶)`,
         '#00f5d4'
       );
       this.renderAllKitchen();
