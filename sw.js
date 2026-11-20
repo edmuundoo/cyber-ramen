@@ -1,4 +1,4 @@
-const CACHE_NAME = 'cyber-ramen-v81';
+const CACHE_NAME = 'cyber-ramen-v82';
 const ASSETS = [
   './',
   './index.html',

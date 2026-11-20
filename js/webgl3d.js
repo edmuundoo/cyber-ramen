@@ -1,5 +1,5 @@
-import { GAME_CONFIG } from './config.js?v=81';
-import { gameState } from './state.js?v=81';
+import { GAME_CONFIG } from './config.js?v=82';
+import { gameState } from './state.js?v=82';
 import {
   createAlleyBackdropTexture,
   createBuildingFacadeTexture,
@@ -9,7 +9,7 @@ import {
   createWallMenuSignTexture,
   createPedestrianTextures,
   AnimeCustomerTextureRenderer
-} from './art3d.js?v=81';
+} from './art3d.js?v=82';
 
 /**
  * Полноэкранный WebGL 3D движок от первого лица с процедурной высокодетализированной
@@ -159,6 +159,7 @@ export class FirstPersonWebGLScene {
       duration: 1.28
     };
     this.fridgeDoorOpenT = 0; // 0 = дверца закрыта, 1 = дверца распахнута на 110°
+    this.dualStanceT = 0; // 0 = одна рука, 1 = естественная асимметричная стойка двумя руками
     this.fridgeDoorHandAnim = { active: false, action: 'open', timer: 0, duration: 0.56 };
     this.fridgeRestockAnim = { active: false, toppingId: 'egg', timer: 0, duration: 0.58 };
     this.servePushAnim = { active: false, timer: 0, duration: 0.46, servedBag: false };
@@ -1535,6 +1536,12 @@ export class FirstPersonWebGLScene {
     } else if (this.fridgeDoorOpenT > targetDoorT) {
       this.fridgeDoorOpenT = Math.max(targetDoorT, this.fridgeDoorOpenT - dt * 2.8);
     }
+    const targetDualT = Boolean((rt.rightHandVessel && rt.rightHandVessel.type) || this.dualHandAnim.active) ? 1.0 : 0.0;
+    if (this.dualStanceT < targetDualT) {
+      this.dualStanceT = Math.min(targetDualT, this.dualStanceT + dt * 4.5);
+    } else if (this.dualStanceT > targetDualT) {
+      this.dualStanceT = Math.max(targetDualT, this.dualStanceT - dt * 4.5);
+    }
     if (this.fridgeDoorHandAnim.active) {
       this.fridgeDoorHandAnim.timer += dt;
       if (this.fridgeDoorHandAnim.timer >= this.fridgeDoorHandAnim.duration) {
@@ -2571,11 +2578,33 @@ export class FirstPersonWebGLScene {
       }
     }
 
-    const d = 0.58 + 0.085 * ext;
+    const dualS = this.dualStanceT * this.dualStanceT * (3 - 2 * this.dualStanceT);
+    const d = 0.58 + 0.085 * ext - 0.034 * dualS;
     const halfW = d * (this.currentTanHalfFovY || 0.6745) * (this.currentAspect || 0.56);
     const halfH = d * (this.currentTanHalfFovY || 0.6745);
-    const r = Math.max(-0.15, Math.min(-0.085, -0.44 * halfW)) + 0.048 * ext;
-    const u = Math.max(-0.27, Math.min(-0.18, -0.52 * halfH)) + 0.072 * ext - catchDip + swayY;
+    const r = Math.max(-0.15, Math.min(-0.085, -0.44 * halfW)) + 0.048 * ext - 0.008 * dualS;
+    const u = Math.max(-0.27, Math.min(-0.18, -0.52 * halfH)) + 0.072 * ext - 0.018 * dualS - catchDip + swayY;
+
+    return [
+      this.camPos[0] + F[0] * d + R[0] * r + U[0] * u,
+      this.camPos[1] + F[1] * d + R[1] * r + U[1] * u,
+      this.camPos[2] + F[2] * d + R[2] * r + U[2] * u
+    ];
+  }
+
+  // Естественная асимметричная 3D-позиция ПРАВОЙ руки с посудой:
+  // Правая рука держит свою миску/коробку на ~9-10 см дальше вперёд и на ~3-4 см выше левой,
+  // с собственной независимой фазой покачивания — живая человеческая поза без роботоподобной зеркальности!
+  getRightHandWorldPos() {
+    const { F, R, U } = this.getCameraBasis();
+    const swayY = Math.sin(this.time * 2.55 + 1.65) * 0.0055;
+    const swayX = Math.cos(this.time * 1.85 + 0.9) * 0.003;
+
+    const d = 0.648;
+    const halfW = d * (this.currentTanHalfFovY || 0.6745) * (this.currentAspect || 0.56);
+    const halfH = d * (this.currentTanHalfFovY || 0.6745);
+    const r = Math.min(0.155, Math.max(0.095, 0.45 * halfW)) + swayX;
+    const u = Math.max(-0.235, Math.min(-0.145, -0.435 * halfH)) + swayY;
 
     return [
       this.camPos[0] + F[0] * d + R[0] * r + U[0] * u,
@@ -3059,13 +3088,7 @@ export class FirstPersonWebGLScene {
       const handPos = this.getLeftHandWorldPos();
       const { F, R, U } = this.getCameraBasis();
       const fromRight = Boolean(this.assemblyVesselAnim.fromRight);
-      const startPos = fromRight
-        ? [
-            handPos[0] + R[0] * 0.24 + F[0] * 0.015,
-            handPos[1] + U[1] * 0.005,
-            handPos[2] + R[2] * 0.24 + F[2] * 0.015
-          ]
-        : handPos;
+      const startPos = fromRight ? this.getRightHandWorldPos() : handPos;
       const intoBag = Boolean(this.assemblyVesselAnim.intoBag);
       const targetX = intoBag ? asmX - 0.075 : asmX - 0.13;
       const targetY = intoBag ? bagBaseY + 0.016 : asmY + 0.017;
@@ -5126,24 +5149,24 @@ export class FirstPersonWebGLScene {
     const { F, R, U } = this.getCameraBasis();
     const yawAngle = Math.atan2(-F[0], -F[2]);
 
-    // Вспомогательные функции отрисовки кибер-перчаток обеих рук (левая и правая)
+    // Вспомогательные функции отрисовки кибер-перчаток обеих рук (левая и правая — с лёгким живым различием углов кисти!)
     const drawRightGloveAt = (rx, ry, rz, extraRoll = 0) => {
-      const rhX = rx + R[0] * 0.088 - F[0] * 0.054;
-      const rhY = ry - 0.034;
-      const rhZ = rz + R[2] * 0.088 - F[2] * 0.054;
-      const rhRot = [0.06, yawAngle + 0.34, -0.12 + extraRoll];
+      const rhX = rx + R[0] * 0.088 - F[0] * 0.052;
+      const rhY = ry - 0.032;
+      const rhZ = rz + R[2] * 0.088 - F[2] * 0.052;
+      const rhRot = [0.09, yawAngle + 0.23, -0.17 + extraRoll];
       this.drawBox(rhX, rhY, rhZ, 0.074, 0.034, 0.13, [0.16, 0.14, 0.24], 0.22, rhRot);
       this.drawBox(rhX, rhY + 0.018, rhZ, 0.078, 0.011, 0.04, [0.0, 0.96, 0.83], 0.92, rhRot);
       this.drawBox(
-        rx + R[0] * 0.12 - F[0] * 0.02,
-        ry + 0.022,
-        rz + R[2] * 0.12 - F[2] * 0.02,
+        rx + R[0] * 0.12 - F[0] * 0.018,
+        ry + 0.023,
+        rz + R[2] * 0.12 - F[2] * 0.018,
         0.024,
         0.024,
         0.048,
         [0.2, 0.18, 0.3],
         0.25,
-        [0.08, yawAngle + 0.15, -0.24 + extraRoll]
+        [0.1, yawAngle + 0.11, -0.26 + extraRoll]
       );
       this.drawBox(
         rhX + R[0] * 0.055 - F[0] * 0.082,
@@ -5162,7 +5185,7 @@ export class FirstPersonWebGLScene {
       const lhX = lx - R[0] * 0.092 - F[0] * 0.056;
       const lhY = ly - 0.036;
       const lhZ = lz - R[2] * 0.092 - F[2] * 0.056;
-      const lhRot = [0.06, yawAngle - 0.34, 0.12];
+      const lhRot = [0.04, yawAngle - 0.36, 0.1];
       this.drawBox(lhX, lhY, lhZ, 0.074, 0.034, 0.13, [0.16, 0.14, 0.24], 0.22, lhRot);
       this.drawBox(lhX, lhY + 0.018, lhZ, 0.078, 0.011, 0.04, [0.0, 0.96, 0.83], pulseGlow, lhRot);
       this.drawBox(
@@ -5174,7 +5197,7 @@ export class FirstPersonWebGLScene {
         0.048,
         [0.2, 0.18, 0.3],
         0.25,
-        [0.08, yawAngle - 0.15, 0.24]
+        [0.07, yawAngle - 0.18, 0.22]
       );
       this.drawBox(
         lhX - R[0] * 0.055 - F[0] * 0.082,
@@ -5189,9 +5212,7 @@ export class FirstPersonWebGLScene {
       );
     };
 
-    const rightHoldX = basePos[0] + R[0] * 0.24 + F[0] * 0.015;
-    const rightHoldY = basePos[1] + U[1] * 0.005;
-    const rightHoldZ = basePos[2] + R[2] * 0.24 + F[2] * 0.015;
+    const [rightHoldX, rightHoldY, rightHoldZ] = this.getRightHandWorldPos();
 
     // =========================================================================
     // ЕДИНАЯ ДВУРУЧНАЯ СИСТЕМА АНИМАЦИЙ (this.dualHandAnim):
