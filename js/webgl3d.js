@@ -1,5 +1,5 @@
-import { GAME_CONFIG } from './config.js?v=76';
-import { gameState } from './state.js?v=76';
+import { GAME_CONFIG } from './config.js?v=77';
+import { gameState } from './state.js?v=77';
 import {
   createAlleyBackdropTexture,
   createBuildingFacadeTexture,
@@ -9,7 +9,7 @@ import {
   createWallMenuSignTexture,
   createPedestrianTextures,
   AnimeCustomerTextureRenderer
-} from './art3d.js?v=76';
+} from './art3d.js?v=77';
 
 /**
  * Полноэкранный WebGL 3D движок от первого лица с процедурной высокодетализированной
@@ -2359,6 +2359,16 @@ export class FirstPersonWebGLScene {
     // Верхняя правая столешница и неоновая полоса
     this.drawBox(0.92, 0.86, -0.22, 0.96, 0.07, 1.82, counterCol, 0.05, null, 0.45);
     this.drawBox(0.45, 0.9, -0.22, 0.03, 0.025, 1.76, trimCol, 0.65);
+
+    // ПРАВАЯ СТЕНА ЯТАЯ ЗА СКЛАДОМ И КРИО-ХОЛОДИЛЬНИКОМ (СИММЕТРИЧНА ЛЕВОЙ, БЕЗ ТАБЛИЧЕК!)
+    const wallRightX = 1.4;
+    this.drawBox(wallRightX, 1.45, 0.1, 0.06, 1.16, 2.36, wallCol, 0.05, null, 0.35);
+    this.drawBox(wallRightX - 0.034, 1.07, 0.1, 0.012, 0.34, 2.32, [0.28, 0.33, 0.4], 0.08, null, 0.78);
+    for (const wz of [-0.95, -0.05, 0.65, 1.18]) {
+      this.drawBox(wallRightX - 0.036, 1.45, wz, 0.024, 1.14, 0.048, [0.13, 0.1, 0.12], 0.04, null, 0.45);
+    }
+    this.drawBox(wallRightX - 0.045, 1.97, 0.1, 0.05, 0.07, 2.36, [0.14, 0.11, 0.13], 0.05, null, 0.4);
+    this.drawBox(wallRightX - 0.045, 1.925, 0.1, 0.014, 0.015, 2.26, trimCol, trimEmissive * 0.85);
 
     // Боковые металлические стойки окна ятая
     this.drawBox(-1.12, 1.55, -0.98, 0.09, 1.5, 0.09, [0.18, 0.2, 0.25], 0.05, null, 0.5);

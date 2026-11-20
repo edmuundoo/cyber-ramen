@@ -341,66 +341,131 @@ export function createKanjiSignTextures(gl) {
   return out;
 }
 
-// 5Б. Красивая деревянно-неоновая табличка «МЕНЮ ЯТАЯ» на левой стене над варочной плитой (по тапу открывает игровое меню!)
+// 5Б. Аутентичная японско-киберпанковская доска «MENU / お品書き» на левой стене (без русского текста — чистый стиль ятая!)
 export function createWallMenuSignTexture(gl) {
   const c = document.createElement('canvas');
   c.width = 512;
   c.height = 320;
   const ctx = c.getContext('2d');
 
-  // Тёмная фактурная лаковая доска ятая
-  const bg = ctx.createLinearGradient(0, 0, 0, 320);
-  bg.addColorStop(0, '#1e1318');
-  bg.addColorStop(1, '#0e0a12');
+  // Глубокая лакированная кедровая доска с фактурой дерева
+  const bg = ctx.createLinearGradient(0, 0, 512, 320);
+  bg.addColorStop(0, '#221614');
+  bg.addColorStop(0.5, '#171014');
+  bg.addColorStop(1, '#110b12');
   ctx.fillStyle = bg;
   ctx.fillRect(0, 0, 512, 320);
 
-  // Лёгкие горизонтальные волокна дерева
-  ctx.fillStyle = 'rgba(255, 200, 140, 0.04)';
-  for (let y = 12; y < 310; y += 16) {
+  // Тонкие древесные волокна
+  ctx.fillStyle = 'rgba(255, 195, 130, 0.045)';
+  for (let y = 10; y < 312; y += 14) {
     ctx.fillRect(14, y, 484, 3);
   }
 
-  // Двойная рамка: тёплый золотистый внешний контур + неоновый бирюзовый внутренний
-  ctx.strokeStyle = '#ffaa33';
+  // Тёмная бронзовая внешняя рамка + тонкая неоновая внутренняя линия
+  ctx.strokeStyle = '#c8843c';
   ctx.lineWidth = 8;
   ctx.strokeRect(10, 10, 492, 300);
-
-  ctx.strokeStyle = '#00f5d4';
-  ctx.lineWidth = 3;
+  ctx.strokeStyle = 'rgba(0, 245, 212, 0.72)';
+  ctx.lineWidth = 2.5;
   ctx.strokeRect(22, 22, 468, 276);
 
-  // Верхняя карминовая плашка с иероглифами «拉麺 · 営業中»
-  ctx.fillStyle = '#c81d38';
-  ctx.fillRect(36, 36, 440, 54);
-  ctx.fillStyle = '#fff5e4';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.font = '900 32px "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif';
-  ctx.fillText('拉 麺  •  CYBER RAMEN  •  営 業 中', 256, 64);
+  // Угловые декоративные золотые уголки (японский орнамент рамки)
+  ctx.fillStyle = '#e5a34e';
+  for (const [cx, cy] of [[22, 22], [490, 22], [22, 298], [490, 298]]) {
+    ctx.fillRect(cx - 5, cy - 5, 10, 10);
+  }
 
-  // Крупный чёткий заголовок МЕНЮ ИГРЫ
+  // Левая колонка: стилизованная векторная миска рамена с паром и палочками + красная печать «拉麺»
+  // Неоновый ореол за миской
+  const glow = ctx.createRadialGradient(118, 165, 12, 118, 165, 86);
+  glow.addColorStop(0, 'rgba(255, 60, 100, 0.25)');
+  glow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+  ctx.fillStyle = glow;
+  ctx.fillRect(30, 70, 180, 190);
+
+  // Волнистые линии пара над миской
+  ctx.strokeStyle = '#00f5d4';
+  ctx.lineWidth = 4;
+  ctx.lineCap = 'round';
+  for (const sx of [96, 118, 140]) {
+    ctx.beginPath();
+    ctx.moveTo(sx, 142);
+    ctx.quadraticCurveTo(sx - 9, 122, sx, 106);
+    ctx.quadraticCurveTo(sx + 9, 90, sx, 74);
+    ctx.stroke();
+  }
+
+  // Пара палочек наискосок
+  ctx.strokeStyle = '#f3d49b';
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.moveTo(64, 152);
+  ctx.lineTo(186, 128);
+  ctx.moveTo(68, 162);
+  ctx.lineTo(188, 142);
+  ctx.stroke();
+
+  // Миска рамена (полукруг + ободок + основание)
+  ctx.fillStyle = '#d92238';
+  ctx.beginPath();
+  ctx.arc(118, 166, 56, 0, Math.PI, false);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = '#f8e6c8';
+  ctx.fillRect(62, 162, 112, 8);
+  ctx.fillStyle = '#991628';
+  ctx.fillRect(92, 220, 52, 12);
+
+  // Вертикальная разделительная линия
+  ctx.strokeStyle = 'rgba(229, 163, 78, 0.35)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(212, 46);
+  ctx.lineTo(212, 274);
+  ctx.stroke();
+
+  // Правая часть: стильный заголовок «MENU» + кандзи «お品書き» + лаконичные строки прайса
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#ffcf70';
+  ctx.font = '700 22px "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif';
+  ctx.fillText('お品書き  •  夜台', 236, 66);
+
   ctx.fillStyle = '#00f5d4';
   ctx.shadowColor = 'rgba(0, 245, 212, 0.65)';
   ctx.shadowBlur = 14;
-  ctx.font = '900 54px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-  ctx.fillText('МЕНЮ ЯТАЯ', 256, 146);
+  ctx.font = '900 58px -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif';
+  ctx.fillText('MENU', 234, 122);
   ctx.shadowBlur = 0;
 
-  // Строка-напоминание о содержимом таблички
-  ctx.fillStyle = '#ffcf70';
-  ctx.font = '700 24px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-  ctx.fillText('ДЕНЬ  •  ВРЕМЯ  •  БАЛАНС  •  РЕЦЕПТЫ', 256, 212);
+  // 3 стильные строчки-позиции с кандзи и точками
+  const rows = [
+    ['豚骨拉麺', '¥'],
+    ['辛口味噌', '¥'],
+    ['天婦羅麺', '¥']
+  ];
+  ctx.font = '700 22px "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif';
+  rows.forEach(([label, cur], idx) => {
+    const ry = 182 + idx * 36;
+    ctx.fillStyle = '#f4ead8';
+    ctx.fillText(label, 236, ry);
+    ctx.fillStyle = 'rgba(255, 207, 112, 0.45)';
+    ctx.fillText('• • • • •', 336, ry);
+    ctx.fillStyle = '#ffcf70';
+    ctx.fillText(cur, 428, ry);
+  });
 
-  // Нижняя кнопка-подсказка «НАЖМИТЕ, ЧТОБЫ ОТКРЫТЬ»
-  ctx.fillStyle = 'rgba(0, 245, 212, 0.16)';
-  ctx.fillRect(110, 244, 292, 38);
-  ctx.strokeStyle = '#00f5d4';
+  // Красная японская печать «ханко» в правом верхнем углу
+  ctx.fillStyle = '#d92238';
+  ctx.fillRect(424, 46, 44, 44);
+  ctx.strokeStyle = '#ffcf70';
   ctx.lineWidth = 2;
-  ctx.strokeRect(110, 244, 292, 38);
-  ctx.fillStyle = '#e8fffb';
-  ctx.font = '800 20px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-  ctx.fillText('📋 ТАПНИТЕ ПО ТАБЛИЧКЕ', 256, 264);
+  ctx.strokeRect(427, 49, 38, 38);
+  ctx.fillStyle = '#fff5e4';
+  ctx.textAlign = 'center';
+  ctx.font = '900 20px "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif';
+  ctx.fillText('麺', 446, 69);
 
   return createGLTextureFromCanvas(gl, c);
 }
