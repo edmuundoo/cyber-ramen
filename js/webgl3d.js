@@ -1,5 +1,5 @@
-import { GAME_CONFIG } from './config.js?v=82';
-import { gameState } from './state.js?v=82';
+import { GAME_CONFIG } from './config.js?v=83';
+import { gameState } from './state.js?v=83';
 import {
   createAlleyBackdropTexture,
   createBuildingFacadeTexture,
@@ -9,7 +9,7 @@ import {
   createWallMenuSignTexture,
   createPedestrianTextures,
   AnimeCustomerTextureRenderer
-} from './art3d.js?v=82';
+} from './art3d.js?v=83';
 
 /**
  * Полноэкранный WebGL 3D движок от первого лица с процедурной высокодетализированной
@@ -408,6 +408,8 @@ export class FirstPersonWebGLScene {
 
     if (mode === 'pickup_tray_right') {
       d.duration = 0.54;
+    } else if (mode === 'handoff_and_pickup_tray_left') {
+      d.duration = 0.88;
     } else if (mode === 'pour_right_to_left') {
       d.duration = 0.96;
     } else if (mode === 'handoff_and_grab_left') {
@@ -5262,6 +5264,60 @@ export class FirstPersonWebGLScene {
           const sc = 0.76 + (0.62 - 0.76) * s;
           if (liftedV) this.drawFilledVessel3D(rx, ry, rz, liftedV, sc, false);
           drawRightGloveAt(rx, ry, rz);
+        }
+        return;
+      }
+
+      if (mode === 'handoff_and_pickup_tray_left') {
+        // 1) p < 0.38: пустая посуда стоит на подносе, а блюдо из ЛЕВОЙ руки перекладывается в ПРАВУЮ;
+        // 2) 0.38..0.62: правая держит блюдо, а освободившаяся левая рука тянется к пустой посуде на подносе;
+        // 3) p >= 0.62: правая держит блюдо, левая поднимает пустую посуду с подноса к себе!
+        const trayX = -0.13;
+        const trayY = 0.918;
+        const trayZ = -0.24;
+        const fullV = d.vessel || rt.rightHandVessel;
+        const emptyLeft = { type: d.type, broth: null, noodleState: null, toppings: [], overflowCount: 0 };
+        if (p < 0.38) {
+          const t = p / 0.38;
+          const s = t * t * (3 - 2 * t);
+          const arc = Math.sin(t * Math.PI) * 0.045;
+          this.drawFilledVessel3D(trayX, trayY, trayZ, emptyLeft, 0.76, false);
+          const bx = basePos[0] + (rightHoldX - basePos[0]) * s;
+          const by = basePos[1] + (rightHoldY - basePos[1]) * s + arc;
+          const bz = basePos[2] + (rightHoldZ - basePos[2]) * s;
+          if (fullV) this.drawFilledVessel3D(bx, by, bz, fullV, 0.64 + (0.62 - 0.64) * s, false);
+          const lFollow = t < 0.55 ? s : 1 - (t - 0.55) / 0.45;
+          drawLeftGloveAt(
+            basePos[0] + (rightHoldX - basePos[0]) * 0.45 * lFollow,
+            basePos[1] + arc * lFollow,
+            basePos[2] + (rightHoldZ - basePos[2]) * 0.45 * lFollow
+          );
+          drawRightGloveAt(
+            rightHoldX + (bx - rightHoldX) * (1 - s * 0.3),
+            by,
+            rightHoldZ + (bz - rightHoldZ) * (1 - s * 0.3)
+          );
+          return;
+        }
+        if (fullV) this.drawFilledVessel3D(rightHoldX, rightHoldY, rightHoldZ, fullV, 0.62, false);
+        drawRightGloveAt(rightHoldX, rightHoldY, rightHoldZ);
+        if (p < 0.62) {
+          const t = (p - 0.38) / 0.24;
+          const s = t * t * (3 - 2 * t);
+          this.drawFilledVessel3D(trayX, trayY, trayZ, emptyLeft, 0.76, false);
+          drawLeftGloveAt(
+            basePos[0] + (trayX - basePos[0]) * s,
+            basePos[1] + (trayY + 0.02 - basePos[1]) * s + Math.sin(t * Math.PI) * 0.04,
+            basePos[2] + (trayZ - basePos[2]) * s
+          );
+        } else {
+          const t = (p - 0.62) / 0.38;
+          const s = t * t * (3 - 2 * t);
+          const lx = trayX + (basePos[0] - trayX) * s;
+          const ly = trayY + (basePos[1] - trayY) * s + Math.sin(t * Math.PI) * 0.075;
+          const lz = trayZ + (basePos[2] - trayZ) * s;
+          this.drawFilledVessel3D(lx, ly, lz, emptyLeft, 0.76 + (0.64 - 0.76) * s, false);
+          drawLeftGloveAt(lx, ly, lz);
         }
         return;
       }

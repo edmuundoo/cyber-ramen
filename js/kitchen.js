@@ -1,6 +1,6 @@
-import { GAME_CONFIG } from './config.js?v=82';
-import { gameState } from './state.js?v=82';
-import { audio } from './audio.js?v=82';
+import { GAME_CONFIG } from './config.js?v=83';
+import { gameState } from './state.js?v=83';
+import { audio } from './audio.js?v=83';
 
 export class KitchenSystem {
   constructor(callbacks) {
@@ -1008,6 +1008,37 @@ export class KitchenSystem {
       return {
         action: 'pickup_tray_right',
         vessel: lifted
+      };
+    }
+
+    // 3Б. В левой руке НАПОЛНЕННОЕ блюдо (с едой), а на подносе (без пакета) стоит ЧИСТАЯ ПУСТАЯ миска/коробка ->
+    //     Перекладываем блюдо из левой руки в ПРАВУЮ, а ЛЕВОЙ РУКОЙ забираем пустую миску/коробку с подноса!
+    //     (После этого тап по подносу поставит туда уже наполненное блюдо из правой руки, а тап по пустой слева — перельёт!)
+    if (
+      hasHand &&
+      !hasRight &&
+      a.vessel &&
+      !a.hasBag &&
+      !this.isVesselEmptyOfFood(handV) &&
+      this.isVesselEmptyOfFood(a.vessel)
+    ) {
+      const fullMoved = JSON.parse(JSON.stringify(handV));
+      const emptyPicked = JSON.parse(JSON.stringify(a.vessel));
+      rt.rightHandVessel = fullMoved;
+      rt.activeVessel = emptyPicked;
+      rt.vesselHeldInLeft = true;
+      rt.sauceModeArmed = false;
+      a.vessel = null;
+      audio.playTapPop();
+      this.onToast(
+        `🙌 Блюдо переложено в правую руку, пустая ${emptyPicked.type === 'bowl' ? '🍜 миска' : '📦 коробка'} с подноса — в левой! Тапните по подносу, чтобы поставить блюдо, или по пустой слева, чтобы перелить.`,
+        '#00f5d4'
+      );
+      this.renderAllKitchen();
+      return {
+        action: 'handoff_and_pickup_tray_left',
+        type: emptyPicked.type,
+        rightVessel: fullMoved
       };
     }
 
