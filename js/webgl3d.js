@@ -1,5 +1,5 @@
-import { GAME_CONFIG } from './config.js?v=86';
-import { gameState } from './state.js?v=86';
+import { GAME_CONFIG } from './config.js?v=87';
+import { gameState } from './state.js?v=87';
 import {
   createAlleyBackdropTexture,
   createBuildingFacadeTexture,
@@ -9,7 +9,7 @@ import {
   createWallMenuSignTexture,
   createPedestrianTextures,
   AnimeCustomerTextureRenderer
-} from './art3d.js?v=86';
+} from './art3d.js?v=87';
 
 /**
  * Полноэкранный WebGL 3D движок от первого лица с процедурной высокодетализированной
@@ -362,11 +362,11 @@ export class FirstPersonWebGLScene {
     this.heldVesselAppear = 0;
   }
 
-  triggerCollectDirtyBowlAnim(side = 'left', bowl = null) {
+  triggerCollectDirtyBowlAnim(side = 'left', bowl = null, followToSink = false) {
     this.collectDirtyAnim.active = true;
     this.collectDirtyAnim.side = side;
     this.collectDirtyAnim.timer = 0;
-    this.collectDirtyAnim.duration = 0.42;
+    this.collectDirtyAnim.duration = followToSink ? 0.88 : 0.56;
     this.collectDirtyAnim.bowl = bowl || { broth: 'tonkotsu' };
   }
 
@@ -3594,35 +3594,59 @@ export class FirstPersonWebGLScene {
         slot.rot
       );
     }
-    if (
-      leftList.length > 0 &&
-      rt.activeSector === 1 &&
-      rt.cameraFocus === 'customer' &&
-      (rt.customerPanSide || 0) === -1
-    ) {
-      // Хитбокс сбора грязных мисок активен ТОЛЬКО когда камера направлена на левую верхнюю полку (слева от котика)!
-      this.registerHitbox('dirty_bowl_left', shelfCenterX, 1.15, shelfCenterZ, 108);
+    if (leftList.length > 0 && rt.activeSector === 1 && !rt.carryingAssembly) {
+      if (rt.cameraFocus === 'customer' && (rt.customerPanSide || 0) === -1) {
+        this.registerHitbox('dirty_bowl_left', shelfCenterX, 1.15, shelfCenterZ, 108);
+      } else if (
+        (this.currentAspect || 0.56) >= 0.85 &&
+        (rt.cameraFocus === 'worktable' || (rt.cameraFocus === 'customer' && (rt.customerPanSide || 0) === 0))
+      ) {
+        // В широком кадре грязные миски на левой полке отлично видны — делаем их кликабельными прямо отсюда!
+        this.registerHitbox('dirty_bowl_left', shelfCenterX, 1.15, shelfCenterZ, 84, true);
+      }
     }
 
-    // Анимация руки, забирающей верхнюю грязную миску с левой полки в мойку
+    // Анимация руки, плавно переносящей грязную миску с левой полки прямо в глубокую чашу раковины (Сектор -1)!
     if (this.collectDirtyAnim.active && this.collectDirtyAnim.bowl) {
       const p = Math.min(1, this.collectDirtyAnim.timer / this.collectDirtyAnim.duration);
-      const s = p * p * (3 - 2 * p);
       const startX = shelfCenterX;
-      const targetX = -0.94;
-      const bx = startX + (targetX - startX) * s;
-      const by = 1.14 + Math.sin(p * Math.PI) * 0.1 - s * 0.16;
-      const bz = -1.04 + s * 0.72;
-      this.drawDirtyBowl3D(
-        bx,
-        by,
-        bz,
-        this.collectDirtyAnim.bowl.broth,
-        0.48 * (1 - p * 0.25),
-        [0.2 * (1 - p), 0.4 * p, -0.25 * (1 - p)]
-      );
-      this.drawBox(bx + 0.06, by + 0.03, bz + 0.08, 0.07, 0.044, 0.13, [0.16, 0.14, 0.24], 0.22, [0.2, 0.2, 0]);
-      this.drawBox(bx + 0.06, by + 0.055, bz + 0.08, 0.074, 0.012, 0.04, [0.0, 0.96, 0.83], 0.92, [0.2, 0.2, 0]);
+      const startY = 1.14;
+      const startZ = -1.04;
+      const sinkTargetX = -0.88;
+      const sinkTargetY = 0.805;
+      const sinkTargetZ = 0.72;
+      let bx, by, bz, bScale, bRot;
+      if (p < 0.22) {
+        // Фаза 1: рука мягко подхватывает верхнюю грязную миску вверх с полки
+        const t = p / 0.22;
+        const s = t * t * (3 - 2 * t);
+        bx = startX + 0.06 * s;
+        by = startY + 0.13 * s;
+        bz = startZ + 0.12 * s;
+        bScale = 0.48;
+        bRot = [0.18 * (1 - s), 0.2 * s, -0.2 * (1 - s)];
+      } else {
+        // Фаза 2: плавный пролёт по дуге вдоль левой зоны и мягкое опускание прямо на дно раковины!
+        const t = (p - 0.22) / 0.78;
+        const s = t * t * (3 - 2 * t);
+        const midSwingX = Math.sin(t * Math.PI) * 0.28;
+        const midArcY = Math.sin(t * Math.PI) * 0.22;
+        const p0x = startX + 0.06;
+        const p0y = startY + 0.13;
+        const p0z = startZ + 0.12;
+        bx = p0x + (sinkTargetX - p0x) * s + midSwingX;
+        by = p0y + (sinkTargetY - p0y) * s + midArcY;
+        bz = p0z + (sinkTargetZ - p0z) * s;
+        bScale = 0.48 - 0.04 * s;
+        bRot = [0.1 * Math.sin(t * Math.PI), 0.2 + 0.65 * s, -0.14 * Math.sin(t * Math.PI)];
+      }
+      this.drawDirtyBowl3D(bx, by, bz, this.collectDirtyAnim.bowl.broth, bScale, bRot);
+      // Правая/левая кибер-перчатка, сопровождающая миску в раковину (уходит, когда миска уже опустилась)
+      if (p < 0.92) {
+        const gRot = [0.16, 0.35 + p * 0.6, -0.12];
+        this.drawBox(bx + 0.075, by + 0.025, bz + 0.055, 0.072, 0.038, 0.13, [0.16, 0.14, 0.24], 0.22, gRot);
+        this.drawBox(bx + 0.075, by + 0.048, bz + 0.055, 0.076, 0.011, 0.04, [0.0, 0.96, 0.83], 0.94, gRot);
+      }
     }
   }
 
@@ -4444,7 +4468,9 @@ export class FirstPersonWebGLScene {
       { dx: 0.09 + 0.01, dy: 0.073, dz: 0.03 + 0.008, rot: [0.21, -0.6, -0.24] },
       { dx: -0.03 - 0.009, dy: 0.072, dz: 0.12 + 0.006, rot: [0.2, 0.25, 0.22] }
     ];
-    const visibleDirty = Math.min(10, dirtyList.length);
+    const flyingIntoSink =
+      this.collectDirtyAnim.active && this.collectDirtyAnim.timer / this.collectDirtyAnim.duration < 0.88;
+    const visibleDirty = Math.max(0, Math.min(10, dirtyList.length - (flyingIntoSink ? 1 : 0)));
     for (let i = 0; i < visibleDirty; i++) {
       const sp = sinkPyramid[i % sinkPyramid.length];
       const extraY = Math.floor(i / sinkPyramid.length) * 0.034;

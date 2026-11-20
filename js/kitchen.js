@@ -1,6 +1,6 @@
-import { GAME_CONFIG } from './config.js?v=86';
-import { gameState } from './state.js?v=86';
-import { audio } from './audio.js?v=86';
+import { GAME_CONFIG } from './config.js?v=87';
+import { gameState } from './state.js?v=87';
+import { audio } from './audio.js?v=87';
 
 export class KitchenSystem {
   constructor(callbacks) {
