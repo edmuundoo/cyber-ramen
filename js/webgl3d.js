@@ -1,5 +1,5 @@
-import { GAME_CONFIG } from './config.js?v=87';
-import { gameState } from './state.js?v=87';
+import { GAME_CONFIG } from './config.js?v=88';
+import { gameState } from './state.js?v=88';
 import {
   createAlleyBackdropTexture,
   createBuildingFacadeTexture,
@@ -9,7 +9,7 @@ import {
   createWallMenuSignTexture,
   createPedestrianTextures,
   AnimeCustomerTextureRenderer
-} from './art3d.js?v=87';
+} from './art3d.js?v=88';
 
 /**
  * Полноэкранный WebGL 3D движок от первого лица с процедурной высокодетализированной
@@ -362,11 +362,11 @@ export class FirstPersonWebGLScene {
     this.heldVesselAppear = 0;
   }
 
-  triggerCollectDirtyBowlAnim(side = 'left', bowl = null, followToSink = false) {
+  triggerCollectDirtyBowlAnim(side = 'left', bowl = null) {
     this.collectDirtyAnim.active = true;
     this.collectDirtyAnim.side = side;
     this.collectDirtyAnim.timer = 0;
-    this.collectDirtyAnim.duration = followToSink ? 0.88 : 0.56;
+    this.collectDirtyAnim.duration = 0.68;
     this.collectDirtyAnim.bowl = bowl || { broth: 'tonkotsu' };
   }
 

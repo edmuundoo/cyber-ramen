@@ -1,16 +1,16 @@
-import { GAME_CONFIG } from './config.js?v=87';
-import { gameState, createShiftRuntimeState } from './state.js?v=87';
-import { audio } from './audio.js?v=87';
+import { GAME_CONFIG } from './config.js?v=88';
+import { gameState, createShiftRuntimeState } from './state.js?v=88';
+import { audio } from './audio.js?v=88';
 import {
   buildCustomerPortraitSVG,
   buildCourierDroneSVG,
   generateAppleTouchIcon
-} from './renderer.js?v=87';
-import { FirstPersonWebGLScene } from './webgl3d.js?v=87';
-import { CustomerAndDeliverySystem } from './customers.js?v=87';
-import { KitchenSystem } from './kitchen.js?v=87';
-import { EconomySystem } from './economy.js?v=87';
-import { TutorialSystem } from './tutorial.js?v=87';
+} from './renderer.js?v=88';
+import { FirstPersonWebGLScene } from './webgl3d.js?v=88';
+import { CustomerAndDeliverySystem } from './customers.js?v=88';
+import { KitchenSystem } from './kitchen.js?v=88';
+import { EconomySystem } from './economy.js?v=88';
+import { TutorialSystem } from './tutorial.js?v=88';
 
 class CyberRamenApp {
   constructor() {
@@ -345,30 +345,9 @@ class CyberRamenApp {
 
     if (hitId === 'dirty_bowl_left' || hitId === 'dirty_bowl_right') {
       const side = hitId === 'dirty_bowl_right' ? 'right' : 'left';
-      const rtCur = gameState.runtime;
-      const fromWideCenter =
-        (this.scene3D.currentAspect || 0.56) >= 0.85 &&
-        rtCur.activeSector === 1 &&
-        (rtCur.cameraFocus === 'worktable' ||
-          (rtCur.cameraFocus === 'customer' && (rtCur.customerPanSide || 0) === 0));
       const res = this.kitchenSystem.collectDirtyBowlFromShelf(side);
       if (res) {
-        this.scene3D.triggerCollectDirtyBowlAnim(res.side, res.bowl, fromWideCenter);
-        if (fromWideCenter) {
-          if (this.pendingAutoTurnTimer) {
-            clearTimeout(this.pendingAutoTurnTimer);
-            this.pendingAutoTurnTimer = null;
-          }
-          // Сначала ~180 мс видим, как рука подхватывает миску с полки, затем камера плавно провожает её прямо в раковину (Сектор -1)!
-          this.pendingAutoTurnTimer = setTimeout(() => {
-            this.pendingAutoTurnTimer = null;
-            if (!gameState.runtime.carryingAssembly) {
-              gameState.runtime.cameraFocus = 'worktable';
-              gameState.runtime.customerPanSide = 0;
-              this.switchSector(-1);
-            }
-          }, 180);
-        }
+        this.scene3D.triggerCollectDirtyBowlAnim(res.side, res.bowl);
       }
       return;
     }
@@ -395,7 +374,7 @@ class CyberRamenApp {
 
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker
-        .register('./sw.js?v=87', { updateViaCache: 'none' })
+        .register('./sw.js?v=88', { updateViaCache: 'none' })
         .then((reg) => reg.update())
         .catch(() => {});
     }
