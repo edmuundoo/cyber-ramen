@@ -1,14 +1,15 @@
-import { GAME_CONFIG } from './config.js?v=75';
-import { gameState } from './state.js?v=75';
+import { GAME_CONFIG } from './config.js?v=76';
+import { gameState } from './state.js?v=76';
 import {
   createAlleyBackdropTexture,
   createBuildingFacadeTexture,
   createACUnitTexture,
   createWetAsphaltTexture,
   createKanjiSignTextures,
+  createWallMenuSignTexture,
   createPedestrianTextures,
   AnimeCustomerTextureRenderer
-} from './art3d.js?v=75';
+} from './art3d.js?v=76';
 
 /**
  * Полноэкранный WebGL 3D движок от первого лица с процедурной высокодетализированной
@@ -738,6 +739,7 @@ export class FirstPersonWebGLScene {
     this.texACUnit = createACUnitTexture(gl);
     this.texAsphalt = createWetAsphaltTexture(gl);
     this.texSigns = createKanjiSignTextures(gl);
+    this.texWallMenuSign = createWallMenuSignTexture(gl);
     this.texPedestrians = createPedestrianTextures(gl);
     this.animeCustomerRenderer = new AnimeCustomerTextureRenderer(gl);
 
@@ -2309,6 +2311,40 @@ export class FirstPersonWebGLScene {
     this.drawBox(-1.265, 0.86, 0.72, 0.27, 0.07, 0.48, [0.22, 0.26, 0.32], 0.05, null, 0.45);
     this.drawBox(-0.535, 0.86, 0.72, 0.19, 0.07, 0.48, [0.22, 0.26, 0.32], 0.05, null, 0.45);
     this.drawBox(-0.45, 0.9, 0.06, 0.03, 0.025, 2.32, [0.0, 0.96, 0.83], 0.65);
+
+    // ЛЕВАЯ СТЕНА ЯТАЯ ЗА ВАРОЧНОЙ ПЛИТОЙ И МОЙКОЙ + ИНТЕРАКТИВНАЯ ТАБЛИЧКА «МЕНЮ ЯТАЯ» НА СТЕНЕ!
+    const wallX = -1.4;
+    const wallCol =
+      tier === 1 ? [0.21, 0.15, 0.13] : tier === 2 ? [0.15, 0.12, 0.24] : [0.09, 0.18, 0.26];
+    // Основная глухая стена ятая слева (z = -1.08 .. +1.28, y = 0.88 .. 2.02)
+    this.drawBox(wallX, 1.45, 0.1, 0.06, 1.16, 2.36, wallCol, 0.05, null, 0.35);
+    // Кухонный стальной фартук над варочной плитой и раковиной (y = 0.90 .. 1.24)
+    this.drawBox(wallX + 0.034, 1.07, 0.1, 0.012, 0.34, 2.32, [0.28, 0.33, 0.4], 0.08, null, 0.78);
+    // Декоративные вертикальные деревянные/металлические балки и верхний карниз
+    for (const wz of [-0.95, -0.05, 0.65, 1.18]) {
+      this.drawBox(wallX + 0.036, 1.45, wz, 0.024, 1.14, 0.048, [0.13, 0.1, 0.12], 0.04, null, 0.45);
+    }
+    this.drawBox(wallX + 0.045, 1.97, 0.1, 0.05, 0.07, 2.36, [0.14, 0.11, 0.13], 0.05, null, 0.4);
+    this.drawBox(wallX + 0.045, 1.925, 0.1, 0.014, 0.015, 2.26, trimCol, trimEmissive * 0.85);
+
+    // ИНТЕРАКТИВНАЯ 3D-ТАБЛИЧКА «МЕНЮ ЯТАЯ» НА ЛЕВОЙ СТЕНЕ НАД ВАРОЧНОЙ ПЛИТОЙ (x = -1.35, y = 1.44, z = -0.44)
+    // Тап по табличке открывает меню игры (день, время, баланс, выручка, рейтинг, рецепты и настройки)!
+    const signX = wallX + 0.052;
+    const signY = 1.44;
+    const signZ = -0.44;
+    const signW = 0.62;
+    const signH = 0.38;
+    // Деревянно-металлическая объёмная рамка-доска и 2 подвеса
+    this.drawBox(signX - 0.008, signY, signZ, 0.022, signH + 0.034, signW + 0.034, [0.16, 0.1, 0.12], 0.1, null, 0.6);
+    this.drawBox(signX + 0.004, signY + signH * 0.5 + 0.016, signZ, 0.014, 0.014, signW + 0.02, [0.0, 0.96, 0.83], 0.72);
+    this.drawBox(signX + 0.004, signY - signH * 0.5 - 0.016, signZ, 0.014, 0.014, signW + 0.02, [1.0, 0.68, 0.22], 0.65);
+    this.drawBox(signX - 0.004, signY + signH * 0.5 + 0.055, signZ - 0.2, 0.012, 0.08, 0.016, [0.68, 0.74, 0.82], 0.15, null, 0.9);
+    this.drawBox(signX - 0.004, signY + signH * 0.5 + 0.055, signZ + 0.2, 0.012, 0.08, 0.016, [0.68, 0.74, 0.82], 0.15, null, 0.9);
+    // Лицевая текстурированная панель с надписью «МЕНЮ ЯТАЯ»
+    this.drawTexturedQuad(this.texWallMenuSign, signX + 0.008, signY, signZ, signW, signH, 0.92, [0, Math.PI * 0.5, 0]);
+    if (gameState.runtime.activeSector === 0) {
+      this.registerHitbox('wall_menu_board', signX + 0.02, signY, signZ, 118);
+    }
 
     // ПРАВАЯ СТОЛЕШНИЦА СКЛАДА И УПАКОВКИ С ОТКРЫТОЙ ПОДСВЕЧЕННОЙ НИШЕЙ ПОД КРИО-ХОЛОДИЛЬНИКОМ (ДЛЯ ПАКЕТОВ С СОБОЙ!)
     // 1) Сплошная передняя тумба под стойками мисок и коробок (z от -1.095 до -0.02, без пересечения с передней стойкой!)
@@ -4847,12 +4883,6 @@ export class FirstPersonWebGLScene {
 
     if (rt.activeSector === 1 && rt.cameraFocus === 'customer' && (rt.customerPanSide || 0) >= 0) {
       this.registerHitbox('courier_drone', droneX, droneY - 0.03, droneZ, 102);
-    }
-
-    if (gameState.persistent.inDebtCollector) {
-      this.drawMesh('cylinder', -0.78, 1.18, -1.45, 0.4, 0.58, 0.26, [0.1, 0.04, 0.08], 0.0);
-      this.drawMesh('sphere', -0.78, 1.54, -1.45, 0.26, 0.26, 0.26, [0.2, 0.18, 0.22], 0.0);
-      this.drawBox(-0.78, 1.55, -1.31, 0.23, 0.05, 0.04, [1.0, 0.1, 0.2], 1.0);
     }
   }
 

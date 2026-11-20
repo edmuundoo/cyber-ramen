@@ -1,6 +1,6 @@
-import { GAME_CONFIG } from './config.js?v=75';
-import { gameState } from './state.js?v=75';
-import { audio } from './audio.js?v=75';
+import { GAME_CONFIG } from './config.js?v=76';
+import { gameState } from './state.js?v=76';
+import { audio } from './audio.js?v=76';
 
 export class EconomySystem {
   constructor(onToast, onStartNextDay) {
@@ -86,17 +86,16 @@ export class EconomySystem {
     const mandatoryDeductions = restockCost + districtTax + electricityBill + loanPayment;
     gameState.persistent.money -= mandatoryDeductions;
 
-    // Проверка на уход баланса в минус (пеня и вызов коллектора-киборга)
+    // Проверка на уход баланса в минус (все долговые удержания происходят строго в конце смены!)
     let debtPenalty = 0;
     if (gameState.persistent.money < 0) {
       debtPenalty = 25;
       gameState.persistent.money -= debtPenalty;
-      gameState.persistent.inDebtCollector = true;
       audio.playPenaltyBuzz();
     } else {
-      gameState.persistent.inDebtCollector = false;
       audio.playCoinChime();
     }
+    gameState.persistent.inDebtCollector = false;
 
     const totalIncome = stats.salesRevenue + stats.tipsEarned + stats.deliveryBonuses;
     const totalExpenses =
@@ -150,7 +149,7 @@ export class EconomySystem {
           <span class="pnl-val-pos">+¥${s.salesRevenue}</span>
         </div>
         <div class="pnl-row">
-          <span>✨ Чаевые гостей ${s.collectorWithheld > 0 ? `(Коллектор забрал ¥${s.collectorWithheld})` : ''}</span>
+          <span>✨ Чаевые гостей</span>
           <span class="pnl-val-pos">+¥${s.tipsEarned}</span>
         </div>
         <div class="pnl-row">

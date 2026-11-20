@@ -1,16 +1,16 @@
-import { GAME_CONFIG } from './config.js?v=75';
-import { gameState, createShiftRuntimeState } from './state.js?v=75';
-import { audio } from './audio.js?v=75';
+import { GAME_CONFIG } from './config.js?v=76';
+import { gameState, createShiftRuntimeState } from './state.js?v=76';
+import { audio } from './audio.js?v=76';
 import {
   buildCustomerPortraitSVG,
   buildCourierDroneSVG,
   generateAppleTouchIcon
-} from './renderer.js?v=75';
-import { FirstPersonWebGLScene } from './webgl3d.js?v=75';
-import { CustomerAndDeliverySystem } from './customers.js?v=75';
-import { KitchenSystem } from './kitchen.js?v=75';
-import { EconomySystem } from './economy.js?v=75';
-import { TutorialSystem } from './tutorial.js?v=75';
+} from './renderer.js?v=76';
+import { FirstPersonWebGLScene } from './webgl3d.js?v=76';
+import { CustomerAndDeliverySystem } from './customers.js?v=76';
+import { KitchenSystem } from './kitchen.js?v=76';
+import { EconomySystem } from './economy.js?v=76';
+import { TutorialSystem } from './tutorial.js?v=76';
 
 class CyberRamenApp {
   constructor() {
@@ -203,6 +203,7 @@ class CyberRamenApp {
           }
         } else if (gameState.runtime.currentCustomer) {
           this.customerSystem.announceCurrentCustomerOrder();
+          this.showToast(gameState.runtime.currentCustomer.order.dialogue, '#00f5d4');
         } else {
           gameState.runtime.cameraFocus = 'worktable';
           gameState.runtime.carryingAssembly = false;
@@ -213,6 +214,15 @@ class CyberRamenApp {
       return;
     }
 
+    if (hitId === 'wall_menu_board') {
+      audio.playTapPop();
+      this.syncVisualTierAndHUD();
+      this.renderCourierWindow();
+      const codexModal = document.getElementById('codex-modal');
+      if (codexModal && !codexModal.open) codexModal.showModal();
+      return;
+    }
+
     if (hitId === 'pacifier_cat') {
       this.scene3D.triggerHandAction('cat', [1.0, 0.16, 0.52]);
       this.customerSystem.triggerPacifier();
@@ -220,6 +230,23 @@ class CyberRamenApp {
     }
 
     if (hitId === 'courier_drone' || hitId === 'sealer_station' || hitId === 'airlock_station') {
+      const rt = gameState.runtime;
+      const hasBoxToDeliver =
+        (rt.activeVessel && rt.activeVessel.type === 'box') ||
+        (rt.assembly && rt.assembly.vessel && rt.assembly.vessel.type === 'box');
+      if (!hasBoxToDeliver && rt.activeDelivery) {
+        const del = rt.activeDelivery;
+        const brothName = GAME_CONFIG.BROTHS[del.broth]?.shortName || del.broth;
+        const topNames = (del.toppings || [])
+          .map((id) => GAME_CONFIG.TOPPINGS[id]?.shortName || id)
+          .join(', ');
+        audio.playTapPop();
+        this.showToast(
+          `🚁 Заказ ${del.id} (${Math.ceil(del.remainingSec)}с): ${brothName} + ${topNames} в 📦 Коробке`,
+          '#00f5d4'
+        );
+        return;
+      }
       const delivered = this.kitchenSystem.deliverBoxToCourierDrone();
       if (delivered) {
         this.scene3D.triggerAutoCloseAndDroneDeliverAnim(delivered);
@@ -296,7 +323,7 @@ class CyberRamenApp {
 
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker
-        .register('./sw.js?v=75', { updateViaCache: 'none' })
+        .register('./sw.js?v=76', { updateViaCache: 'none' })
         .then((reg) => reg.update())
         .catch(() => {});
     }
@@ -554,6 +581,7 @@ class CyberRamenApp {
 
   syncVisualTierAndHUD() {
     const p = gameState.persistent;
+    const rt = gameState.runtime;
     const district = gameState.getCurrentDistrict();
 
     document.documentElement.setAttribute('data-yatai-tier', String(district.tier));
@@ -567,16 +595,24 @@ class CyberRamenApp {
     const moneyEl = document.getElementById('hud-money');
     const creditsPill = document.getElementById('hud-credits-pill');
     if (moneyEl) moneyEl.textContent = String(p.money);
-    if (creditsPill) creditsPill.classList.toggle('is-debt', p.money < 0 || p.inDebtCollector);
+    if (creditsPill) creditsPill.classList.toggle('is-debt', p.money < 0);
+
+    const revEl = document.getElementById('menu-shift-revenue');
+    if (revEl && rt?.dailyStats) {
+      const todayTotal =
+        (rt.dailyStats.salesRevenue || 0) +
+        (rt.dailyStats.tipsEarned || 0) +
+        (rt.dailyStats.deliveryBonuses || 0);
+      revEl.textContent = `+¥${todayTotal}`;
+    }
 
     const ratingEl = document.getElementById('hud-rating');
     if (ratingEl) ratingEl.textContent = p.rating.toFixed(1);
 
-    const collectorEl = document.getElementById('collector-presence');
-    if (collectorEl) collectorEl.hidden = !p.inDebtCollector;
-
-    const audioIcon = document.getElementById('audio-icon');
-    if (audioIcon) audioIcon.textContent = p.settings.muted ? '🔇' : '🔊';
+    const audioBtn = document.getElementById('btn-audio');
+    if (audioBtn) {
+      audioBtn.textContent = p.settings.muted ? '🔇 Звук: ВЫКЛ' : '🔊 Звук: ВКЛ';
+    }
 
     const musicBtn = document.getElementById('btn-toggle-music');
     if (musicBtn) {
@@ -589,9 +625,6 @@ class CyberRamenApp {
   }
 
   renderCustomerStage() {
-    // Плашки с текущим заказом и 2D-портретом полностью отключены:
-    // при подходе клиента камера берёт его крупным планом, он озвучивает заказ голосом,
-    // после чего камера автоматически опускается на крупный план 3D-тарелки и лотков!
     const wrap = document.getElementById('customer-portrait-wrap');
     const nameTag = document.getElementById('customer-name-tag');
     const bubble = document.getElementById('order-bubble');
@@ -602,26 +635,16 @@ class CyberRamenApp {
 
   renderCourierWindow() {
     const del = gameState.runtime.activeDelivery;
-    const unit = document.getElementById('courier-window-unit');
-    const avatar = document.getElementById('courier-avatar-svg');
-    const timerTxt = document.getElementById('courier-window-timer');
-
-    if (!unit) return;
+    const card = document.getElementById('menu-delivery-card');
+    const info = document.getElementById('menu-delivery-info');
+    if (!card || !info) return;
     if (!del) {
-      unit.hidden = true;
+      card.hidden = true;
       return;
     }
-
-    unit.hidden = false;
-    if (avatar && !avatar.innerHTML) {
-      avatar.innerHTML = buildCourierDroneSVG();
-    }
-    if (timerTxt) {
-      const slotReady = gameState.runtime.sealerSlot?.inAirlock;
-      timerTxt.textContent = slotReady
-        ? `В шлюзе! Прилёт: ${Math.ceil(del.remainingSec)}с`
-        : `Заказ ${del.id} • ${Math.ceil(del.remainingSec)}с`;
-    }
+    card.hidden = false;
+    const brothName = GAME_CONFIG.BROTHS[del.broth]?.shortName || del.broth;
+    info.textContent = `${del.id}: ${brothName} (${Math.ceil(del.remainingSec)}с)`;
   }
 
   updateLiveHUDAndTimers(dt) {

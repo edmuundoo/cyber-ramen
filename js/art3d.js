@@ -341,6 +341,70 @@ export function createKanjiSignTextures(gl) {
   return out;
 }
 
+// 5Б. Красивая деревянно-неоновая табличка «МЕНЮ ЯТАЯ» на левой стене над варочной плитой (по тапу открывает игровое меню!)
+export function createWallMenuSignTexture(gl) {
+  const c = document.createElement('canvas');
+  c.width = 512;
+  c.height = 320;
+  const ctx = c.getContext('2d');
+
+  // Тёмная фактурная лаковая доска ятая
+  const bg = ctx.createLinearGradient(0, 0, 0, 320);
+  bg.addColorStop(0, '#1e1318');
+  bg.addColorStop(1, '#0e0a12');
+  ctx.fillStyle = bg;
+  ctx.fillRect(0, 0, 512, 320);
+
+  // Лёгкие горизонтальные волокна дерева
+  ctx.fillStyle = 'rgba(255, 200, 140, 0.04)';
+  for (let y = 12; y < 310; y += 16) {
+    ctx.fillRect(14, y, 484, 3);
+  }
+
+  // Двойная рамка: тёплый золотистый внешний контур + неоновый бирюзовый внутренний
+  ctx.strokeStyle = '#ffaa33';
+  ctx.lineWidth = 8;
+  ctx.strokeRect(10, 10, 492, 300);
+
+  ctx.strokeStyle = '#00f5d4';
+  ctx.lineWidth = 3;
+  ctx.strokeRect(22, 22, 468, 276);
+
+  // Верхняя карминовая плашка с иероглифами «拉麺 · 営業中»
+  ctx.fillStyle = '#c81d38';
+  ctx.fillRect(36, 36, 440, 54);
+  ctx.fillStyle = '#fff5e4';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = '900 32px "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif';
+  ctx.fillText('拉 麺  •  CYBER RAMEN  •  営 業 中', 256, 64);
+
+  // Крупный чёткий заголовок МЕНЮ ИГРЫ
+  ctx.fillStyle = '#00f5d4';
+  ctx.shadowColor = 'rgba(0, 245, 212, 0.65)';
+  ctx.shadowBlur = 14;
+  ctx.font = '900 54px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+  ctx.fillText('МЕНЮ ЯТАЯ', 256, 146);
+  ctx.shadowBlur = 0;
+
+  // Строка-напоминание о содержимом таблички
+  ctx.fillStyle = '#ffcf70';
+  ctx.font = '700 24px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+  ctx.fillText('ДЕНЬ  •  ВРЕМЯ  •  БАЛАНС  •  РЕЦЕПТЫ', 256, 212);
+
+  // Нижняя кнопка-подсказка «НАЖМИТЕ, ЧТОБЫ ОТКРЫТЬ»
+  ctx.fillStyle = 'rgba(0, 245, 212, 0.16)';
+  ctx.fillRect(110, 244, 292, 38);
+  ctx.strokeStyle = '#00f5d4';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(110, 244, 292, 38);
+  ctx.fillStyle = '#e8fffb';
+  ctx.font = '800 20px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+  ctx.fillText('📋 ТАПНИТЕ ПО ТАБЛИЧКЕ', 256, 264);
+
+  return createGLTextureFromCanvas(gl, c);
+}
+
 // 6. Силуэты прохожих в капюшонах с неоновыми полосами в глубине переулка (как на скриншоте!)
 export function createPedestrianTextures(gl) {
   const configs = [

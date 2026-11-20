@@ -1,6 +1,6 @@
-import { GAME_CONFIG } from './config.js?v=75';
-import { gameState } from './state.js?v=75';
-import { audio } from './audio.js?v=75';
+import { GAME_CONFIG } from './config.js?v=76';
+import { gameState } from './state.js?v=76';
+import { audio } from './audio.js?v=76';
 
 export class KitchenSystem {
   constructor(callbacks) {
@@ -888,34 +888,21 @@ export class KitchenSystem {
     );
     if (evalRes.multiplier < 0.75 || wrongBagForDineIn) rawTip = 0;
 
-    let collectorCut = 0;
-    if (gameState.persistent.inDebtCollector && rawTip > 0) {
-      collectorCut = Math.ceil(rawTip * 0.5);
-      rawTip -= collectorCut;
-      rt.dailyStats.collectorWithheld += collectorCut;
-    }
-
     const totalEarned = basePay + rawTip;
     gameState.persistent.money += totalEarned;
     rt.dailyStats.salesRevenue += basePay;
     rt.dailyStats.tipsEarned += rawTip;
     rt.dailyStats.servedCount += 1;
 
-    if (gameState.persistent.inDebtCollector && gameState.persistent.money >= 0) {
-      gameState.persistent.inDebtCollector = false;
-      this.onToast('🦾 Долг погашен! Коллектор покинул переулок.', '#00f5d4');
-    }
-
     audio.playCoinChime();
     this.onSpawnCoins(10, `+¥${totalEarned}`);
 
     const qualityTag = evalRes.notes.join(', ');
-    const collectorNote = collectorCut > 0 ? ` (Коллектор -¥${collectorCut})` : '';
     const vesselIcon = servingBag ? '🛍️' : '🍱';
     this.onToast(
       wrongBagForDineIn
         ? `⚠️ Отдано в пакете вместо подноса: +¥${basePay}, чаевые ¥0, рейтинг -0.15★`
-        : `${vesselIcon} Подано: +¥${basePay} и чаевые +¥${rawTip}${collectorNote} [${qualityTag}]`,
+        : `${vesselIcon} Подано: +¥${basePay} и чаевые +¥${rawTip} [${qualityTag}]`,
       penaltyNote ? '#ffaa00' : evalRes.isPerfect ? '#10f56c' : '#00f5d4'
     );
 
