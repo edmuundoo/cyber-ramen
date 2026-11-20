@@ -1,5 +1,5 @@
-import { GAME_CONFIG } from './config.js?v=83';
-import { gameState } from './state.js?v=83';
+import { GAME_CONFIG } from './config.js?v=84';
+import { gameState } from './state.js?v=84';
 import {
   createAlleyBackdropTexture,
   createBuildingFacadeTexture,
@@ -9,7 +9,7 @@ import {
   createWallMenuSignTexture,
   createPedestrianTextures,
   AnimeCustomerTextureRenderer
-} from './art3d.js?v=83';
+} from './art3d.js?v=84';
 
 /**
  * Полноэкранный WebGL 3D движок от первого лица с процедурной высокодетализированной
@@ -2581,11 +2581,11 @@ export class FirstPersonWebGLScene {
     }
 
     const dualS = this.dualStanceT * this.dualStanceT * (3 - 2 * this.dualStanceT);
-    const d = 0.58 + 0.085 * ext - 0.034 * dualS;
+    const d = 0.58 + 0.085 * ext + 0.046 * dualS;
     const halfW = d * (this.currentTanHalfFovY || 0.6745) * (this.currentAspect || 0.56);
     const halfH = d * (this.currentTanHalfFovY || 0.6745);
     const r = Math.max(-0.15, Math.min(-0.085, -0.44 * halfW)) + 0.048 * ext - 0.008 * dualS;
-    const u = Math.max(-0.27, Math.min(-0.18, -0.52 * halfH)) + 0.072 * ext - 0.018 * dualS - catchDip + swayY;
+    const u = Math.max(-0.27, Math.min(-0.18, -0.52 * halfH)) + 0.072 * ext - 0.024 * dualS - catchDip + swayY;
 
     return [
       this.camPos[0] + F[0] * d + R[0] * r + U[0] * u,
@@ -2595,18 +2595,18 @@ export class FirstPersonWebGLScene {
   }
 
   // Естественная асимметричная 3D-позиция ПРАВОЙ руки с посудой:
-  // Правая рука держит свою миску/коробку на ~9-10 см дальше вперёд и на ~3-4 см выше левой,
-  // с собственной независимой фазой покачивания — живая человеческая поза без роботоподобной зеркальности!
+  // Правая рука держит свою миску/коробку чуть БЛИЖЕ к себе и чуть ВЫШЕ,
+  // а левая при занятых обеих руках уходит чуть ДАЛЬШЕ вперёд и НИЖЕ — живая поза с независимым покачиванием!
   getRightHandWorldPos() {
     const { F, R, U } = this.getCameraBasis();
     const swayY = Math.sin(this.time * 2.55 + 1.65) * 0.0055;
     const swayX = Math.cos(this.time * 1.85 + 0.9) * 0.003;
 
-    const d = 0.648;
+    const d = 0.555;
     const halfW = d * (this.currentTanHalfFovY || 0.6745) * (this.currentAspect || 0.56);
     const halfH = d * (this.currentTanHalfFovY || 0.6745);
-    const r = Math.min(0.155, Math.max(0.095, 0.45 * halfW)) + swayX;
-    const u = Math.max(-0.235, Math.min(-0.145, -0.435 * halfH)) + swayY;
+    const r = Math.min(0.142, Math.max(0.084, 0.44 * halfW)) + swayX;
+    const u = Math.max(-0.21, Math.min(-0.135, -0.42 * halfH)) + swayY;
 
     return [
       this.camPos[0] + F[0] * d + R[0] * r + U[0] * u,
