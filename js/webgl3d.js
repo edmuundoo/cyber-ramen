@@ -1,5 +1,5 @@
-import { GAME_CONFIG } from './config.js?v=79';
-import { gameState } from './state.js?v=79';
+import { GAME_CONFIG } from './config.js?v=80';
+import { gameState } from './state.js?v=80';
 import {
   createAlleyBackdropTexture,
   createBuildingFacadeTexture,
@@ -9,7 +9,7 @@ import {
   createWallMenuSignTexture,
   createPedestrianTextures,
   AnimeCustomerTextureRenderer
-} from './art3d.js?v=79';
+} from './art3d.js?v=80';
 
 /**
  * Полноэкранный WebGL 3D движок от первого лица с процедурной высокодетализированной
@@ -147,7 +147,8 @@ export class FirstPersonWebGLScene {
       timer: 0,
       duration: 0.38,
       vessel: null,
-      intoBag: false
+      intoBag: false,
+      fromRight: false
     };
     this.chopsticksPlaceAnim = { active: false, timer: 0, duration: 0.42 };
     this.drinkPlaceAnim = {
@@ -493,6 +494,7 @@ export class FirstPersonWebGLScene {
       ? { ...res.vessel, toppings: [...(res.vessel.toppings || [])] }
       : null;
     this.assemblyVesselAnim.intoBag = Boolean(res.intoBag || res.fromBag);
+    this.assemblyVesselAnim.fromRight = Boolean(res.fromRight);
     this.vesselBounce = 0.7;
   }
 
@@ -3048,22 +3050,51 @@ export class FirstPersonWebGLScene {
       }
     }
 
-    // Анимация постановки посуды из левой руки на поднос (ближе к левому краю!) или внутрь полого пакета (с запечатыванием коробки!)
+    // Анимация постановки посуды из левой или правой руки на поднос (ближе к левому краю!) или внутрь полого пакета (с запечатыванием коробки!)
     if (this.assemblyVesselAnim.active && this.assemblyVesselAnim.vessel && this.assemblyVesselAnim.action === 'place') {
       const p = Math.min(1, this.assemblyVesselAnim.timer / this.assemblyVesselAnim.duration);
       const s = p * p * (3 - 2 * p);
       const handPos = this.getLeftHandWorldPos();
+      const { F, R, U } = this.getCameraBasis();
+      const fromRight = Boolean(this.assemblyVesselAnim.fromRight);
+      const startPos = fromRight
+        ? [
+            handPos[0] + R[0] * 0.24 + F[0] * 0.015,
+            handPos[1] + U[1] * 0.005,
+            handPos[2] + R[2] * 0.24 + F[2] * 0.015
+          ]
+        : handPos;
       const intoBag = Boolean(this.assemblyVesselAnim.intoBag);
       const targetX = intoBag ? asmX - 0.075 : asmX - 0.13;
       const targetY = intoBag ? bagBaseY + 0.016 : asmY + 0.017;
       const targetZ = intoBag ? asmZ - 0.01 : asmZ;
       const arcH = intoBag ? 0.28 : 0.08;
-      const vx = handPos[0] + (targetX - handPos[0]) * s;
-      const vy = handPos[1] + (targetY - handPos[1]) * s + Math.sin(p * Math.PI) * arcH;
-      const vz = handPos[2] + (targetZ - handPos[2]) * s;
+      const vx = startPos[0] + (targetX - startPos[0]) * s;
+      const vy = startPos[1] + (targetY - startPos[1]) * s + Math.sin(p * Math.PI) * arcH;
+      const vz = startPos[2] + (targetZ - startPos[2]) * s;
       const vsc = intoBag ? 0.64 + 0.14 * s : 0.64 + 0.12 * s;
       const sealP = intoBag ? Math.min(1, Math.max(0, (p - 0.22) / 0.55)) : 0;
       this.drawFilledVessel3D(vx, vy, vz, this.assemblyVesselAnim.vessel, vsc, sealP);
+      if (fromRight) {
+        const yawAngle = Math.atan2(-F[0], -F[2]);
+        const rhX = vx + R[0] * 0.088 - F[0] * 0.054;
+        const rhY = vy - 0.034;
+        const rhZ = vz + R[2] * 0.088 - F[2] * 0.054;
+        const rhRot = [0.06, yawAngle + 0.34, -0.12];
+        this.drawBox(rhX, rhY, rhZ, 0.074, 0.034, 0.13, [0.16, 0.14, 0.24], 0.22, rhRot);
+        this.drawBox(rhX, rhY + 0.018, rhZ, 0.078, 0.011, 0.04, [0.0, 0.96, 0.83], 0.92, rhRot);
+        this.drawBox(
+          rhX + R[0] * 0.055 - F[0] * 0.082,
+          rhY - 0.024,
+          rhZ + R[2] * 0.055 - F[2] * 0.082,
+          0.08,
+          0.048,
+          0.135,
+          [0.11, 0.13, 0.2],
+          0.15,
+          rhRot
+        );
+      }
     }
 
     // Анимация переноса палочек Варибаси из зоны мисок и коробок (x=0.60, z=-0.36) на поднос или внутрь полого пакета!

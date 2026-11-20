@@ -1,6 +1,6 @@
-import { GAME_CONFIG } from './config.js?v=79';
-import { gameState } from './state.js?v=79';
-import { audio } from './audio.js?v=79';
+import { GAME_CONFIG } from './config.js?v=80';
+import { gameState } from './state.js?v=80';
+import { audio } from './audio.js?v=80';
 
 export class KitchenSystem {
   constructor(callbacks) {
@@ -483,21 +483,35 @@ export class KitchenSystem {
 
     // =========================================================================
     // ВЕТКА 3: В ЛЕВОЙ РУКЕ ПУСТАЯ, ПРАВАЯ СВОБОДНА
-    // -> Правой рукой берём ВТОРУЮ пустую посуду со стопки (в обеих руках пустые!)
-    //    (Если стопка мисок 0/10 и в левой миска — возвращаем её обратно в стопку!)
+    // -> Если тапаем по СВОЕЙ стопке (миска -> миски, коробка -> коробки):
+    //    ВОЗВРАЩАЕМ пустую посуду из левой руки обратно в стопку (руки свободны!).
+    //    В руках никогда не может быть двух одинаковых пустых тарелок или двух пустых коробок!
+    // -> Если тапаем по ДРУГОЙ стопке (миска -> коробки или коробка -> миски):
+    //    правой рукой берём пустую посуду другого типа.
     // =========================================================================
     if (hasLeft && leftEmpty && !hasRight) {
+      if (left.type === type) {
+        if (type === 'bowl') {
+          rt.cleanBowls = Math.min(rt.maxCleanBowls || 10, (rt.cleanBowls ?? 0) + 1);
+        } else if (type === 'box') {
+          rt.dailyStats.restockSpent = Math.max(0, (rt.dailyStats.restockSpent || 0) - 8);
+        }
+        rt.activeVessel = this.createEmptyVessel(null);
+        rt.vesselHeldInLeft = false;
+        rt.sauceModeArmed = false;
+        audio.playTapPop();
+        this.onToast(
+          type === 'bowl'
+            ? `🍜 Пустая миска возвращена в стопку (чистых: ${rt.cleanBowls}/10)`
+            : '📦 Пустая вок-коробка возвращена в стопку (+¥8)',
+          '#00f5d4'
+        );
+        this.renderAllKitchen();
+        return { action: 'return_left_empty', type };
+      }
+
       if (type === 'bowl') {
         if ((rt.cleanBowls ?? 10) <= 0) {
-          if (left.type === 'bowl') {
-            rt.cleanBowls = 1;
-            rt.activeVessel = this.createEmptyVessel(null);
-            rt.vesselHeldInLeft = false;
-            audio.playTapPop();
-            this.onToast('🍜 Пустая миска возвращена в стопку (чистых: 1/10)', '#00f5d4');
-            this.renderAllKitchen();
-            return { action: 'return_left_empty', type: 'bowl' };
-          }
           audio.playPenaltyBuzz();
           this.onToast('🍽️ Чистые миски закончились (0/10)! Помойте посуду в раковине слева!', '#ff385c');
           return false;
@@ -512,8 +526,8 @@ export class KitchenSystem {
       audio.playTapPop();
       this.onToast(
         type === 'bowl'
-          ? `😄 Взята вторая пустая миска в правую руку (${rt.cleanBowls}/10)! Тапните по стопке, чтобы положить обратно.`
-          : '😄 Взята пустая коробка в правую руку (-¥8)! Тапните по стопке, чтобы положить обратно.',
+          ? `🙌 Пустая миска взята в правую руку (${rt.cleanBowls}/10)! Тапните по любой стопке, чтобы вернуть лишнюю посуду.`
+          : '🙌 Пустая коробка взята в правую руку (-¥8)! Тапните по любой стопке, чтобы вернуть лишнюю посуду.',
         '#00f5d4'
       );
       this.renderAllKitchen();
@@ -918,7 +932,7 @@ export class KitchenSystem {
           '#00f5d4'
         );
         this.renderAllKitchen();
-        return { action: 'place', vessel: placedRight, intoBag: a.hasBag };
+        return { action: 'place', vessel: placedRight, intoBag: a.hasBag, fromRight: true };
       }
       this.blockIfBothHandsBusy();
       return null;
