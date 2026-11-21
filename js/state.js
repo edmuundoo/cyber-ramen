@@ -1,4 +1,4 @@
-import { GAME_CONFIG } from './config.js?v=97';
+import { GAME_CONFIG } from './config.js?v=98';
 
 const BASE_SAVE_KEY = 'CR_NIGHT_YATAI_SAVE_V1';
 
@@ -100,6 +100,15 @@ export function createShiftRuntimeState() {
       hasNoodles: false,
       toppings: []
     },
+    // Протекание мусорного бака под раковиной (если вылили/выбросили туда бульон — со временем вокруг бака появляется лужа!)
+    trashLeak: {
+      brothCount: 0,
+      leakTimer: 0,
+      puddleLevel: 0,
+      broth: 'tonkotsu'
+    },
+    // Посуда (полная и пустая), свободно расставленная на новой правой столешнице справа от холодильника (Сектор 3)
+    reserveItems: [],
     nextDirtyShelfSide: 'left',
     baskets: [
       { index: 0, state: 'empty', elapsed: 0 },

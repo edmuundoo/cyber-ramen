@@ -1,6 +1,6 @@
-import { GAME_CONFIG } from './config.js?v=97';
-import { gameState } from './state.js?v=97';
-import { audio } from './audio.js?v=97';
+import { GAME_CONFIG } from './config.js?v=98';
+import { gameState } from './state.js?v=98';
+import { audio } from './audio.js?v=98';
 
 export class KitchenSystem {
   constructor(callbacks) {
@@ -83,9 +83,39 @@ export class KitchenSystem {
     // 2. Свист закипающего чайника: свистит на Al Dente и ещё сильнее свистит при переваре, пока не тапнешь корзину!
     audio.syncKettleWhistle(highestWhistle);
 
-    // 3. Таймер остывания блюда на подносе / в пакете (если долго стоит на столе)
+    // 3. Таймер остывания блюда на подносе / в пакете и на правой резервной столешнице
     if (rt.assembly && rt.assembly.vessel && (rt.assembly.vessel.broth || rt.assembly.vessel.noodleState)) {
       rt.assembly.vessel.tableAgeSec = (rt.assembly.vessel.tableAgeSec || 0) + dt;
+    }
+    if (Array.isArray(rt.reserveItems)) {
+      for (const item of rt.reserveItems) {
+        if (item.vessel && (item.vessel.broth || item.vessel.noodleState)) {
+          item.vessel.tableAgeSec = (item.vessel.tableAgeSec || 0) + dt;
+        }
+      }
+    }
+
+    // 3Б. Таймер протекания мусорного пакета (если в мусорку выливали/выкидывали бульон — со временем появляется лужа!)
+    if (rt.trashLeak && rt.trashLeak.leakTimer > 0) {
+      rt.trashLeak.leakTimer -= dt;
+      if (rt.trashLeak.leakTimer <= 0) {
+        rt.trashLeak.leakTimer = 0;
+        const prevLvl = rt.trashLeak.puddleLevel || 0;
+        const nextLvl = Math.min(2, prevLvl + 1);
+        rt.trashLeak.puddleLevel = nextLvl;
+        if (nextLvl < 2 && (rt.trashLeak.brothCount || 0) >= 2) {
+          rt.trashLeak.leakTimer = 7.5;
+        }
+        if (nextLvl > prevLvl) {
+          audio.playTapPop();
+          this.onToast(
+            nextLvl >= 2
+              ? '💦 Мусорный пакет совсем протёк! Под раковиной разлилась большая лужа бульона — вытрите её!'
+              : '💦 Из мусорки под раковиной потёк бульон! Можно вытереть лужу по тапу в мойке (Сектор -1).',
+            '#ffaa00'
+          );
+        }
+      }
     }
 
     // 4. Таймеры гостей, которые едят из керамических мисок и затем оставляют грязную миску на ЛЕВОЙ полке прилавка (слева от котика)!
@@ -859,6 +889,16 @@ export class KitchenSystem {
     }
 
     const hadFood = !this.isVesselEmptyOfFood(tossed);
+    if (tossed && tossed.broth) {
+      if (!rt.trashLeak) {
+        rt.trashLeak = { brothCount: 0, leakTimer: 0, puddleLevel: 0, broth: tossed.broth };
+      }
+      rt.trashLeak.brothCount = (rt.trashLeak.brothCount || 0) + 1;
+      rt.trashLeak.broth = tossed.broth;
+      if ((rt.trashLeak.puddleLevel || 0) < 2 && (rt.trashLeak.leakTimer || 0) <= 0) {
+        rt.trashLeak.leakTimer = 6.5;
+      }
+    }
     if (hadFood) {
       const wasteCost =
         (tossed.broth ? 15 : 0) +
@@ -1599,6 +1639,220 @@ export class KitchenSystem {
     this.onToast('🗑️ Засор из раковины выброшен в мусорку под раковиной — слив снова чист!', '#10f56c');
     this.renderAllKitchen();
     return prevClog;
+  }
+
+  // Вытереть лужу бульона, вытекшую из-под мусорного бака под раковиной (Сектор -1)
+  wipeTrashLeak() {
+    if (this.blockIfBothHandsBusy()) return null;
+    const rt = gameState.runtime;
+    if (!rt.trashLeak || (rt.trashLeak.puddleLevel || 0) <= 0) {
+      return null;
+    }
+    const res = {
+      prevLevel: rt.trashLeak.puddleLevel,
+      broth: rt.trashLeak.broth || 'tonkotsu'
+    };
+    rt.trashLeak = {
+      brothCount: 0,
+      leakTimer: 0,
+      puddleLevel: 0,
+      broth: 'tonkotsu'
+    };
+    audio.playTapPop();
+    this.onToast('🧽 Лужа под мусоркой вытерта начисто!', '#10f56c');
+    this.renderAllKitchen();
+    return res;
+  }
+
+  // =========================================================================
+  // НОВАЯ ПРАВАЯ СТОЛЕШНИЦА-РЕЗЕРВ СПРАВА ОТ ХОЛОДИЛЬНИКА (СЕКТОР 3):
+  // Умный подбор случайных НЕПЕРЕСЕКАЮЩИХСЯ точек для свободного складирования тарелок и коробок!
+  // =========================================================================
+  findFreeReserveSpot(items = []) {
+    const minX = 0.62;
+    const maxX = 1.16;
+    const minZ = 0.70;
+    const maxZ = 1.28;
+    const minDist = 0.275;
+
+    const isClear = (x, z, distLimit) => {
+      for (const it of items) {
+        if (Math.hypot(x - it.x, z - it.z) < distLimit) return false;
+      }
+      return true;
+    };
+
+    // 1. До 90 случайных точек по всей поверхности столешницы (естественная живая расстановка без жёсткой сетки!)
+    for (let attempt = 0; attempt < 90; attempt++) {
+      const rx = minX + Math.random() * (maxX - minX);
+      const rz = minZ + Math.random() * (maxZ - minZ);
+      if (isClear(rx, rz, minDist)) {
+        return {
+          x: +rx.toFixed(3),
+          z: +rz.toFixed(3),
+          rotY: +((Math.random() - 0.5) * 0.45).toFixed(3)
+        };
+      }
+    }
+
+    // 2. Fallback: плотный поиск самой свободной точки, когда стол почти заполнен (до 6-8 предметов без пересечений!)
+    let best = null;
+    let bestMinD = 0;
+    const steps = 7;
+    for (let ix = 0; ix < steps; ix++) {
+      for (let iz = 0; iz < steps; iz++) {
+        const cx = minX + (ix / (steps - 1)) * (maxX - minX) + (Math.random() - 0.5) * 0.025;
+        const cz = minZ + (iz / (steps - 1)) * (maxZ - minZ) + (Math.random() - 0.5) * 0.025;
+        const clampedX = Math.max(minX, Math.min(maxX, cx));
+        const clampedZ = Math.max(minZ, Math.min(maxZ, cz));
+        let nearest = Infinity;
+        for (const it of items) {
+          const d = Math.hypot(clampedX - it.x, clampedZ - it.z);
+          if (d < nearest) nearest = d;
+        }
+        if (nearest >= 0.252 && nearest > bestMinD) {
+          bestMinD = nearest;
+          best = {
+            x: +clampedX.toFixed(3),
+            z: +clampedZ.toFixed(3),
+            rotY: +((Math.random() - 0.5) * 0.45).toFixed(3)
+          };
+        }
+      }
+    }
+    return best;
+  }
+
+  // Поставить посуду из руки (из правой, если обе заняты, иначе из левой) на случайную свободную точку правой столешницы!
+  handleReserveSurfaceTap() {
+    const rt = gameState.runtime;
+    if (!Array.isArray(rt.reserveItems)) rt.reserveItems = [];
+    const left = rt.activeVessel;
+    const right = rt.rightHandVessel;
+    const hasLeft = Boolean(left && left.type);
+    const hasRight = Boolean(right && right.type);
+
+    if (!hasLeft && !hasRight) {
+      audio.playTapPop();
+      this.onToast('📦 Свободная столешница справа от холодильника — сюда можно складывать любые миски и коробки!', '#00f5d4');
+      return null;
+    }
+
+    const spot = this.findFreeReserveSpot(rt.reserveItems);
+    if (!spot) {
+      audio.playPenaltyBuzz();
+      this.onToast('🚫 На правой столешнице больше нет свободного места! Заберите что-нибудь со стола.', '#ffaa00');
+      return null;
+    }
+
+    const fromRight = hasLeft && hasRight;
+    const placedVessel = JSON.parse(JSON.stringify(fromRight ? right : left));
+    placedVessel.wasStagedOnTable = true;
+
+    const item = {
+      id: `res_${Date.now()}_${Math.floor(Math.random() * 10000)}`,
+      x: spot.x,
+      z: spot.z,
+      rotY: spot.rotY,
+      vessel: placedVessel
+    };
+    rt.reserveItems.push(item);
+
+    if (fromRight) {
+      rt.rightHandVessel = null;
+    } else {
+      rt.activeVessel = this.createEmptyVessel(null);
+      rt.vesselHeldInLeft = false;
+      rt.sauceModeArmed = false;
+    }
+
+    audio.playTapPop();
+    this.onToast(
+      `${placedVessel.type === 'box' ? '📦 Коробка' : '🍜 Миска'} поставлена на правую столешницу (всего: ${rt.reserveItems.length})`,
+      '#00f5d4'
+    );
+    this.renderAllKitchen();
+    return {
+      action: 'place',
+      item: JSON.parse(JSON.stringify(item)),
+      fromRight
+    };
+  }
+
+  // Взаимодействие с конкретной миской/коробкой, стоящей на правой столешнице (Сектор 3)
+  handleReserveItemTap(itemId) {
+    const rt = gameState.runtime;
+    if (!Array.isArray(rt.reserveItems)) rt.reserveItems = [];
+    const idx = rt.reserveItems.findIndex((it) => it.id === itemId);
+    if (idx === -1) return null;
+
+    const left = rt.activeVessel;
+    const right = rt.rightHandVessel;
+    const hasLeft = Boolean(left && left.type);
+    const hasRight = Boolean(right && right.type);
+
+    // Если обе руки заняты -> ставим посуду из правой руки на свободное место столешницы!
+    if (hasLeft && hasRight) {
+      return this.handleReserveSurfaceTap();
+    }
+
+    const item = rt.reserveItems[idx];
+    const pickedVessel = JSON.parse(JSON.stringify(item.vessel));
+
+    // 1. Обе руки свободны -> забираем посуду в ЛЕВУЮ руку!
+    if (!hasLeft) {
+      rt.reserveItems.splice(idx, 1);
+      rt.activeVessel = pickedVessel;
+      rt.vesselHeldInLeft = true;
+      rt.sauceModeArmed = false;
+      audio.playTapPop();
+      this.onToast(
+        `${pickedVessel.type === 'box' ? '📦 Коробка' : '🍜 Миска'} взята со столешницы в левую руку.`,
+        '#00f5d4'
+      );
+      this.renderAllKitchen();
+      return {
+        action: 'pickup',
+        item: JSON.parse(JSON.stringify(item))
+      };
+    }
+
+    // 2. В левой руке НАПОЛНЕННАЯ, а на столешнице стоит ПУСТАЯ -> перекладываем полную в правую, пустую берём в левую!
+    if (!this.isVesselEmptyOfFood(left) && this.isVesselEmptyOfFood(pickedVessel)) {
+      rt.reserveItems.splice(idx, 1);
+      const fullMoved = JSON.parse(JSON.stringify(left));
+      rt.rightHandVessel = fullMoved;
+      rt.activeVessel = pickedVessel;
+      rt.vesselHeldInLeft = true;
+      rt.sauceModeArmed = false;
+      audio.playTapPop();
+      this.onToast(
+        `🙌 Блюдо в правой руке, пустая ${pickedVessel.type === 'box' ? '📦 коробка' : '🍜 миска'} в левой! Тапните по левой, чтобы перелить.`,
+        '#00f5d4'
+      );
+      this.renderAllKitchen();
+      return {
+        action: 'handoff_and_pickup_tray_left',
+        type: pickedVessel.type,
+        rightVessel: fullMoved,
+        targetPos: [item.x, 0.908, item.z]
+      };
+    }
+
+    // 3. Иначе (левая пустая, или обе с едой) -> правой рукой поднимаем посуду со столешницы!
+    rt.reserveItems.splice(idx, 1);
+    rt.rightHandVessel = pickedVessel;
+    audio.playTapPop();
+    this.onToast(
+      `🙌 ${pickedVessel.type === 'box' ? '📦 Коробка' : '🍜 Миска'} со столешницы взята в правую руку!`,
+      '#00f5d4'
+    );
+    this.renderAllKitchen();
+    return {
+      action: 'pickup_tray_right',
+      vessel: pickedVessel,
+      targetPos: [item.x, 0.908, item.z]
+    };
   }
 
   // Помыть одну грязную миску в раковине (Сектор -1, левее плиты):

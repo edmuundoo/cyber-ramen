@@ -1,5 +1,5 @@
-import { GAME_CONFIG } from './config.js?v=97';
-import { gameState } from './state.js?v=97';
+import { GAME_CONFIG } from './config.js?v=98';
+import { gameState } from './state.js?v=98';
 import {
   createAlleyBackdropTexture,
   createBuildingFacadeTexture,
@@ -9,7 +9,7 @@ import {
   createWallMenuSignTexture,
   createPedestrianTextures,
   AnimeCustomerTextureRenderer
-} from './art3d.js?v=97';
+} from './art3d.js?v=98';
 
 /**
  * Полноэкранный WebGL 3D движок от первого лица с процедурной высокодетализированной
@@ -116,6 +116,21 @@ export class FirstPersonWebGLScene {
       timer: 0,
       duration: 2.7,
       broth: 'tonkotsu'
+    };
+    this.trashLeakWipeAnim = {
+      active: false,
+      timer: 0,
+      duration: 0.78,
+      prevLevel: 1,
+      broth: 'tonkotsu'
+    };
+    this.reserveAnim = {
+      active: false,
+      action: 'place',
+      timer: 0,
+      duration: 0.44,
+      item: null,
+      fromRight: false
     };
     this.rackPickupAnim = {
       active: false,
@@ -450,6 +465,7 @@ export class FirstPersonWebGLScene {
     d.rightSource = data.rightSource ? { ...data.rightSource, toppings: [...(data.rightSource.toppings || [])] } : null;
     d.spillLevel = data.spillLevel || 0;
     d.spillBroth = data.spillBroth || 'tonkotsu';
+    d.targetPos = Array.isArray(data.targetPos) ? [...data.targetPos] : null;
 
     if (mode === 'pickup_tray_right') {
       d.duration = 0.54;
@@ -511,6 +527,30 @@ export class FirstPersonWebGLScene {
     this.sinkUnclogAnim.clog = prevClog
       ? { ...prevClog, toppings: [...(prevClog.toppings || [])] }
       : { broth: 'tonkotsu', hasNoodles: true, toppings: [] };
+  }
+
+  triggerTrashLeakWipeAnim(res = {}) {
+    this.trashLeakWipeAnim.active = true;
+    this.trashLeakWipeAnim.timer = 0;
+    this.trashLeakWipeAnim.duration = 0.78;
+    this.trashLeakWipeAnim.prevLevel = res.prevLevel || 1;
+    this.trashLeakWipeAnim.broth = res.broth || 'tonkotsu';
+  }
+
+  triggerReserveAnim(res = {}) {
+    if (!res || !res.item) return;
+    this.reserveAnim.active = true;
+    this.reserveAnim.action = res.action || 'place';
+    this.reserveAnim.timer = 0;
+    this.reserveAnim.duration = 0.44;
+    this.reserveAnim.item = {
+      ...res.item,
+      vessel: res.item.vessel
+        ? { ...res.item.vessel, toppings: [...(res.item.vessel.toppings || [])] }
+        : null
+    };
+    this.reserveAnim.fromRight = Boolean(res.fromRight);
+    this.vesselBounce = 0.6;
   }
 
   triggerToppingPlaceAnim(toppingId = 'egg') {
@@ -1598,6 +1638,18 @@ export class FirstPersonWebGLScene {
         this.sinkDrainAnim.active = false;
       }
     }
+    if (this.trashLeakWipeAnim.active) {
+      this.trashLeakWipeAnim.timer += dt;
+      if (this.trashLeakWipeAnim.timer >= this.trashLeakWipeAnim.duration) {
+        this.trashLeakWipeAnim.active = false;
+      }
+    }
+    if (this.reserveAnim.active) {
+      this.reserveAnim.timer += dt;
+      if (this.reserveAnim.timer >= this.reserveAnim.duration) {
+        this.reserveAnim.active = false;
+      }
+    }
     if (this.rackPickupAnim.active) {
       this.rackPickupAnim.timer += dt;
       if (this.rackPickupAnim.timer >= this.rackPickupAnim.duration) {
@@ -1734,6 +1786,10 @@ export class FirstPersonWebGLScene {
         this.camPosTarget = [0.05, 1.66, 0.45];
         this.lookAtTarget = [0.88, 0.98 + this.dragPanY * 0.6, -0.1 - this.dragPanX];
       }
+    } else if (rt.activeSector === 3) {
+      // Сектор 3: Новая просторная правая столешница-резерв справа от холодильника для свободного складирования посуды!
+      this.camPosTarget = [0.06, 1.66, 0.48];
+      this.lookAtTarget = [0.88, 0.92 + this.dragPanY * 0.4, 0.98 - this.dragPanX];
     } else if (rt.cameraFocus === 'customer') {
       const panSide = rt.customerPanSide || 0;
       const dims = this.getCustomerDimensions(rt.currentCustomer);
@@ -1828,6 +1884,7 @@ export class FirstPersonWebGLScene {
     this.drawLeftBoilerStation3D();
     this.drawLeftSinkStation3D();
     this.drawRightFridgeAndSealer3D();
+    this.drawRightReserveCounter3D();
     this.drawCustomerAndCourier3D();
     this.drawParticles3D(dt);
     this.drawHeldVesselInLeftHand3D();
@@ -2576,26 +2633,28 @@ export class FirstPersonWebGLScene {
     // ПРАВАЯ СТОЛЕШНИЦА СКЛАДА И УПАКОВКИ С ОТКРЫТОЙ ПОДСВЕЧЕННОЙ НИШЕЙ ПОД КРИО-ХОЛОДИЛЬНИКОМ (ДЛЯ ПАКЕТОВ С СОБОЙ!)
     // 1) Сплошная передняя тумба под стойками мисок и коробок (z от -1.095 до -0.02, без пересечения с передней стойкой!)
     this.drawBox(0.92, 0.44, -0.5575, 0.92, 0.82, 1.075, woodMain, 0.0);
-    // 2) Задняя стенка ниши за пакетами и крайняя правая боковина (z от +0.56 до +0.655)
+    // 2) Задняя стенка ниши за пакетами и тумба под новой правой столешницей справа от холодильника (z от +0.56 до +1.42)
     this.drawBox(1.18, 0.44, 0.27, 0.4, 0.82, 0.58, woodMain, 0.0);
-    this.drawBox(0.92, 0.44, 0.6075, 0.92, 0.82, 0.095, woodMain, 0.0);
+    this.drawBox(0.92, 0.44, 0.99, 0.92, 0.82, 0.86, woodMain, 0.0);
     // 3) Нижний цоколь, внутренняя стальная полка (y = 0.34) и LED-подсветка ниши под холодильником (z = -0.02..+0.56)
     this.drawBox(0.72, 0.18, 0.27, 0.52, 0.28, 0.58, [0.14, 0.12, 0.14], 0.0);
     this.drawBox(0.74, 0.34, 0.27, 0.54, 0.032, 0.56, [0.26, 0.3, 0.36], 0.08, null, 0.65);
     this.drawBox(0.52, 0.805, 0.27, 0.02, 0.014, 0.52, [0.98, 0.88, 0.62], 0.92);
-    // Верхняя правая столешница и неоновая полоса
-    this.drawBox(0.92, 0.86, -0.22, 0.96, 0.07, 1.82, counterCol, 0.05, null, 0.45);
-    this.drawBox(0.45, 0.9, -0.22, 0.03, 0.025, 1.76, trimCol, 0.65);
+    // Единая правая столешница (продлена справа от холодильника до z = +1.42 для свободного складирования посуды!) и неоновая полоса
+    this.drawBox(0.92, 0.86, 0.145, 0.96, 0.07, 2.55, counterCol, 0.05, null, 0.45);
+    this.drawBox(0.45, 0.9, 0.145, 0.03, 0.025, 2.48, trimCol, 0.65);
+    // Тёплая деревянная рабочая поверхность справа от холодильника (Сектор 3: z = +0.62..+1.36)
+    this.drawBox(0.9, 0.901, 0.99, 0.76, 0.012, 0.74, [0.3, 0.2, 0.14], 0.06, null, 0.48);
 
-    // ПРАВАЯ СТЕНА ЯТАЯ ЗА СКЛАДОМ И КРИО-ХОЛОДИЛЬНИКОМ (СИММЕТРИЧНА ЛЕВОЙ, БЕЗ ТАБЛИЧЕК!)
+    // ПРАВАЯ СТЕНА ЯТАЯ ЗА СКЛАДОМ, ХОЛОДИЛЬНИКОМ И НОВОЙ ПРАВОЙ СТОЛЕШНИЦЕЙ (СИММЕТРИЧНА ЛЕВОЙ, БЕЗ ТАБЛИЧЕК!)
     const wallRightX = 1.4;
-    this.drawBox(wallRightX, 1.45, 0.1, 0.06, 1.16, 2.36, wallCol, 0.05, null, 0.35);
-    this.drawBox(wallRightX - 0.034, 1.07, 0.1, 0.012, 0.34, 2.32, [0.28, 0.33, 0.4], 0.08, null, 0.78);
-    for (const wz of [-0.95, -0.05, 0.65, 1.18]) {
+    this.drawBox(wallRightX, 1.45, 0.18, 0.06, 1.16, 2.54, wallCol, 0.05, null, 0.35);
+    this.drawBox(wallRightX - 0.034, 1.07, 0.18, 0.012, 0.34, 2.5, [0.28, 0.33, 0.4], 0.08, null, 0.78);
+    for (const wz of [-0.95, -0.05, 0.65, 1.36]) {
       this.drawBox(wallRightX - 0.036, 1.45, wz, 0.024, 1.14, 0.048, [0.13, 0.1, 0.12], 0.04, null, 0.45);
     }
-    this.drawBox(wallRightX - 0.045, 1.97, 0.1, 0.05, 0.07, 2.36, [0.14, 0.11, 0.13], 0.05, null, 0.4);
-    this.drawBox(wallRightX - 0.045, 1.925, 0.1, 0.014, 0.015, 2.26, trimCol, trimEmissive * 0.85);
+    this.drawBox(wallRightX - 0.045, 1.97, 0.18, 0.05, 0.07, 2.54, [0.14, 0.11, 0.13], 0.05, null, 0.4);
+    this.drawBox(wallRightX - 0.045, 1.925, 0.18, 0.014, 0.015, 2.44, trimCol, trimEmissive * 0.85);
 
     // Боковые металлические стойки окна ятая
     this.drawBox(-1.12, 1.55, -0.98, 0.09, 1.5, 0.09, [0.18, 0.2, 0.25], 0.05, null, 0.5);
@@ -4589,7 +4648,78 @@ export class FirstPersonWebGLScene {
     this.drawMesh('cylinder', trashX, trashTopY - 0.02, trashZ, 0.272, 0.03, 0.272, [0.05, 0.06, 0.09], 0.02, null, 0.35);
     this.drawMesh('torus', trashX, trashTopY - 0.008, trashZ, 0.288, 0.014, 0.288, [0.08, 0.1, 0.14], 0.04, null, 0.55);
     if (rt.activeSector === -1) {
-      this.registerHitbox('trash_bin', trashX, trashTopY - 0.02, trashZ, 94);
+      this.registerHitbox('trash_bin', trashX, trashTopY - 0.02, trashZ, 88);
+    }
+
+    // 1Г. ЛУЖА БУЛЬОНА, ПРОТЕКАЮЩАЯ ИЗ-ПОД МУСОРНОГО БАКА (если в мусорку выливали/выбрасывали бульон!)
+    const tLeak = rt.trashLeak || { puddleLevel: 0, broth: 'tonkotsu' };
+    const tWipeActive = this.trashLeakWipeAnim.active;
+    const tWipeP = tWipeActive ? Math.min(1, this.trashLeakWipeAnim.timer / this.trashLeakWipeAnim.duration) : 0;
+    const visLeakLvl =
+      (tLeak.puddleLevel || 0) > 0
+        ? tLeak.puddleLevel
+        : tWipeActive && tWipeP < 0.85
+          ? this.trashLeakWipeAnim.prevLevel
+          : 0;
+    const leakScale = tWipeActive ? Math.max(0.05, 1.0 - Math.max(0, (tWipeP - 0.15) / 0.7)) : 1.0;
+
+    if (visLeakLvl > 0) {
+      const leakBrothId = (tLeak.puddleLevel || 0) > 0 ? tLeak.broth : this.trashLeakWipeAnim.broth;
+      const leakColMap = {
+        tonkotsu: [0.86, 0.68, 0.36],
+        chili_broth: [0.92, 0.18, 0.18],
+        miso_mushroom: [0.64, 0.2, 0.84]
+      };
+      const lCol = leakColMap[leakBrothId] || leakColMap.tonkotsu;
+      const ly = trashBaseY + 0.013;
+      const bigLeak = visLeakLvl >= 2;
+      const lk = (bigLeak ? 1.32 : 0.92) * leakScale;
+
+      // Глянцевая лужа бульона на полу подраковинной ниши, вытекающая из-под основания бака вперёд-вправо
+      this.drawMesh('cylinder', trashX + 0.08 * lk, ly, trashZ - 0.12 * lk, 0.24 * lk, 0.004, 0.2 * lk, lCol, 0.3, null, 0.96, 0, 0.82);
+      this.drawMesh('cylinder', trashX + 0.16 * lk, ly, trashZ - 0.22 * lk, 0.15 * lk, 0.004, 0.13 * lk, lCol, 0.28, null, 0.96, 0, 0.78);
+      if (bigLeak) {
+        this.drawMesh('cylinder', trashX - 0.04 * lk, ly, trashZ - 0.24 * lk, 0.14 * lk, 0.004, 0.12 * lk, lCol, 0.28, null, 0.96, 0, 0.76);
+        this.drawMesh('cylinder', trashX + 0.23 * lk, ly, trashZ - 0.05 * lk, 0.11 * lk, 0.004, 0.1 * lk, lCol, 0.3, null, 0.96, 0, 0.78);
+      }
+      if (rt.activeSector === -1 && (tLeak.puddleLevel || 0) > 0) {
+        this.registerHitbox('trash_leak', trashX + 0.14, ly + 0.02, trashZ - 0.18, 86);
+      }
+    }
+
+    // 3D-анимация протирания пола под мусоркой тряпкой правой рукой
+    if (tWipeActive) {
+      const originX = -0.22;
+      const originY = 0.62;
+      const originZ = 0.44;
+      const targetX = trashX + 0.12;
+      const targetY = trashBaseY + 0.028;
+      const targetZ = trashZ - 0.16;
+      let wx, wy, wz, wYaw;
+      if (tWipeP < 0.18) {
+        const t = tWipeP / 0.18;
+        const s = t * t * (3 - 2 * t);
+        wx = originX + (targetX - originX) * s;
+        wy = originY + (targetY - originY) * s;
+        wz = originZ + (targetZ - originZ) * s;
+        wYaw = 0.2;
+      } else if (tWipeP < 0.82) {
+        const t = (tWipeP - 0.18) / 0.64;
+        wx = targetX + Math.sin(t * Math.PI * 5.0) * 0.12;
+        wy = targetY + Math.abs(Math.cos(t * Math.PI * 5.0)) * 0.006;
+        wz = targetZ + Math.cos(t * Math.PI * 5.0) * 0.11;
+        wYaw = Math.cos(t * Math.PI * 5.0) * 0.3;
+      } else {
+        const t = (tWipeP - 0.82) / 0.18;
+        const s = t * t * (3 - 2 * t);
+        wx = targetX + (originX - targetX) * s;
+        wy = targetY + (originY - targetY) * s;
+        wz = targetZ + (originZ - targetZ) * s;
+        wYaw = 0.2 * (1 - s);
+      }
+      this.drawBox(wx, wy, wz, 0.125, 0.018, 0.12, [0.88, 0.95, 0.98], 0.36, [0, wYaw, 0], 0.25);
+      this.drawBox(wx + 0.04, wy + 0.032, wz - 0.03, 0.072, 0.034, 0.125, [0.16, 0.14, 0.24], 0.22, [0.18, 0.45 + wYaw * 0.5, -0.14]);
+      this.drawBox(wx + 0.04, wy + 0.052, wz - 0.03, 0.076, 0.011, 0.038, [0.0, 0.96, 0.83], 0.94, [0.18, 0.45 + wYaw * 0.5, -0.14]);
     }
 
     // 2. ВЫСОКИЙ ХРОМИРОВАННЫЙ КРАН-ГУСАК И ВЕНТИЛИ ГОРЯЧЕЙ/ХОЛОДНОЙ ВОДЫ (x = -1.10, z = +0.72)
@@ -5489,6 +5619,98 @@ export class FirstPersonWebGLScene {
     }
   }
 
+  // =========================================================================
+  // СЕКТОР 3 (НОВАЯ ПРАВАЯ СТОЛЕШНИЦА-РЕЗЕРВ СПРАВА ОТ ХОЛОДИЛЬНИКА):
+  // Свободное складирование любых мисок и коробок в случайные непересекающиеся точки!
+  // =========================================================================
+  drawRightReserveCounter3D() {
+    const rt = gameState.runtime;
+    const items = Array.isArray(rt.reserveItems) ? rt.reserveItems : [];
+    const surfaceY = 0.908;
+    const isReserveSector = rt.activeSector === 3;
+
+    const animActive = this.reserveAnim.active && this.reserveAnim.item;
+    const hidingItemId =
+      animActive && this.reserveAnim.action === 'place' ? this.reserveAnim.item.id : null;
+
+    // 1. Отрисовываем все стоящие на столешнице миски и коробки в их случайных непересекающихся точках
+    for (const item of items) {
+      if (!item || !item.vessel || item.id === hidingItemId) continue;
+      this.drawFilledVessel3D(
+        item.x,
+        surfaceY,
+        item.z,
+        item.vessel,
+        0.7,
+        false,
+        [0, item.rotY || 0, 0]
+      );
+      if (isReserveSector) {
+        this.registerHitbox(`reserve_item_${item.id}`, item.x, surfaceY + 0.06, item.z, 48);
+      }
+    }
+
+    // 2. Плавная 3D-анимация постановки посуды на случайную точку или взятия с неё (с кибер-перчаткой!)
+    if (animActive && this.reserveAnim.item.vessel) {
+      const p = Math.min(1, this.reserveAnim.timer / this.reserveAnim.duration);
+      const s = p * p * (3 - 2 * p);
+      const it = this.reserveAnim.item;
+      const fromRight = Boolean(this.reserveAnim.fromRight);
+      const handPos = fromRight ? this.getRightHandWorldPos() : this.getLeftHandWorldPos();
+      const { F, R } = this.getCameraBasis();
+      const yawAngle = Math.atan2(-F[0], -F[2]);
+
+      let vx, vy, vz, vsc, vRotY;
+      if (this.reserveAnim.action === 'place') {
+        vx = handPos[0] + (it.x - handPos[0]) * s;
+        vy = handPos[1] + (surfaceY - handPos[1]) * s + Math.sin(p * Math.PI) * 0.1;
+        vz = handPos[2] + (it.z - handPos[2]) * s;
+        vsc = 0.64 + (0.7 - 0.64) * s;
+        vRotY = (it.rotY || 0) * s;
+      } else {
+        vx = it.x + (handPos[0] - it.x) * s;
+        vy = surfaceY + (handPos[1] - surfaceY) * s + Math.sin(p * Math.PI) * 0.08;
+        vz = it.z + (handPos[2] - it.z) * s;
+        vsc = 0.7 + (0.64 - 0.7) * s;
+        vRotY = (it.rotY || 0) * (1 - s);
+      }
+      this.drawFilledVessel3D(vx, vy, vz, it.vessel, vsc, false, [0, vRotY, 0]);
+
+      // Перчатка руки, сопровождающая посуду точно до/от выбранной случайной точки
+      const sideSign = fromRight ? 1 : -1;
+      const gx = vx + R[0] * (0.088 * sideSign) - F[0] * 0.052;
+      const gy = vy - 0.032;
+      const gz = vz + R[2] * (0.088 * sideSign) - F[2] * 0.052;
+      const gRot = [0.06, yawAngle + 0.3 * sideSign, -0.14 * sideSign];
+      this.drawBox(gx, gy, gz, 0.074, 0.034, 0.13, [0.16, 0.14, 0.24], 0.22, gRot);
+      this.drawBox(gx, gy + 0.018, gz, 0.078, 0.011, 0.04, [0.0, 0.96, 0.83], 0.92, gRot);
+      this.drawBox(
+        gx + R[0] * (0.055 * sideSign) - F[0] * 0.082,
+        gy - 0.024,
+        gz + R[2] * (0.055 * sideSign) - F[2] * 0.082,
+        0.08,
+        0.048,
+        0.135,
+        [0.11, 0.13, 0.2],
+        0.15,
+        gRot
+      );
+    }
+
+    // 3. Фоновые хитбоксы всей свободной поверхности столешницы (isPeripheral = true -> стоящая посуда всегда в приоритете!)
+    if (isReserveSector) {
+      const surfacePts = [
+        [0.74, 0.82],
+        [1.06, 0.82],
+        [0.74, 1.15],
+        [1.06, 1.15]
+      ];
+      for (const [sx, sz] of surfacePts) {
+        this.registerHitbox('reserve_counter_surface', sx, surfaceY + 0.03, sz, 98, true);
+      }
+    }
+  }
+
   // Индивидуальные пропорции и рост каждого из 4 персонажей:
   // У всех нижний край квада уходит глубоко за новую заднюю стенку-бортик тележки (bottomY = 0.64),
   // а верхняя макушка отражает индивидуальный рост:
@@ -5732,6 +5954,7 @@ export class FirstPersonWebGLScene {
       this.droneDeliverAnim.active ||
       (this.trashTossAnim.active && !this.trashTossAnim.fromRight && !this.trashTossAnim.handoffBack) ||
       this.sinkDumpAnim.active ||
+      (this.reserveAnim.active && this.reserveAnim.action === 'pickup') ||
       rt.cameraFocus === 'under_counter' ||
       (rt.activeSector === -1 && (this.sinkWashAnim.active || this.rackPickupAnim.active))
     ) {
@@ -5880,17 +6103,17 @@ export class FirstPersonWebGLScene {
       const rightStartZ = rightHoldZ + R[2] * 0.06;
 
       if (mode === 'pickup_tray_right') {
-        // Левая держит пустую; правая вылетает к миске на подносе (-0.13, 0.918, -0.24) и поднимает её в правую руку!
+        // Левая держит свою посуду; правая вылетает к миске на подносе ИЛИ на правой столешнице (targetPos) и поднимает её в правую руку!
         this.drawFilledVessel3D(basePos[0], basePos[1], basePos[2], v, 0.64, false);
         drawLeftGloveAt(basePos[0], basePos[1], basePos[2]);
-        const trayX = -0.13;
-        const trayY = 0.918;
-        const trayZ = -0.24;
+        const trayX = d.targetPos ? d.targetPos[0] : -0.13;
+        const trayY = d.targetPos ? d.targetPos[1] : 0.918;
+        const trayZ = d.targetPos ? d.targetPos[2] : -0.24;
         const liftedV = d.vessel || rt.rightHandVessel;
         if (p < 0.4) {
           const t = p / 0.4;
           const s = t * t * (3 - 2 * t);
-          if (liftedV) this.drawFilledVessel3D(trayX, trayY, trayZ, liftedV, 0.76, false);
+          if (liftedV) this.drawFilledVessel3D(trayX, trayY, trayZ, liftedV, d.targetPos ? 0.7 : 0.76, false);
           drawRightGloveAt(
             rightStartX + (trayX - rightStartX) * s,
             rightStartY + (trayY + 0.02 - rightStartY) * s + Math.sin(t * Math.PI) * 0.05,
@@ -5902,7 +6125,8 @@ export class FirstPersonWebGLScene {
           const rx = trayX + (rightHoldX - trayX) * s;
           const ry = trayY + (rightHoldY - trayY) * s + Math.sin(t * Math.PI) * 0.075;
           const rz = trayZ + (rightHoldZ - trayZ) * s;
-          const sc = 0.76 + (0.62 - 0.76) * s;
+          const startSc = d.targetPos ? 0.7 : 0.76;
+          const sc = startSc + (0.62 - startSc) * s;
           if (liftedV) this.drawFilledVessel3D(rx, ry, rz, liftedV, sc, false);
           drawRightGloveAt(rx, ry, rz);
         }
@@ -5910,19 +6134,20 @@ export class FirstPersonWebGLScene {
       }
 
       if (mode === 'handoff_and_pickup_tray_left') {
-        // 1) p < 0.38: пустая посуда стоит на подносе, а блюдо из ЛЕВОЙ руки перекладывается в ПРАВУЮ;
-        // 2) 0.38..0.62: правая держит блюдо, а освободившаяся левая рука тянется к пустой посуде на подносе;
-        // 3) p >= 0.62: правая держит блюдо, левая поднимает пустую посуду с подноса к себе!
-        const trayX = -0.13;
-        const trayY = 0.918;
-        const trayZ = -0.24;
+        // 1) p < 0.38: пустая посуда стоит на подносе (или на правой столешнице), а блюдо из ЛЕВОЙ руки перекладывается в ПРАВУЮ;
+        // 2) 0.38..0.62: правая держит блюдо, а освободившаяся левая рука тянется к пустой посуде;
+        // 3) p >= 0.62: правая держит блюдо, левая поднимает пустую посуду к себе!
+        const trayX = d.targetPos ? d.targetPos[0] : -0.13;
+        const trayY = d.targetPos ? d.targetPos[1] : 0.918;
+        const trayZ = d.targetPos ? d.targetPos[2] : -0.24;
+        const startSc = d.targetPos ? 0.7 : 0.76;
         const fullV = d.vessel || rt.rightHandVessel;
         const emptyLeft = { type: d.type, broth: null, noodleState: null, toppings: [], overflowCount: 0 };
         if (p < 0.38) {
           const t = p / 0.38;
           const s = t * t * (3 - 2 * t);
           const arc = Math.sin(t * Math.PI) * 0.045;
-          this.drawFilledVessel3D(trayX, trayY, trayZ, emptyLeft, 0.76, false);
+          this.drawFilledVessel3D(trayX, trayY, trayZ, emptyLeft, startSc, false);
           const bx = basePos[0] + (rightHoldX - basePos[0]) * s;
           const by = basePos[1] + (rightHoldY - basePos[1]) * s + arc;
           const bz = basePos[2] + (rightHoldZ - basePos[2]) * s;
@@ -5945,7 +6170,7 @@ export class FirstPersonWebGLScene {
         if (p < 0.62) {
           const t = (p - 0.38) / 0.24;
           const s = t * t * (3 - 2 * t);
-          this.drawFilledVessel3D(trayX, trayY, trayZ, emptyLeft, 0.76, false);
+          this.drawFilledVessel3D(trayX, trayY, trayZ, emptyLeft, startSc, false);
           drawLeftGloveAt(
             basePos[0] + (trayX - basePos[0]) * s,
             basePos[1] + (trayY + 0.02 - basePos[1]) * s + Math.sin(t * Math.PI) * 0.04,
@@ -5957,7 +6182,7 @@ export class FirstPersonWebGLScene {
           const lx = trayX + (basePos[0] - trayX) * s;
           const ly = trayY + (basePos[1] - trayY) * s + Math.sin(t * Math.PI) * 0.075;
           const lz = trayZ + (basePos[2] - trayZ) * s;
-          this.drawFilledVessel3D(lx, ly, lz, emptyLeft, 0.76 + (0.64 - 0.76) * s, false);
+          this.drawFilledVessel3D(lx, ly, lz, emptyLeft, startSc + (0.64 - startSc) * s, false);
           drawLeftGloveAt(lx, ly, lz);
         }
         return;

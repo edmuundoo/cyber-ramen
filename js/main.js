@@ -1,16 +1,16 @@
-import { GAME_CONFIG } from './config.js?v=97';
-import { gameState, createShiftRuntimeState } from './state.js?v=97';
-import { audio } from './audio.js?v=97';
+import { GAME_CONFIG } from './config.js?v=98';
+import { gameState, createShiftRuntimeState } from './state.js?v=98';
+import { audio } from './audio.js?v=98';
 import {
   buildCustomerPortraitSVG,
   buildCourierDroneSVG,
   generateAppleTouchIcon
-} from './renderer.js?v=97';
-import { FirstPersonWebGLScene } from './webgl3d.js?v=97';
-import { CustomerAndDeliverySystem } from './customers.js?v=97';
-import { KitchenSystem } from './kitchen.js?v=97';
-import { EconomySystem } from './economy.js?v=97';
-import { TutorialSystem } from './tutorial.js?v=97';
+} from './renderer.js?v=98';
+import { FirstPersonWebGLScene } from './webgl3d.js?v=98';
+import { CustomerAndDeliverySystem } from './customers.js?v=98';
+import { KitchenSystem } from './kitchen.js?v=98';
+import { EconomySystem } from './economy.js?v=98';
+import { TutorialSystem } from './tutorial.js?v=98';
 
 class CyberRamenApp {
   constructor() {
@@ -243,6 +243,35 @@ class CyberRamenApp {
       return;
     }
 
+    if (hitId === 'trash_leak') {
+      const wiped = this.kitchenSystem.wipeTrashLeak();
+      if (wiped) {
+        this.scene3D.triggerTrashLeakWipeAnim(wiped);
+      }
+      return;
+    }
+
+    if (hitId === 'reserve_counter_surface') {
+      const res = this.kitchenSystem.handleReserveSurfaceTap();
+      if (res) {
+        this.scene3D.triggerReserveAnim(res);
+      }
+      return;
+    }
+
+    if (hitId.startsWith('reserve_item_')) {
+      const itemId = hitId.slice('reserve_item_'.length);
+      const res = this.kitchenSystem.handleReserveItemTap(itemId);
+      if (res) {
+        if (res.action === 'pickup_tray_right' || res.action === 'handoff_and_pickup_tray_left') {
+          this.scene3D.triggerDualHandAnim(res.action, res);
+        } else {
+          this.scene3D.triggerReserveAnim(res);
+        }
+      }
+      return;
+    }
+
     if (hitId === 'customer_serve') {
       if (gameState.runtime.cameraFocus === 'customer') {
         const hasHeld = Boolean(gameState.runtime.activeVessel && gameState.runtime.activeVessel.type);
@@ -392,7 +421,7 @@ class CyberRamenApp {
 
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker
-        .register('./sw.js?v=97', { updateViaCache: 'none' })
+        .register('./sw.js?v=98', { updateViaCache: 'none' })
         .then((reg) => reg.update())
         .catch(() => {});
     }
@@ -602,8 +631,8 @@ class CyberRamenApp {
     if (gameState.runtime.cameraFocus === 'customer' && gameState.runtime.carryingAssembly) {
       return;
     }
-    // Сектора: -1 (Мойка левее плиты), 0 (Плита), 1 (Центральный стол), 2 (Склад справа)
-    const clamped = Math.max(-1, Math.min(2, sectorIdx));
+    // Сектора: -1 (Мойка), 0 (Плита), 1 (Центральный стол), 2 (Склад/Холодильник), 3 (Правая столешница-резерв)
+    const clamped = Math.max(-1, Math.min(3, sectorIdx));
     if (gameState.runtime.activeSector === clamped) return;
 
     gameState.runtime.activeSector = clamped;
