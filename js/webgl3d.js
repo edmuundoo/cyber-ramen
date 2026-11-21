@@ -1,5 +1,5 @@
-import { GAME_CONFIG } from './config.js?v=110';
-import { gameState } from './state.js?v=110';
+import { GAME_CONFIG } from './config.js?v=111';
+import { gameState } from './state.js?v=111';
 import {
   createAlleyBackdropTexture,
   createBuildingFacadeTexture,
@@ -9,7 +9,7 @@ import {
   createWallMenuSignTexture,
   createPedestrianTextures,
   AnimeCustomerTextureRenderer
-} from './art3d.js?v=110';
+} from './art3d.js?v=111';
 
 /**
  * Полноэкранный WebGL 3D движок от первого лица с процедурной высокодетализированной
@@ -571,7 +571,7 @@ export class FirstPersonWebGLScene {
     this.reserveAnim.active = true;
     this.reserveAnim.action = res.action || 'place';
     this.reserveAnim.timer = 0;
-    this.reserveAnim.duration = 0.44;
+    this.reserveAnim.duration = this.reserveAnim.action === 'place' ? 0.56 : 0.48;
     this.reserveAnim.item = {
       ...res.item,
       vessel: res.item.vessel
@@ -638,7 +638,7 @@ export class FirstPersonWebGLScene {
     this.assemblyAccessoryAnim.drinkId = res.drinkId || 'cola';
     this.assemblyAccessoryAnim.intoBag = Boolean(res.intoBag || res.fromBag);
     this.assemblyAccessoryAnim.timer = 0;
-    this.assemblyAccessoryAnim.duration = 0.44;
+    this.assemblyAccessoryAnim.duration = this.assemblyAccessoryAnim.action === 'place_accessory' ? 0.56 : 0.44;
   }
 
   triggerFridgeDoorAnim(action = 'open') {
@@ -686,7 +686,7 @@ export class FirstPersonWebGLScene {
     this.assemblyVesselAnim.active = true;
     this.assemblyVesselAnim.action = res.action || 'place';
     this.assemblyVesselAnim.timer = 0;
-    this.assemblyVesselAnim.duration = 0.38;
+    this.assemblyVesselAnim.duration = this.assemblyVesselAnim.action === 'place' ? 0.52 : 0.38;
     this.assemblyVesselAnim.vessel = res.vessel
       ? { ...res.vessel, toppings: [...(res.vessel.toppings || [])] }
       : null;
@@ -3709,20 +3709,29 @@ export class FirstPersonWebGLScene {
     // Если пакет стоит на столе/подносе (и мы не проигрываем анимацию упаковки и не держим его перед клиентом)
     const bagBaseY = a.hasTray ? asmY + 0.016 : asmY;
     const showStaticBag = a.hasBag && !this.bagPackAnim.active && !isCarryingOrder;
+    const vesselPlaceP = this.assemblyVesselAnim.active
+      ? this.assemblyVesselAnim.timer / this.assemblyVesselAnim.duration
+      : 1;
     const vesselFlyingIntoBag =
       this.assemblyVesselAnim.active &&
       this.assemblyVesselAnim.action === 'place' &&
-      this.assemblyVesselAnim.intoBag;
+      this.assemblyVesselAnim.intoBag &&
+      vesselPlaceP < 0.72;
+    const accPlaceP = this.assemblyAccessoryAnim.active
+      ? this.assemblyAccessoryAnim.timer / this.assemblyAccessoryAnim.duration
+      : 1;
     const drinkHiddenOnPlace =
       (this.assemblyAccessoryAnim.active &&
         this.assemblyAccessoryAnim.action === 'place_accessory' &&
-        this.assemblyAccessoryAnim.itemType === 'drink') ||
+        this.assemblyAccessoryAnim.itemType === 'drink' &&
+        accPlaceP < 0.72) ||
       (this.drinkPlaceAnim.active && this.drinkPlaceAnim.timer / this.drinkPlaceAnim.duration < 0.88) ||
       (this.trayPlaceAnim.active && this.trayPlaceAnim.autoMoveItem?.vessel?.type === 'drink');
     const chopsticksHiddenOnPlace =
       (this.assemblyAccessoryAnim.active &&
         this.assemblyAccessoryAnim.action === 'place_accessory' &&
-        this.assemblyAccessoryAnim.itemType === 'chopsticks') ||
+        this.assemblyAccessoryAnim.itemType === 'chopsticks' &&
+        accPlaceP < 0.72) ||
       this.chopsticksPlaceAnim.active ||
       (this.trayPlaceAnim.active && this.trayPlaceAnim.autoMoveItem?.vessel?.type === 'chopsticks');
 
@@ -4058,7 +4067,7 @@ export class FirstPersonWebGLScene {
       const vesselOnTrayX = asmX - 0.13;
       const vesselOnTrayY = asmY + 0.016;
       const vesselAnimHidden =
-        (this.assemblyVesselAnim.active && this.assemblyVesselAnim.action === 'place') ||
+        (this.assemblyVesselAnim.active && this.assemblyVesselAnim.action === 'place' && vesselPlaceP < 0.72) ||
         (this.trayPlaceAnim.active &&
           this.trayPlaceAnim.autoMoveItem &&
           (this.trayPlaceAnim.autoMoveItem.vessel?.type === 'bowl' ||
@@ -4074,40 +4083,61 @@ export class FirstPersonWebGLScene {
       }
     }
 
-    // Анимация ручной постановки или взятия БАНКИ / ПАЛОЧЕК правой рукой на поднос / в пакет!
+    // Анимация ручной постановки или взятия БАНКИ / ПАЛОЧЕК правой рукой на поднос / в пакет (с плавным возвратом руки к нам!)
     if (this.assemblyAccessoryAnim.active) {
       const aa = this.assemblyAccessoryAnim;
       const p = Math.min(1, aa.timer / aa.duration);
-      const s = smooth01(p);
       const isPlace = aa.action === 'place_accessory';
       const isDrink = aa.itemType === 'drink';
       const intoBag = Boolean(aa.intoBag);
       const handPos = this.getRightHandWorldPos();
-      const { F, R } = this.getCameraBasis();
+      const { F, R, U } = this.getCameraBasis();
       const yawAngle = Math.atan2(-F[0], -F[2]);
 
       const targetX = isDrink ? (intoBag ? asmX + 0.095 : asmX + 0.1) : intoBag ? asmX + 0.16 : asmX + 0.22;
       const targetY = isDrink ? (intoBag ? bagBaseY + 0.016 : asmY + 0.016) : intoBag ? bagBaseY + 0.22 : asmY + 0.016;
       const targetZ = isDrink ? (intoBag ? asmZ + 0.01 : asmZ - 0.05) : asmZ;
+      const retractPos = [
+        this.camPos[0] + F[0] * 0.34 + R[0] * 0.2 - U[0] * 0.28,
+        this.camPos[1] + F[1] * 0.34 + R[1] * 0.2 - U[1] * 0.28,
+        this.camPos[2] + F[2] * 0.34 + R[2] * 0.2 - U[2] * 0.28
+      ];
 
-      const u = isPlace ? s : 1 - s;
-      const arcH = intoBag ? 0.24 : 0.075;
-      const ax = handPos[0] + (targetX - handPos[0]) * u;
-      const ay = handPos[1] + (targetY - handPos[1]) * u + Math.sin(p * Math.PI) * arcH;
-      const az = handPos[2] + (targetZ - handPos[2]) * u;
-
-      if (isDrink) {
-        const sc = 0.92 + (1.12 - 0.92) * u;
-        this.draw3DDrinkCan(ax, ay, az, aa.drinkId || 'cola', sc, [0.04 * (1 - u), yawAngle * (1 - u), -0.06 * (1 - u)]);
+      let ghX, ghY, ghZ;
+      if (isPlace && p >= 0.72) {
+        // Предмет уже стоит на подносе/в пакете — пустая правая рука плавно отъезжает обратно к нам!
+        const t = (p - 0.72) / 0.28;
+        const s = smooth01(t);
+        const startGx = targetX + R[0] * 0.058 - F[0] * 0.04;
+        const startGy = targetY + (isDrink ? 0.048 : 0.022);
+        const startGz = targetZ + R[2] * 0.058 - F[2] * 0.04;
+        const liftOut = Math.sin(t * Math.PI) * (intoBag ? 0.14 : 0.035);
+        ghX = startGx + (retractPos[0] - startGx) * s;
+        ghY = startGy + (retractPos[1] - startGy) * s + liftOut;
+        ghZ = startGz + (retractPos[2] - startGz) * s;
       } else {
-        const sc = 0.95 + ((intoBag ? 0.98 : 1.02) - 0.95) * u;
-        const tiltZ = intoBag ? -0.35 * u : 0;
-        this.draw3DChopsticksPack(ax, ay, az, sc, [0.18 * (1 - u), (yawAngle - 0.14) * (1 - u), tiltZ]);
+        const moveP = isPlace ? p / 0.72 : p;
+        const s = smooth01(moveP);
+        const u = isPlace ? s : 1 - s;
+        const arcH = intoBag ? 0.24 : 0.075;
+        const ax = handPos[0] + (targetX - handPos[0]) * u;
+        const ay = handPos[1] + (targetY - handPos[1]) * u + Math.sin(moveP * Math.PI) * arcH;
+        const az = handPos[2] + (targetZ - handPos[2]) * u;
+
+        if (isDrink) {
+          const sc = 0.92 + (1.12 - 0.92) * u;
+          this.draw3DDrinkCan(ax, ay, az, aa.drinkId || 'cola', sc, [0.04 * (1 - u), yawAngle * (1 - u), -0.06 * (1 - u)]);
+        } else {
+          const sc = 0.95 + ((intoBag ? 0.98 : 1.02) - 0.95) * u;
+          const tiltZ = intoBag ? -0.35 * u : 0;
+          this.draw3DChopsticksPack(ax, ay, az, sc, [0.18 * (1 - u), (yawAngle - 0.14) * (1 - u), tiltZ]);
+        }
+
+        ghX = ax + R[0] * 0.058 - F[0] * 0.04;
+        ghY = ay + (isDrink ? 0.048 : 0.022);
+        ghZ = az + R[2] * 0.058 - F[2] * 0.04;
       }
 
-      const ghX = ax + R[0] * 0.058 - F[0] * 0.04;
-      const ghY = ay + (isDrink ? 0.048 : 0.022);
-      const ghZ = az + R[2] * 0.058 - F[2] * 0.04;
       const ghRot = [0.06, yawAngle + 0.28, -0.14];
       this.drawBox(ghX, ghY, ghZ, 0.066, 0.034, 0.12, [0.16, 0.14, 0.24], 0.22, ghRot);
       this.drawBox(ghX, ghY + 0.018, ghZ, 0.07, 0.011, 0.038, [0.0, 0.96, 0.83], 0.92, ghRot);
@@ -4124,45 +4154,67 @@ export class FirstPersonWebGLScene {
       );
     }
 
-    // Анимация постановки посуды из левой или правой руки на поднос (ближе к левому краю!) или внутрь полого пакета (с запечатыванием коробки!)
+    // Анимация постановки посуды из левой или правой руки на поднос / внутрь полого пакета (с плавным отъездом руки к нам!)
     if (this.assemblyVesselAnim.active && this.assemblyVesselAnim.vessel && this.assemblyVesselAnim.action === 'place') {
       const p = Math.min(1, this.assemblyVesselAnim.timer / this.assemblyVesselAnim.duration);
-      const s = p * p * (3 - 2 * p);
       const handPos = this.getLeftHandWorldPos();
       const { F, R, U } = this.getCameraBasis();
+      const yawAngle = Math.atan2(-F[0], -F[2]);
       const fromRight = Boolean(this.assemblyVesselAnim.fromRight);
+      const sideSign = fromRight ? 1 : -1;
       const startPos = fromRight ? this.getRightHandWorldPos() : handPos;
       const intoBag = Boolean(this.assemblyVesselAnim.intoBag);
       const targetX = intoBag ? asmX - 0.075 : asmX - 0.13;
       const targetY = intoBag ? bagBaseY + 0.016 : asmY + 0.017;
       const targetZ = intoBag ? asmZ - 0.01 : asmZ;
-      const arcH = intoBag ? 0.28 : 0.08;
-      const vx = startPos[0] + (targetX - startPos[0]) * s;
-      const vy = startPos[1] + (targetY - startPos[1]) * s + Math.sin(p * Math.PI) * arcH;
-      const vz = startPos[2] + (targetZ - startPos[2]) * s;
-      const vsc = intoBag ? 0.64 + 0.14 * s : 0.64 + 0.12 * s;
-      const sealP = intoBag ? Math.min(1, Math.max(0, (p - 0.22) / 0.55)) : 0;
-      this.drawFilledVessel3D(vx, vy, vz, this.assemblyVesselAnim.vessel, vsc, sealP);
-      if (fromRight) {
-        const yawAngle = Math.atan2(-F[0], -F[2]);
-        const rhX = vx + R[0] * 0.088 - F[0] * 0.054;
-        const rhY = vy - 0.034;
-        const rhZ = vz + R[2] * 0.088 - F[2] * 0.054;
-        const rhRot = [0.06, yawAngle + 0.34, -0.12];
-        this.drawBox(rhX, rhY, rhZ, 0.074, 0.034, 0.13, [0.16, 0.14, 0.24], 0.22, rhRot);
-        this.drawBox(rhX, rhY + 0.018, rhZ, 0.078, 0.011, 0.04, [0.0, 0.96, 0.83], 0.92, rhRot);
-        this.drawBox(
-          rhX + R[0] * 0.055 - F[0] * 0.082,
-          rhY - 0.024,
-          rhZ + R[2] * 0.055 - F[2] * 0.082,
-          0.08,
-          0.048,
-          0.135,
-          [0.11, 0.13, 0.2],
-          0.15,
-          rhRot
-        );
+      const retractPos = [
+        this.camPos[0] + F[0] * 0.34 + R[0] * (0.2 * sideSign) - U[0] * 0.28,
+        this.camPos[1] + F[1] * 0.34 + R[1] * (0.2 * sideSign) - U[1] * 0.28,
+        this.camPos[2] + F[2] * 0.34 + R[2] * (0.2 * sideSign) - U[2] * 0.28
+      ];
+
+      let gx, gy, gz;
+      if (p < 0.72) {
+        const moveP = p / 0.72;
+        const s = smooth01(moveP);
+        const arcH = intoBag ? 0.28 : 0.08;
+        const vx = startPos[0] + (targetX - startPos[0]) * s;
+        const vy = startPos[1] + (targetY - startPos[1]) * s + Math.sin(moveP * Math.PI) * arcH;
+        const vz = startPos[2] + (targetZ - startPos[2]) * s;
+        const vsc = intoBag ? 0.64 + 0.14 * s : 0.64 + 0.12 * s;
+        const sealP = intoBag ? Math.min(1, Math.max(0, (moveP - 0.22) / 0.55)) : 0;
+        this.drawFilledVessel3D(vx, vy, vz, this.assemblyVesselAnim.vessel, vsc, sealP);
+
+        gx = vx + R[0] * (0.088 * sideSign) - F[0] * 0.054;
+        gy = Math.max(intoBag ? bagBaseY + 0.24 : asmY + 0.025, vy + (intoBag ? 0.04 : 0.012));
+        gz = vz + R[2] * (0.088 * sideSign) - F[2] * 0.054;
+      } else {
+        // Посуда уже стоит на подносе / в пакете — пустая рука плавно уходит обратно к нам!
+        const t = (p - 0.72) / 0.28;
+        const s = smooth01(t);
+        const startGx = targetX + R[0] * (0.088 * sideSign) - F[0] * 0.054;
+        const startGy = intoBag ? bagBaseY + 0.24 : asmY + 0.03;
+        const startGz = targetZ + R[2] * (0.088 * sideSign) - F[2] * 0.054;
+        const liftOut = Math.sin(t * Math.PI) * (intoBag ? 0.08 : 0.035);
+        gx = startGx + (retractPos[0] - startGx) * s;
+        gy = startGy + (retractPos[1] - startGy) * s + liftOut;
+        gz = startGz + (retractPos[2] - startGz) * s;
       }
+
+      const gRot = [0.06, yawAngle + 0.34 * sideSign, -0.12 * sideSign];
+      this.drawBox(gx, gy, gz, 0.074, 0.034, 0.13, [0.16, 0.14, 0.24], 0.22, gRot);
+      this.drawBox(gx, gy + 0.018, gz, 0.078, 0.011, 0.04, [0.0, 0.96, 0.83], 0.92, gRot);
+      this.drawBox(
+        gx + R[0] * (0.055 * sideSign) - F[0] * 0.082,
+        gy - 0.024,
+        gz + R[2] * (0.055 * sideSign) - F[2] * 0.082,
+        0.08,
+        0.048,
+        0.135,
+        [0.11, 0.13, 0.2],
+        0.15,
+        gRot
+      );
     }
 
     // Анимация переноса палочек Варибаси из зоны мисок и коробок (x=0.60, z=-0.36) на поднос или внутрь полого пакета!
@@ -4203,7 +4255,8 @@ export class FirstPersonWebGLScene {
       const hidingCenterId =
         this.reserveAnim.active &&
         this.reserveAnim.action === 'place' &&
-        this.reserveAnim.item
+        this.reserveAnim.item &&
+        this.reserveAnim.timer / this.reserveAnim.duration < 0.72
           ? this.reserveAnim.item.id
           : null;
       const centerSurfaceY = 0.896;
@@ -6474,8 +6527,9 @@ export class FirstPersonWebGLScene {
     const isReserveSector = rt.activeSector === 3;
 
     const animActive = this.reserveAnim.active && this.reserveAnim.item;
+    const reserveP = animActive ? Math.min(1, this.reserveAnim.timer / this.reserveAnim.duration) : 1;
     const hidingItemId =
-      animActive && this.reserveAnim.action === 'place' ? this.reserveAnim.item.id : null;
+      animActive && this.reserveAnim.action === 'place' && reserveP < 0.72 ? this.reserveAnim.item.id : null;
 
     // 1. Отрисовываем все стоящие на столешнице предметы (миски, коробки, напитки, палочки) в их случайных непересекающихся точках
     for (const item of items) {
@@ -6494,37 +6548,86 @@ export class FirstPersonWebGLScene {
       }
     }
 
-    // 2. Плавная 3D-анимация постановки предмета на случайную точку или взятия с неё (с кибер-перчаткой!)
+    // 2. Плавная 3D-анимация постановки предмета на случайную точку или взятия с неё (с плавным отъездом руки к нам!)
     if (animActive && this.reserveAnim.item.vessel) {
-      const p = Math.min(1, this.reserveAnim.timer / this.reserveAnim.duration);
-      const s = p * p * (3 - 2 * p);
+      const p = reserveP;
+      const smooth = (t) => {
+        const c = Math.max(0, Math.min(1, t));
+        return c * c * (3 - 2 * c);
+      };
       const it = this.reserveAnim.item;
       const fromRight = Boolean(this.reserveAnim.fromRight);
-      const handPos = fromRight ? this.getRightHandWorldPos() : this.getLeftHandWorldPos();
-      const { F, R } = this.getCameraBasis();
-      const yawAngle = Math.atan2(-F[0], -F[2]);
-
-      let vx, vy, vz, vsc, vRotY;
-      if (this.reserveAnim.action === 'place') {
-        vx = handPos[0] + (it.x - handPos[0]) * s;
-        vy = handPos[1] + (surfaceY - handPos[1]) * s + Math.sin(p * Math.PI) * 0.1;
-        vz = handPos[2] + (it.z - handPos[2]) * s;
-        vsc = 0.64 + (0.7 - 0.64) * s;
-        vRotY = (it.rotY || 0) * s;
-      } else {
-        vx = it.x + (handPos[0] - it.x) * s;
-        vy = surfaceY + (handPos[1] - surfaceY) * s + Math.sin(p * Math.PI) * 0.08;
-        vz = it.z + (handPos[2] - it.z) * s;
-        vsc = 0.7 + (0.64 - 0.7) * s;
-        vRotY = (it.rotY || 0) * (1 - s);
-      }
-      this.drawAnyItem3D(vx, vy, vz, it.vessel, vsc, false, [0, vRotY, 0]);
-
-      // Перчатка руки, сопровождающая посуду точно до/от выбранной случайной точки
       const sideSign = fromRight ? 1 : -1;
-      const gx = vx + R[0] * (0.088 * sideSign) - F[0] * 0.052;
-      const gy = vy - 0.032;
-      const gz = vz + R[2] * (0.088 * sideSign) - F[2] * 0.052;
+      const handPos = fromRight ? this.getRightHandWorldPos() : this.getLeftHandWorldPos();
+      const { F, R, U } = this.getCameraBasis();
+      const yawAngle = Math.atan2(-F[0], -F[2]);
+      const isDrink = it.vessel.type === 'drink';
+      const isChop = it.vessel.type === 'chopsticks';
+      const handOffsetX = isDrink ? 0.058 : isChop ? 0.064 : 0.088;
+      const handOffsetY = isDrink ? 0.048 : isChop ? 0.024 : 0.016;
+      const retractPos = [
+        this.camPos[0] + F[0] * 0.34 + R[0] * (0.2 * sideSign) - U[0] * 0.28,
+        this.camPos[1] + F[1] * 0.34 + R[1] * (0.2 * sideSign) - U[1] * 0.28,
+        this.camPos[2] + F[2] * 0.34 + R[2] * (0.2 * sideSign) - U[2] * 0.28
+      ];
+
+      let gx, gy, gz;
+      if (this.reserveAnim.action === 'place') {
+        if (p < 0.72) {
+          // Фаза 1: рука переносит предмет на выбранную свободную точку и аккуратно ставит его
+          const t = p / 0.72;
+          const s = smooth(t);
+          const vx = handPos[0] + (it.x - handPos[0]) * s;
+          const vy = handPos[1] + (surfaceY - handPos[1]) * s + Math.sin(t * Math.PI) * 0.095;
+          const vz = handPos[2] + (it.z - handPos[2]) * s;
+          const vsc = 0.64 + (0.7 - 0.64) * s;
+          const vRotY = (it.rotY || 0) * s;
+          this.drawAnyItem3D(vx, vy, vz, it.vessel, vsc, false, [0, vRotY, 0]);
+
+          gx = vx + R[0] * (handOffsetX * sideSign) - F[0] * 0.05;
+          gy = Math.max(surfaceY + 0.022, vy + handOffsetY);
+          gz = vz + R[2] * (handOffsetX * sideSign) - F[2] * 0.05;
+        } else {
+          // Фаза 2: предмет уже стоит на столе — пустая левая или правая рука плавно отъезжает обратно к нам!
+          const t = (p - 0.72) / 0.28;
+          const s = smooth(t);
+          const startGx = it.x + R[0] * (handOffsetX * sideSign) - F[0] * 0.05;
+          const startGy = surfaceY + Math.max(0.024, handOffsetY);
+          const startGz = it.z + R[2] * (handOffsetX * sideSign) - F[2] * 0.05;
+          const liftOut = Math.sin(t * Math.PI) * 0.036;
+          gx = startGx + (retractPos[0] - startGx) * s;
+          gy = startGy + (retractPos[1] - startGy) * s + liftOut;
+          gz = startGz + (retractPos[2] - startGz) * s;
+        }
+      } else {
+        if (p < 0.24) {
+          // Фаза 1 взятия: пустая рука тянется от нас прямо к предмету на столе
+          const t = p / 0.24;
+          const s = smooth(t);
+          this.drawAnyItem3D(it.x, surfaceY, it.z, it.vessel, 0.7, false, [0, it.rotY || 0, 0]);
+          const dstGx = it.x + R[0] * (handOffsetX * sideSign) - F[0] * 0.05;
+          const dstGy = surfaceY + Math.max(0.024, handOffsetY);
+          const dstGz = it.z + R[2] * (handOffsetX * sideSign) - F[2] * 0.05;
+          gx = retractPos[0] + (dstGx - retractPos[0]) * s;
+          gy = retractPos[1] + (dstGy - retractPos[1]) * s + Math.sin(t * Math.PI) * 0.03;
+          gz = retractPos[2] + (dstGz - retractPos[2]) * s;
+        } else {
+          // Фаза 2 взятия: рука подхватывает предмет и плавно подносит к себе!
+          const t = (p - 0.24) / 0.76;
+          const s = smooth(t);
+          const vx = it.x + (handPos[0] - it.x) * s;
+          const vy = surfaceY + (handPos[1] - surfaceY) * s + Math.sin(t * Math.PI) * 0.08;
+          const vz = it.z + (handPos[2] - it.z) * s;
+          const vsc = 0.7 + (0.64 - 0.7) * s;
+          const vRotY = (it.rotY || 0) * (1 - s);
+          this.drawAnyItem3D(vx, vy, vz, it.vessel, vsc, false, [0, vRotY, 0]);
+
+          gx = vx + R[0] * (handOffsetX * sideSign) - F[0] * 0.05;
+          gy = Math.max(surfaceY + 0.022, vy + handOffsetY);
+          gz = vz + R[2] * (handOffsetX * sideSign) - F[2] * 0.05;
+        }
+      }
+
       const gRot = [0.06, yawAngle + 0.3 * sideSign, -0.14 * sideSign];
       this.drawBox(gx, gy, gz, 0.074, 0.034, 0.13, [0.16, 0.14, 0.24], 0.22, gRot);
       this.drawBox(gx, gy + 0.018, gz, 0.078, 0.011, 0.04, [0.0, 0.96, 0.83], 0.92, gRot);
