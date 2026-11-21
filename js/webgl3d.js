@@ -1,5 +1,5 @@
-import { GAME_CONFIG } from './config.js?v=109';
-import { gameState } from './state.js?v=109';
+import { GAME_CONFIG } from './config.js?v=110';
+import { gameState } from './state.js?v=110';
 import {
   createAlleyBackdropTexture,
   createBuildingFacadeTexture,
@@ -9,7 +9,7 @@ import {
   createWallMenuSignTexture,
   createPedestrianTextures,
   AnimeCustomerTextureRenderer
-} from './art3d.js?v=109';
+} from './art3d.js?v=110';
 
 /**
  * Полноэкранный WebGL 3D движок от первого лица с процедурной высокодетализированной

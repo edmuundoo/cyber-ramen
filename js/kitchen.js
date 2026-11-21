@@ -1,6 +1,6 @@
-import { GAME_CONFIG } from './config.js?v=109';
-import { gameState } from './state.js?v=109';
-import { audio } from './audio.js?v=109';
+import { GAME_CONFIG } from './config.js?v=110';
+import { gameState } from './state.js?v=110';
+import { audio } from './audio.js?v=110';
 
 export class KitchenSystem {
   constructor(callbacks) {
@@ -2261,7 +2261,7 @@ export class KitchenSystem {
   // СВОБОДНАЯ РАССТАНОВКА НА ЦЕНТРАЛЬНОЙ СТОЛЕШНИЦЕ (МАКСИМУМ 3 ПРЕДМЕТА БЕЗ ПОДНОСА):
   // 3 живые зоны (слева, по центру, справа) с хаотичным случайным смещением и защитой от пересечений!
   // =========================================================================
-  findFreeCenterSpot(items = []) {
+  findFreeCenterSpot(items = [], preferRight = false) {
     if (items.length >= 3) return null;
     const zones = [
       { id: 0, minX: -0.32, maxX: -0.21, minZ: -0.35, maxZ: -0.15 }, // Левая зона (не задевая тряпочку на -0.49!)
@@ -2272,10 +2272,16 @@ export class KitchenSystem {
     const freeZones = zones.filter((z) => !usedZones.has(z.id));
     if (freeZones.length === 0) return null;
 
-    // Перемешиваем свободные зоны в случайном порядке, чтобы постановка ощущалась естественно и хаотично!
-    for (let i = freeZones.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [freeZones[i], freeZones[j]] = [freeZones[j], freeZones[i]];
+    if (preferRight) {
+      // Для предметов в правой руке (банка напитка / палочки) сначала выбираем правую сторону (zone 2),
+      // а если она занята — ближайшую свободную зону (центр -> левый край)!
+      freeZones.sort((a, b) => b.id - a.id);
+    } else {
+      // Перемешиваем свободные зоны в случайном порядке, чтобы постановка посуды ощущалась естественно и хаотично!
+      for (let i = freeZones.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [freeZones[i], freeZones[j]] = [freeZones[j], freeZones[i]];
+      }
     }
 
     const minDist = 0.255;
@@ -2328,15 +2334,18 @@ export class KitchenSystem {
       return null;
     }
 
-    const spot = this.findFreeCenterSpot(rt.centerItems);
+    const fromRight = hasRight;
+    const srcItem = fromRight ? right : left;
+    const preferRight = Boolean(srcItem && this.isAccessoryItem(srcItem));
+
+    const spot = this.findFreeCenterSpot(rt.centerItems, preferRight);
     if (!spot) {
       audio.playPenaltyBuzz();
       this.onToast('🚫 На центральной столешнице уже 3 предмета (максимум)! Освободите место или отнесите направо ▶', '#ffaa00');
       return null;
     }
 
-    const fromRight = hasRight;
-    const placedVessel = JSON.parse(JSON.stringify(fromRight ? right : left));
+    const placedVessel = JSON.parse(JSON.stringify(srcItem));
     if (this.isFoodVessel(placedVessel)) {
       placedVessel.wasStagedOnTable = true;
     }
