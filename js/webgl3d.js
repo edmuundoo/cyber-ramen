@@ -1,5 +1,5 @@
-import { GAME_CONFIG } from './config.js?v=98';
-import { gameState } from './state.js?v=98';
+import { GAME_CONFIG } from './config.js?v=99';
+import { gameState } from './state.js?v=99';
 import {
   createAlleyBackdropTexture,
   createBuildingFacadeTexture,
@@ -9,7 +9,7 @@ import {
   createWallMenuSignTexture,
   createPedestrianTextures,
   AnimeCustomerTextureRenderer
-} from './art3d.js?v=98';
+} from './art3d.js?v=99';
 
 /**
  * Полноэкранный WebGL 3D движок от первого лица с процедурной высокодетализированной
@@ -533,7 +533,7 @@ export class FirstPersonWebGLScene {
     this.trashLeakWipeAnim.active = true;
     this.trashLeakWipeAnim.timer = 0;
     this.trashLeakWipeAnim.duration = 0.78;
-    this.trashLeakWipeAnim.prevLevel = res.prevLevel || 1;
+    this.trashLeakWipeAnim.prevSpread = res.prevSpread || 0.6;
     this.trashLeakWipeAnim.broth = res.broth || 'tonkotsu';
   }
 
@@ -2643,8 +2643,6 @@ export class FirstPersonWebGLScene {
     // Единая правая столешница (продлена справа от холодильника до z = +1.42 для свободного складирования посуды!) и неоновая полоса
     this.drawBox(0.92, 0.86, 0.145, 0.96, 0.07, 2.55, counterCol, 0.05, null, 0.45);
     this.drawBox(0.45, 0.9, 0.145, 0.03, 0.025, 2.48, trimCol, 0.65);
-    // Тёплая деревянная рабочая поверхность справа от холодильника (Сектор 3: z = +0.62..+1.36)
-    this.drawBox(0.9, 0.901, 0.99, 0.76, 0.012, 0.74, [0.3, 0.2, 0.14], 0.06, null, 0.48);
 
     // ПРАВАЯ СТЕНА ЯТАЯ ЗА СКЛАДОМ, ХОЛОДИЛЬНИКОМ И НОВОЙ ПРАВОЙ СТОЛЕШНИЦЕЙ (СИММЕТРИЧНА ЛЕВОЙ, БЕЗ ТАБЛИЧЕК!)
     const wallRightX = 1.4;
@@ -4651,39 +4649,45 @@ export class FirstPersonWebGLScene {
       this.registerHitbox('trash_bin', trashX, trashTopY - 0.02, trashZ, 88);
     }
 
-    // 1Г. ЛУЖА БУЛЬОНА, ПРОТЕКАЮЩАЯ ИЗ-ПОД МУСОРНОГО БАКА (если в мусорку выливали/выбрасывали бульон!)
-    const tLeak = rt.trashLeak || { puddleLevel: 0, broth: 'tonkotsu' };
+    // 1Г. КРАСИВАЯ ВЛАЖНАЯ СИНЕВАТАЯ ЛУЖИЦА, ТИХО И ПЛАВНО РАСПОЛЗАЮЩАЯСЯ ИЗ-ПОД МУСОРНОГО БАКА!
+    const tLeak = rt.trashLeak || { puddleLevel: 0, puddleSpread: 0, broth: 'tonkotsu' };
     const tWipeActive = this.trashLeakWipeAnim.active;
     const tWipeP = tWipeActive ? Math.min(1, this.trashLeakWipeAnim.timer / this.trashLeakWipeAnim.duration) : 0;
-    const visLeakLvl =
-      (tLeak.puddleLevel || 0) > 0
-        ? tLeak.puddleLevel
-        : tWipeActive && tWipeP < 0.85
-          ? this.trashLeakWipeAnim.prevLevel
+    const rawSpread =
+      (tLeak.puddleSpread || 0) > 0.005
+        ? tLeak.puddleSpread
+        : tWipeActive && tWipeP < 0.86
+          ? (this.trashLeakWipeAnim.prevSpread || 0.6) * Math.max(0, 1.0 - Math.max(0, (tWipeP - 0.14) / 0.72))
           : 0;
-    const leakScale = tWipeActive ? Math.max(0.05, 1.0 - Math.max(0, (tWipeP - 0.15) / 0.7)) : 1.0;
 
-    if (visLeakLvl > 0) {
-      const leakBrothId = (tLeak.puddleLevel || 0) > 0 ? tLeak.broth : this.trashLeakWipeAnim.broth;
-      const leakColMap = {
-        tonkotsu: [0.86, 0.68, 0.36],
-        chili_broth: [0.92, 0.18, 0.18],
-        miso_mushroom: [0.64, 0.2, 0.84]
-      };
-      const lCol = leakColMap[leakBrothId] || leakColMap.tonkotsu;
-      const ly = trashBaseY + 0.013;
-      const bigLeak = visLeakLvl >= 2;
-      const lk = (bigLeak ? 1.32 : 0.92) * leakScale;
+    if (rawSpread > 0.01) {
+      const s = rawSpread * rawSpread * (3 - 2 * rawSpread); // Супер-плавная кривая расползания
+      const ly = trashBaseY + 0.012;
+      // Благородный влажно-синий кибер-отлив с лёгким мягким глянцем (никаких пятен слякоти!)
+      const mainBlue = [0.14, 0.46, 0.78];
+      const highlightBlue = [0.34, 0.74, 0.96];
+      const baseAlpha = 0.72 * Math.min(1, rawSpread * 2.6);
 
-      // Глянцевая лужа бульона на полу подраковинной ниши, вытекающая из-под основания бака вперёд-вправо
-      this.drawMesh('cylinder', trashX + 0.08 * lk, ly, trashZ - 0.12 * lk, 0.24 * lk, 0.004, 0.2 * lk, lCol, 0.3, null, 0.96, 0, 0.82);
-      this.drawMesh('cylinder', trashX + 0.16 * lk, ly, trashZ - 0.22 * lk, 0.15 * lk, 0.004, 0.13 * lk, lCol, 0.28, null, 0.96, 0, 0.78);
-      if (bigLeak) {
-        this.drawMesh('cylinder', trashX - 0.04 * lk, ly, trashZ - 0.24 * lk, 0.14 * lk, 0.004, 0.12 * lk, lCol, 0.28, null, 0.96, 0, 0.76);
-        this.drawMesh('cylinder', trashX + 0.23 * lk, ly, trashZ - 0.05 * lk, 0.11 * lk, 0.004, 0.1 * lk, lCol, 0.3, null, 0.96, 0, 0.78);
-      }
-      if (rt.activeSector === -1 && (tLeak.puddleLevel || 0) > 0) {
-        this.registerHitbox('trash_leak', trashX + 0.14, ly + 0.02, trashZ - 0.18, 86);
+      // Единая цельная лужица: плавно выступает из-под самого основания бака и мягко растекается вперёд-вправо
+      const rMainX = 0.22 + 0.24 * s;
+      const rMainZ = 0.22 + 0.22 * s;
+      const mainX = trashX + 0.06 * s;
+      const mainZ = trashZ - 0.08 * s;
+      this.drawMesh('cylinder', mainX, ly, mainZ, rMainX, 0.003, rMainZ, mainBlue, 0.22, null, 0.98, 0, baseAlpha);
+
+      // Плавно вытекающий передне-правый «язычок» той же лужи (перекрывается с центром в один гладкий силуэт!)
+      const tongueX = trashX + 0.14 * s;
+      const tongueZ = trashZ - 0.17 * s;
+      const rTonX = 0.14 + 0.17 * s;
+      const rTonZ = 0.12 + 0.15 * s;
+      this.drawMesh('cylinder', tongueX, ly + 0.0004, tongueZ, rTonX, 0.0025, rTonZ, mainBlue, 0.24, null, 0.98, 0, baseAlpha * 0.92);
+
+      // Тонкий влажный глянцевый блик света по центру лужицы
+      const shimmer = 0.28 + 0.08 * Math.sin(this.time * 2.4);
+      this.drawMesh('cylinder', tongueX - 0.02 * s, ly + 0.0012, tongueZ + 0.02 * s, rTonX * 0.62, 0.0016, rTonZ * 0.58, highlightBlue, shimmer, null, 1.0, 0, baseAlpha * 0.55);
+
+      if (rt.activeSector === -1 && (tLeak.puddleSpread || 0) > 0.04) {
+        this.registerHitbox('trash_leak', tongueX + 0.04, ly + 0.02, tongueZ - 0.02, 86);
       }
     }
 
@@ -5626,7 +5630,7 @@ export class FirstPersonWebGLScene {
   drawRightReserveCounter3D() {
     const rt = gameState.runtime;
     const items = Array.isArray(rt.reserveItems) ? rt.reserveItems : [];
-    const surfaceY = 0.908;
+    const surfaceY = 0.896;
     const isReserveSector = rt.activeSector === 3;
 
     const animActive = this.reserveAnim.active && this.reserveAnim.item;

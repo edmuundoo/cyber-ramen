@@ -1,6 +1,6 @@
-import { GAME_CONFIG } from './config.js?v=98';
-import { gameState } from './state.js?v=98';
-import { audio } from './audio.js?v=98';
+import { GAME_CONFIG } from './config.js?v=99';
+import { gameState } from './state.js?v=99';
+import { audio } from './audio.js?v=99';
 
 export class KitchenSystem {
   constructor(callbacks) {
@@ -95,26 +95,32 @@ export class KitchenSystem {
       }
     }
 
-    // 3Б. Таймер протекания мусорного пакета (если в мусорку выливали/выкидывали бульон — со временем появляется лужа!)
-    if (rt.trashLeak && rt.trashLeak.leakTimer > 0) {
-      rt.trashLeak.leakTimer -= dt;
-      if (rt.trashLeak.leakTimer <= 0) {
-        rt.trashLeak.leakTimer = 0;
-        const prevLvl = rt.trashLeak.puddleLevel || 0;
-        const nextLvl = Math.min(2, prevLvl + 1);
-        rt.trashLeak.puddleLevel = nextLvl;
-        if (nextLvl < 2 && (rt.trashLeak.brothCount || 0) >= 2) {
-          rt.trashLeak.leakTimer = 7.5;
+    // 3Б. Таймер и тихое плавное расползание лужицы из-под мусорного бака (без резких скачков!)
+    if (rt.trashLeak) {
+      if (rt.trashLeak.leakTimer > 0) {
+        rt.trashLeak.leakTimer -= dt;
+        if (rt.trashLeak.leakTimer <= 0) {
+          rt.trashLeak.leakTimer = 0;
+          const prevLvl = rt.trashLeak.puddleLevel || 0;
+          const nextLvl = Math.min(2, prevLvl + 1);
+          rt.trashLeak.puddleLevel = nextLvl;
+          rt.trashLeak.targetSpread = nextLvl >= 2 ? 1.0 : 0.56;
+          if (nextLvl < 2 && (rt.trashLeak.brothCount || 0) >= 2) {
+            rt.trashLeak.leakTimer = 6.5;
+          }
+          if (prevLvl === 0 && nextLvl > 0) {
+            audio.playTapPop();
+            this.onToast(
+              '💦 Из-под мусорки под раковиной тихо начала подтекать лужица — можно вытереть в мойке (Сектор -1).',
+              '#00bbf9'
+            );
+          }
         }
-        if (nextLvl > prevLvl) {
-          audio.playTapPop();
-          this.onToast(
-            nextLvl >= 2
-              ? '💦 Мусорный пакет совсем протёк! Под раковиной разлилась большая лужа бульона — вытрите её!'
-              : '💦 Из мусорки под раковиной потёк бульон! Можно вытереть лужу по тапу в мойке (Сектор -1).',
-            '#ffaa00'
-          );
-        }
+      }
+      const curS = rt.trashLeak.puddleSpread || 0;
+      const tgtS = rt.trashLeak.targetSpread || 0;
+      if (curS < tgtS) {
+        rt.trashLeak.puddleSpread = Math.min(tgtS, curS + dt * 0.11);
       }
     }
 
@@ -891,12 +897,16 @@ export class KitchenSystem {
     const hadFood = !this.isVesselEmptyOfFood(tossed);
     if (tossed && tossed.broth) {
       if (!rt.trashLeak) {
-        rt.trashLeak = { brothCount: 0, leakTimer: 0, puddleLevel: 0, broth: tossed.broth };
+        rt.trashLeak = { brothCount: 0, leakTimer: 0, puddleLevel: 0, puddleSpread: 0, targetSpread: 0, broth: tossed.broth };
       }
       rt.trashLeak.brothCount = (rt.trashLeak.brothCount || 0) + 1;
       rt.trashLeak.broth = tossed.broth;
-      if ((rt.trashLeak.puddleLevel || 0) < 2 && (rt.trashLeak.leakTimer || 0) <= 0) {
-        rt.trashLeak.leakTimer = 6.5;
+      if ((rt.trashLeak.puddleLevel || 0) === 0 && (rt.trashLeak.leakTimer || 0) <= 0) {
+        rt.trashLeak.leakTimer = 4.5;
+      } else if ((rt.trashLeak.puddleLevel || 0) >= 1) {
+        // При повторном выливании бульона лужа просто тихо и плавно подрастает шире (без резкого появления!)
+        rt.trashLeak.puddleLevel = 2;
+        rt.trashLeak.targetSpread = Math.min(1.0, Math.max(rt.trashLeak.targetSpread || 0.56, 0.56 + (rt.trashLeak.brothCount - 1) * 0.24));
       }
     }
     if (hadFood) {
@@ -1641,25 +1651,28 @@ export class KitchenSystem {
     return prevClog;
   }
 
-  // Вытереть лужу бульона, вытекшую из-под мусорного бака под раковиной (Сектор -1)
+  // Вытереть лужу, вытекшую из-под мусорного бака под раковиной (Сектор -1)
   wipeTrashLeak() {
     if (this.blockIfBothHandsBusy()) return null;
     const rt = gameState.runtime;
-    if (!rt.trashLeak || (rt.trashLeak.puddleLevel || 0) <= 0) {
+    const spread = rt.trashLeak?.puddleSpread || 0;
+    if (!rt.trashLeak || ((rt.trashLeak.puddleLevel || 0) <= 0 && spread <= 0.04)) {
       return null;
     }
     const res = {
-      prevLevel: rt.trashLeak.puddleLevel,
+      prevSpread: Math.max(0.25, spread),
       broth: rt.trashLeak.broth || 'tonkotsu'
     };
     rt.trashLeak = {
       brothCount: 0,
       leakTimer: 0,
       puddleLevel: 0,
+      puddleSpread: 0,
+      targetSpread: 0,
       broth: 'tonkotsu'
     };
     audio.playTapPop();
-    this.onToast('🧽 Лужа под мусоркой вытерта начисто!', '#10f56c');
+    this.onToast('🧽 Лужица под мусоркой вытерта начисто!', '#10f56c');
     this.renderAllKitchen();
     return res;
   }
@@ -1835,7 +1848,7 @@ export class KitchenSystem {
         action: 'handoff_and_pickup_tray_left',
         type: pickedVessel.type,
         rightVessel: fullMoved,
-        targetPos: [item.x, 0.908, item.z]
+        targetPos: [item.x, 0.896, item.z]
       };
     }
 
@@ -1851,7 +1864,7 @@ export class KitchenSystem {
     return {
       action: 'pickup_tray_right',
       vessel: pickedVessel,
-      targetPos: [item.x, 0.908, item.z]
+      targetPos: [item.x, 0.896, item.z]
     };
   }
 
