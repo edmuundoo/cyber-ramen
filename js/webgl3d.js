@@ -1,5 +1,5 @@
-import { GAME_CONFIG } from './config.js?v=89';
-import { gameState } from './state.js?v=89';
+import { GAME_CONFIG } from './config.js?v=90';
+import { gameState } from './state.js?v=90';
 import {
   createAlleyBackdropTexture,
   createBuildingFacadeTexture,
@@ -9,7 +9,7 @@ import {
   createWallMenuSignTexture,
   createPedestrianTextures,
   AnimeCustomerTextureRenderer
-} from './art3d.js?v=89';
+} from './art3d.js?v=90';
 
 /**
  * Полноэкранный WebGL 3D движок от первого лица с процедурной высокодетализированной
@@ -359,12 +359,23 @@ export class FirstPersonWebGLScene {
     this.vesselBounce = 1.0;
   }
 
-  triggerTossFromHandToTrashAnim(vessel = null) {
+  triggerTossFromHandToTrashAnim(res = null) {
+    const vessel = res && res.vessel ? res.vessel : res;
+    const fromRight = Boolean(res && res.fromRight);
+    const handoffBack = Boolean(res && res.handoffBack);
+    const rightBowl = res && res.rightBowl
+      ? { ...res.rightBowl, toppings: [...(res.rightBowl.toppings || [])] }
+      : null;
     this.trashTossAnim.active = true;
     this.trashTossAnim.timer = 0;
-    this.trashTossAnim.duration = 0.52;
+    this.trashTossAnim.duration = handoffBack ? 0.84 : 0.54;
     this.trashTossAnim.vessel = vessel ? { ...vessel, toppings: [...(vessel.toppings || [])] } : null;
-    this.heldVesselAppear = 0;
+    this.trashTossAnim.fromRight = fromRight;
+    this.trashTossAnim.handoffBack = handoffBack;
+    this.trashTossAnim.rightBowl = rightBowl;
+    if (!fromRight && !handoffBack) {
+      this.heldVesselAppear = 0;
+    }
   }
 
   triggerAutoCloseAndDroneDeliverAnim(vessel = null) {
@@ -1691,8 +1702,8 @@ export class FirstPersonWebGLScene {
     //   * cameraFocus === 'customer': верхний ракурс на гостя (с возможностью покрутиться чуть влево -1 и чуть вправо +1 на полки с грязными мисками!)
     //   * cameraFocus === 'worktable': крупный план рабочего стола
     if (rt.activeSector === -1) {
-      this.camPosTarget = [-0.05, 1.68, 0.22];
-      this.lookAtTarget = [-0.84, 0.78 + this.dragPanY * 0.4, 0.65 + this.dragPanX];
+      this.camPosTarget = [0.08, 1.5, 0.18];
+      this.lookAtTarget = [-0.84, 0.74 + this.dragPanY * 0.4, 0.68 + this.dragPanX];
     } else if (rt.activeSector === 0) {
       this.camPosTarget = [-0.04, 1.68, 0.46];
       this.lookAtTarget = [-0.86, 0.98 + this.dragPanY * 0.6, -0.16 + this.dragPanX];
@@ -4476,25 +4487,28 @@ export class FirstPersonWebGLScene {
       }
     }
 
-    // 1В. СТИЛЬНЫЙ 3D-МУСОРНЫЙ БАК В ОТКРЫТОЙ НИШЕ ПОД РАКОВИНОЙ (НЕ ВРЕЗАЕТСЯ В ТЕКСТУРЫ, ПОЛНОСТЬЮ ВИДЕН И КЛИКАБЕЛЕН!)
-    const trashX = -0.44;
-    const trashZ = 0.48;
+    // 1В. СТИЛЬНЫЙ 3D-МУСОРНЫЙ БАК ВНУТРИ ОТКРЫТОГО ПРОЁМА ПОД РАКОВИНОЙ, ПРИЖАТЫЙ К ЛЕВОЙ СТЕНКЕ ПРОЁМА (z = 0.96)!
+    const trashX = -0.58;
+    const trashZ = 0.78;
     const trashBaseY = 0.11;
-    const trashH = 0.49;
-    const trashTopY = trashBaseY + trashH; // 0.60
+    const trashH = 0.45;
+    const trashTopY = trashBaseY + trashH; // 0.56
     const heldV = rt.activeVessel;
-    const hasHeld = Boolean(heldV && heldV.type);
-    const trashPulse = hasHeld ? 0.48 + 0.34 * Math.sin(this.time * 6.0) : 0.14;
-    const trashRimCol = hasHeld ? [1.0, 0.28, 0.44] : [0.62, 0.68, 0.76];
+    const rightHeldV = rt.rightHandVessel;
+    const hasBoxInHands = Boolean(
+      (heldV && heldV.type === 'box') || (rightHeldV && rightHeldV.type === 'box')
+    );
+    const trashPulse = hasBoxInHands ? 0.48 + 0.34 * Math.sin(this.time * 6.0) : 0.14;
+    const trashRimCol = hasBoxInHands ? [1.0, 0.28, 0.44] : [0.62, 0.68, 0.76];
     // Корпус бака из тёмной рифлёной стали + декоративное кольцо + ножная педаль
-    this.drawMesh('cylinder', trashX, trashBaseY + trashH * 0.5, trashZ, 0.32, trashH, 0.32, [0.19, 0.23, 0.29], 0.06, null, 0.8);
-    this.drawMesh('torus', trashX, trashBaseY + trashH * 0.35, trashZ, 0.326, 0.012, 0.326, [0.32, 0.37, 0.44], 0.08, null, 0.88);
-    this.drawMesh('torus', trashX, trashTopY, trashZ, 0.338, 0.024, 0.338, trashRimCol, trashPulse, null, 0.92);
+    this.drawMesh('cylinder', trashX, trashBaseY + trashH * 0.5, trashZ, 0.3, trashH, 0.3, [0.19, 0.23, 0.29], 0.06, null, 0.8);
+    this.drawMesh('torus', trashX, trashBaseY + trashH * 0.35, trashZ, 0.306, 0.012, 0.306, [0.32, 0.37, 0.44], 0.08, null, 0.88);
+    this.drawMesh('torus', trashX, trashTopY, trashZ, 0.318, 0.024, 0.318, trashRimCol, trashPulse, null, 0.92);
     // Ножная педаль со стороны повара
-    this.drawBox(trashX + 0.175, trashBaseY + 0.032, trashZ, 0.055, 0.016, 0.095, [0.56, 0.62, 0.7], 0.14, null, 0.9);
+    this.drawBox(trashX + 0.165, trashBaseY + 0.03, trashZ, 0.052, 0.016, 0.09, [0.56, 0.62, 0.7], 0.14, null, 0.9);
     // Чёрный мусорный пакет внутри открытого бака (глубина + мягкие края пакета по ободку)
-    this.drawMesh('cylinder', trashX, trashTopY - 0.02, trashZ, 0.29, 0.03, 0.29, [0.05, 0.06, 0.09], 0.02, null, 0.35);
-    this.drawMesh('torus', trashX, trashTopY - 0.008, trashZ, 0.305, 0.014, 0.305, [0.08, 0.1, 0.14], 0.04, null, 0.55);
+    this.drawMesh('cylinder', trashX, trashTopY - 0.02, trashZ, 0.272, 0.03, 0.272, [0.05, 0.06, 0.09], 0.02, null, 0.35);
+    this.drawMesh('torus', trashX, trashTopY - 0.008, trashZ, 0.288, 0.014, 0.288, [0.08, 0.1, 0.14], 0.04, null, 0.55);
     if (rt.activeSector === -1) {
       this.registerHitbox('trash_bin', trashX, trashTopY - 0.02, trashZ, 94);
     }
@@ -4574,13 +4588,7 @@ export class FirstPersonWebGLScene {
       (this.collectDirtyAnim.active && this.collectDirtyAnim.timer / this.collectDirtyAnim.duration < 0.88) ||
       (this.sinkDumpAnim.active &&
         this.sinkDumpAnim.vessel?.type === 'bowl' &&
-        this.sinkDumpAnim.timer / this.sinkDumpAnim.duration < 0.86) ||
-      (this.trashTossAnim.active &&
-        this.trashTossAnim.vessel?.type === 'bowl' &&
-        (this.trashTossAnim.vessel.broth ||
-          this.trashTossAnim.vessel.noodleState ||
-          (this.trashTossAnim.vessel.toppings || []).length > 0) &&
-        this.trashTossAnim.timer / this.trashTossAnim.duration < 0.88);
+        this.sinkDumpAnim.timer / this.sinkDumpAnim.duration < 0.86);
     const visibleDirty = Math.max(0, Math.min(10, dirtyList.length - (flyingIntoSink ? 1 : 0)));
     for (let i = 0; i < visibleDirty; i++) {
       const sp = sinkPyramid[i % sinkPyramid.length];
@@ -4821,50 +4829,19 @@ export class FirstPersonWebGLScene {
       this.drawBox(bx + 0.07, by + 0.048, bz + 0.04, 0.074, 0.012, 0.04, [0.0, 0.96, 0.83], 0.92, [0.18, 1.15, 0]);
     }
 
-    // 9. АНИМАЦИЯ ВЫБРОСА ИЗ ЛЕВОЙ РУКИ В МУСОРНЫЙ БАК ПОД РАКОВИНОЙ (trashTossAnim)
+    // 9. АНИМАЦИЯ ВЫБРОСА КОРОБКИ В МУСОРНЫЙ БАК ПОД РАКОВИНОЙ (trashTossAnim)
     if (this.trashTossAnim.active && this.trashTossAnim.vessel) {
       const p = Math.min(1, this.trashTossAnim.timer / this.trashTossAnim.duration);
-      const handPos = this.getLeftHandWorldPos();
       const tv = this.trashTossAnim.vessel;
-      const hadFood = Boolean(tv.broth || tv.noodleState || (tv.toppings && tv.toppings.length > 0));
-      if (tv.type === 'bowl' && hadFood) {
-        // Керамическая миска с едой: выносим над мусоркой, вываливаем содержимое в бак, затем опускаем миску в раковину!
-        const overTrashX = trashX;
-        const overTrashY = trashTopY + 0.16;
-        const overTrashZ = trashZ;
-        if (p < 0.34) {
-          const t = p / 0.34;
-          const s = t * t * (3 - 2 * t);
-          const bx = handPos[0] + (overTrashX - handPos[0]) * s;
-          const by = handPos[1] + (overTrashY - handPos[1]) * s + Math.sin(t * Math.PI) * 0.06;
-          const bz = handPos[2] + (overTrashZ - handPos[2]) * s;
-          this.drawFilledVessel3D(bx, by, bz, tv, 0.62, false);
-        } else if (p < 0.68) {
-          const t = (p - 0.34) / 0.34;
-          const tilt = Math.sin(t * Math.PI) * 1.15;
-          this.drawDirtyBowl3D(overTrashX, overTrashY, overTrashZ, tv.broth || 'tonkotsu', 0.56, [0.15, 0.3, tilt]);
-          // Падающие остатки в мусорку
-          const dropY = overTrashY - 0.04 - t * 0.24;
-          const bCol = bMapSink[tv.broth] || bMapSink.tonkotsu;
-          this.drawMesh('sphere', overTrashX, dropY, overTrashZ, 0.032, 0.044, 0.032, bCol, 0.65);
-          if (tv.noodleState) {
-            this.drawMesh('wavy_noodle', overTrashX, dropY + 0.02, overTrashZ, 0.09, 0.018, 0.09, [1.0, 0.84, 0.3], 0.28, [t * 2, 0.5, 0.3]);
-          }
-        } else {
-          const t = (p - 0.68) / 0.32;
-          const s = t * t * (3 - 2 * t);
-          const bx = overTrashX + (sinkX - overTrashX) * s;
-          const by = overTrashY + (floorY + 0.03 - overTrashY) * s + Math.sin(t * Math.PI) * 0.14;
-          const bz = overTrashZ + (sinkZ - overTrashZ) * s;
-          this.drawDirtyBowl3D(bx, by, bz, tv.broth || 'tonkotsu', 0.5, [0, 0.3 * s, 0]);
-        }
-      } else {
-        // Коробка (или пустая коробка): плавно улетает прямо внутрь мусорного бака!
-        const s = p * p * (3 - 2 * p);
-        const tx = handPos[0] + (trashX - handPos[0]) * s;
-        const tz = handPos[2] + (trashZ - handPos[2]) * s;
-        const ty = handPos[1] + (trashTopY - 0.08 - handPos[1]) * s + Math.sin(p * Math.PI) * 0.12;
-        const shrink = Math.max(0.32, 0.64 * (1 - Math.max(0, p - 0.55) * 1.1));
+      const isHandoff = Boolean(this.trashTossAnim.handoffBack);
+      const tossP = isHandoff ? Math.min(1, p / 0.56) : p;
+      if (!isHandoff || p <= 0.58) {
+        const startPos = this.trashTossAnim.fromRight ? this.getRightHandWorldPos() : this.getLeftHandWorldPos();
+        const s = tossP * tossP * (3 - 2 * tossP);
+        const tx = startPos[0] + (trashX - startPos[0]) * s;
+        const tz = startPos[2] + (trashZ - startPos[2]) * s;
+        const ty = startPos[1] + (trashTopY - 0.08 - startPos[1]) * s + Math.sin(tossP * Math.PI) * 0.12;
+        const shrink = Math.max(0.32, 0.64 * (1 - Math.max(0, tossP - 0.55) * 1.1));
         this.drawFilledVessel3D(tx, ty, tz, tv, shrink);
       }
     }
@@ -5605,7 +5582,7 @@ export class FirstPersonWebGLScene {
     if (!v || (v.type !== 'bowl' && v.type !== 'box')) return;
     if (
       this.droneDeliverAnim.active ||
-      this.trashTossAnim.active ||
+      (this.trashTossAnim.active && !this.trashTossAnim.fromRight && !this.trashTossAnim.handoffBack) ||
       this.sinkDumpAnim.active ||
       rt.cameraFocus === 'under_counter' ||
       (rt.activeSector === -1 && (this.sinkWashAnim.active || this.rackPickupAnim.active))
@@ -5695,6 +5672,41 @@ export class FirstPersonWebGLScene {
     };
 
     const [rightHoldX, rightHoldY, rightHoldZ] = this.getRightHandWorldPos();
+
+    // Если коробка выбрасывалась из ЛЕВОЙ руки, пока в ПРАВОЙ была миска ->
+    // 1) p < 0.56: правая держит миску, пока коробка летит из левой руки в мусорку под раковиной;
+    // 2) p >= 0.56: правая плавно перекладывает миску обратно в освободившуюся левую руку!
+    if (this.trashTossAnim.active && this.trashTossAnim.handoffBack) {
+      const p = Math.min(1, this.trashTossAnim.timer / this.trashTossAnim.duration);
+      const bowlV = this.trashTossAnim.rightBowl || v;
+      if (p < 0.56) {
+        if (bowlV) this.drawFilledVessel3D(rightHoldX, rightHoldY, rightHoldZ, bowlV, 0.62, false);
+        drawRightGloveAt(rightHoldX, rightHoldY, rightHoldZ);
+        const t = p / 0.56;
+        const swing = Math.sin(t * Math.PI) * 0.08;
+        drawLeftGloveAt(basePos[0] - R[0] * swing, basePos[1] - 0.04 * swing, basePos[2] + F[2] * swing);
+      } else {
+        const t = (p - 0.56) / 0.44;
+        const s = t * t * (3 - 2 * t);
+        const arc = Math.sin(t * Math.PI) * 0.045;
+        const bx = rightHoldX + (basePos[0] - rightHoldX) * s;
+        const by = rightHoldY + (basePos[1] - rightHoldY) * s + arc;
+        const bz = rightHoldZ + (basePos[2] - rightHoldZ) * s;
+        if (bowlV) this.drawFilledVessel3D(bx, by, bz, bowlV, 0.62 + 0.02 * s, false);
+        drawLeftGloveAt(
+          basePos[0] + (bx - basePos[0]) * (1 - s * 0.3),
+          by,
+          basePos[2] + (bz - basePos[2]) * (1 - s * 0.3)
+        );
+        const rFollow = t < 0.55 ? s : 1 - (t - 0.55) / 0.45;
+        drawRightGloveAt(
+          rightHoldX + (basePos[0] - rightHoldX) * 0.4 * rFollow,
+          rightHoldY + arc * rFollow - 0.1 * Math.max(0, t - 0.55),
+          rightHoldZ + (basePos[2] - rightHoldZ) * 0.4 * rFollow
+        );
+      }
+      return;
+    }
 
     // =========================================================================
     // ЕДИНАЯ ДВУРУЧНАЯ СИСТЕМА АНИМАЦИЙ (this.dualHandAnim):
