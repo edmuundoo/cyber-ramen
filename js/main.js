@@ -1,16 +1,16 @@
-import { GAME_CONFIG } from './config.js?v=111';
-import { gameState, createShiftRuntimeState } from './state.js?v=111';
-import { audio } from './audio.js?v=111';
+import { GAME_CONFIG } from './config.js?v=112';
+import { gameState, createShiftRuntimeState } from './state.js?v=112';
+import { audio } from './audio.js?v=112';
 import {
   buildCustomerPortraitSVG,
   buildCourierDroneSVG,
   generateAppleTouchIcon
-} from './renderer.js?v=111';
-import { FirstPersonWebGLScene } from './webgl3d.js?v=111';
-import { CustomerAndDeliverySystem } from './customers.js?v=111';
-import { KitchenSystem } from './kitchen.js?v=111';
-import { EconomySystem } from './economy.js?v=111';
-import { TutorialSystem } from './tutorial.js?v=111';
+} from './renderer.js?v=112';
+import { FirstPersonWebGLScene } from './webgl3d.js?v=112';
+import { CustomerAndDeliverySystem } from './customers.js?v=112';
+import { KitchenSystem } from './kitchen.js?v=112';
+import { EconomySystem } from './economy.js?v=112';
+import { TutorialSystem } from './tutorial.js?v=112';
 
 class CyberRamenApp {
   constructor() {
@@ -211,6 +211,8 @@ class CyberRamenApp {
           this.scene3D.triggerDualHandAnim(res.action, res);
         } else if (res.action === 'place_accessory' || res.action === 'pickup_accessory') {
           this.scene3D.triggerAssemblyAccessoryAnim(res);
+        } else if (res.action === 'return_bag') {
+          this.scene3D.triggerBagReturnAnim(res);
         } else {
           this.scene3D.triggerAssemblyVesselAnim(res);
         }
@@ -319,6 +321,9 @@ class CyberRamenApp {
         } else {
           gameState.runtime.cameraFocus = 'worktable';
           gameState.runtime.carryingAssembly = false;
+    if (gameState.runtime.assembly) {
+      gameState.runtime.assembly.unpackingBag = false;
+    }
         }
       } else {
         this.customerSystem.announceCurrentCustomerOrder();
@@ -444,7 +449,7 @@ class CyberRamenApp {
 
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker
-        .register('./sw.js?v=111', { updateViaCache: 'none' })
+        .register('./sw.js?v=112', { updateViaCache: 'none' })
         .then((reg) => reg.update())
         .catch(() => {});
     }
@@ -513,6 +518,9 @@ class CyberRamenApp {
         if (idx === 1 && gameState.runtime.activeSector === 1) {
           gameState.runtime.cameraFocus = 'worktable';
           gameState.runtime.carryingAssembly = false;
+    if (gameState.runtime.assembly) {
+      gameState.runtime.assembly.unpackingBag = false;
+    }
         }
         this.switchSector(idx);
       });
@@ -662,6 +670,9 @@ class CyberRamenApp {
     gameState.runtime.customerPanSide = 0;
     gameState.runtime.underCounterSide = 0;
     gameState.runtime.carryingAssembly = false;
+    if (gameState.runtime.assembly) {
+      gameState.runtime.assembly.unpackingBag = false;
+    }
     if (clamped !== 2 && gameState.runtime.fridgeOpen) {
       gameState.runtime.fridgeOpen = false;
       this.scene3D.triggerFridgeDoorAnim('close');

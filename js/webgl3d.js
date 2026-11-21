@@ -1,5 +1,5 @@
-import { GAME_CONFIG } from './config.js?v=111';
-import { gameState } from './state.js?v=111';
+import { GAME_CONFIG } from './config.js?v=112';
+import { gameState } from './state.js?v=112';
 import {
   createAlleyBackdropTexture,
   createBuildingFacadeTexture,
@@ -9,7 +9,7 @@ import {
   createWallMenuSignTexture,
   createPedestrianTextures,
   AnimeCustomerTextureRenderer
-} from './art3d.js?v=111';
+} from './art3d.js?v=112';
 
 /**
  * Полноэкранный WebGL 3D движок от первого лица с процедурной высокодетализированной
@@ -184,6 +184,7 @@ export class FirstPersonWebGLScene {
       prevChopsticks: false,
       prevDrink: null
     };
+    this.bagReturnAnim = { active: false, timer: 0, duration: 0.56, wasOnTray: false };
     this.assemblyVesselAnim = {
       active: false,
       action: 'place',
@@ -620,6 +621,13 @@ export class FirstPersonWebGLScene {
     if (fromCenter) {
       this.reserveAnim.active = false;
     }
+  }
+
+  triggerBagReturnAnim(res = {}) {
+    this.bagReturnAnim.active = true;
+    this.bagReturnAnim.timer = 0;
+    this.bagReturnAnim.duration = 0.56;
+    this.bagReturnAnim.wasOnTray = Boolean(res && res.wasOnTray);
   }
 
   triggerRightItemGrabAnim(res = {}) {
@@ -1865,6 +1873,12 @@ export class FirstPersonWebGLScene {
       if (this.bagPackAnim.timer >= this.bagPackAnim.duration) {
         this.bagPackAnim.active = false;
         this.bagPackAnim.fromCenterItem = null;
+      }
+    }
+    if (this.bagReturnAnim.active) {
+      this.bagReturnAnim.timer += dt;
+      if (this.bagReturnAnim.timer >= this.bagReturnAnim.duration) {
+        this.bagReturnAnim.active = false;
       }
     }
     if (this.assemblyVesselAnim.active) {
@@ -4059,6 +4073,41 @@ export class FirstPersonWebGLScene {
           const bx = (asmX + 0.16) + (asmX - (asmX + 0.16)) * s;
           this.draw3DTakeoutBag(bx, bagBaseY, asmZ, 1.0, a.vessel, Boolean(a.hasChopsticks), false, null, a.drink);
         }
+      }
+    }
+
+    // Анимация уборки пустого пакета обратно под стол (когда руки пустые и тапнули по пустому пакету!)
+    if (this.bagReturnAnim.active) {
+      const p = Math.min(1, this.bagReturnAnim.timer / this.bagReturnAnim.duration);
+      const retBaseY = this.bagReturnAnim.wasOnTray ? asmY + 0.016 : asmY;
+      const { F, R, U } = this.getCameraBasis();
+      const handOrigin = [
+        this.camPos[0] + F[0] * 0.34 + R[0] * 0.2 - U[0] * 0.28,
+        this.camPos[1] + F[1] * 0.34 + R[1] * 0.2 - U[1] * 0.28,
+        this.camPos[2] + F[2] * 0.34 + R[2] * 0.2 - U[2] * 0.28
+      ];
+
+      if (p < 0.24) {
+        // Правая рука тянется от нас к верхней кромке пустого пакета
+        const t = p / 0.24;
+        const s = smooth01(t);
+        this.draw3DTakeoutBag(asmX, retBaseY, asmZ, 1.0, false, false, false);
+        const dstX = asmX + 0.165;
+        const dstY = retBaseY + 0.23;
+        const dstZ = asmZ + 0.04;
+        const rhX = handOrigin[0] + (dstX - handOrigin[0]) * s;
+        const rhY = handOrigin[1] + (dstY - handOrigin[1]) * s + Math.sin(t * Math.PI) * 0.04;
+        const rhZ = handOrigin[2] + (dstZ - handOrigin[2]) * s;
+        drawCyberGlove(rhX, rhY, rhZ, 1, [0.14, 0.24, -0.15]);
+      } else {
+        // Правая рука подхватывает пустой пакет и плавно уносит его обратно вниз под прилавок!
+        const t = (p - 0.24) / 0.76;
+        const s = smooth01(t);
+        const bx = asmX + (0.38 - asmX) * s;
+        const by = retBaseY + (0.58 - retBaseY) * s + Math.sin(t * Math.PI) * 0.10;
+        const bz = asmZ + (0.12 - asmZ) * s;
+        this.draw3DTakeoutBag(bx, by, bz, 1.0 - 0.06 * s, false, false, false);
+        drawCyberGlove(bx + 0.165, by + 0.23, bz + 0.04, 1, [0.14, 0.24 - 0.06 * s, -0.15]);
       }
     }
 
@@ -7813,7 +7862,7 @@ export class FirstPersonWebGLScene {
       const startY = this.assemblyVesselAnim.intoBag ? 1.04 : 0.92;
       const startZ = -0.24;
       hx = startX + (basePos[0] - startX) * s;
-      hy = startY + (basePos[1] - startY) * s + Math.sin(p * Math.PI) * 0.065;
+      hy = startY + (basePos[1] - startY) * s + Math.sin(p * Math.PI) * (this.assemblyVesselAnim.intoBag ? 0.16 : 0.065);
       hz = startZ + (basePos[2] - startZ) * s;
       handAnchorX = hx;
       handAnchorY = hy;

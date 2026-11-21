@@ -1,6 +1,6 @@
-import { GAME_CONFIG } from './config.js?v=111';
-import { gameState } from './state.js?v=111';
-import { audio } from './audio.js?v=111';
+import { GAME_CONFIG } from './config.js?v=112';
+import { gameState } from './state.js?v=112';
+import { audio } from './audio.js?v=112';
 
 export class KitchenSystem {
   constructor(callbacks) {
@@ -553,6 +553,7 @@ export class KitchenSystem {
 
   setVesselType(type) {
     const rt = gameState.runtime;
+    if (rt.assembly) rt.assembly.unpackingBag = false;
     const left = rt.activeVessel;
     const right = rt.rightHandVessel;
     const hasLeft = Boolean(left && left.type);
@@ -1372,6 +1373,11 @@ export class KitchenSystem {
     const onTray = Boolean(rt.assembly.hasTray);
 
     rt.assembly.hasBag = true;
+    rt.assembly.bagHistory = [];
+    rt.assembly.unpackingBag = false;
+    if (rt.assembly.vessel) rt.assembly.bagHistory.push('vessel');
+    if (rt.assembly.drink) rt.assembly.bagHistory.push('drink');
+    if (rt.assembly.hasChopsticks) rt.assembly.bagHistory.push('chopsticks');
     rt.cameraFocus = 'worktable';
     rt.underCounterSide = 0;
     audio.playTapPop();
@@ -1405,11 +1411,44 @@ export class KitchenSystem {
     return { hadItems, onTray, fromCenterItem, leftHandOnly, prevVessel, prevChopsticks, prevDrink };
   }
 
+  pushBagHistory(slot) {
+    const a = gameState.runtime.assembly;
+    if (!a) return;
+    if (!Array.isArray(a.bagHistory)) a.bagHistory = [];
+    a.bagHistory = a.bagHistory.filter((k) => k !== slot);
+    a.bagHistory.push(slot);
+  }
+
+  getSyncedBagHistory(a) {
+    if (!a) return [];
+    const present = [];
+    if (a.vessel) present.push('vessel');
+    if (a.drink) present.push('drink');
+    if (a.hasChopsticks) present.push('chopsticks');
+    const hist = Array.isArray(a.bagHistory) ? a.bagHistory.filter((k) => present.includes(k)) : [];
+    for (const k of present) {
+      if (!hist.includes(k)) hist.push(k);
+    }
+    a.bagHistory = hist;
+    return hist;
+  }
+
   // Поставить посуду, напиток или палочки на поднос / в пакет, или забрать обратно в нужную руку!
+  // Для пакета:
+  // - Пустой пакет + пустые руки -> убираем пакет обратно под прилавок!
+  // - Непустой пакет + пустые руки (или продолжаем доставать в свободную вторую руку) -> достаём по очереди LIFO (последнее положенное — первым!) в обе руки!
   handleAssemblyZoneTap(preferredPart = null) {
     const rt = gameState.runtime;
     if (!rt.assembly) {
-      rt.assembly = { hasTray: false, hasBag: false, vessel: null, hasChopsticks: false, drink: null };
+      rt.assembly = {
+        hasTray: false,
+        hasBag: false,
+        vessel: null,
+        hasChopsticks: false,
+        drink: null,
+        bagHistory: [],
+        unpackingBag: false
+      };
     }
     const a = rt.assembly;
     const handV = rt.activeVessel;
@@ -1424,11 +1463,92 @@ export class KitchenSystem {
       return null;
     }
 
+    // 0.0 СПЕЦИАЛЬНАЯ ЛОГИКА ДЛЯ ПАКЕТА: уборка пустого пакета под стол ИЛИ вынимание содержимого в обратном порядке (LIFO) в обе руки!
+    if (a.hasBag) {
+      const bagHist = this.getSyncedBagHistory(a);
+
+      // Пустой пакет + пустые руки -> убираем пакет обратно под прилавок!
+      if (bagHist.length === 0 && !hasHand && !hasRight) {
+        const wasOnTray = Boolean(a.hasTray);
+        a.hasBag = false;
+        a.bagHistory = [];
+        a.unpackingBag = false;
+        audio.playTapPop();
+        this.onToast(
+          wasOnTray
+            ? '🛍️ Пустой пакет убран обратно под прилавок — остался чистый поднос!'
+            : '🛍️ Пустой пакет убран обратно под прилавок!',
+          '#00f5d4'
+        );
+        this.renderAllKitchen();
+        return { action: 'return_bag', wasOnTray };
+      }
+
+      // Непустой пакет: начинаем доставать с пустыми руками ИЛИ продолжаем доставать в свободную вторую руку!
+      if (bagHist.length > 0 && ((!hasHand && !hasRight) || (a.unpackingBag && !(hasHand && hasRight)))) {
+        let pickedSlot = null;
+        for (let i = bagHist.length - 1; i >= 0; i--) {
+          const slot = bagHist[i];
+          if (slot === 'vessel' && !hasHand) {
+            pickedSlot = slot;
+            break;
+          }
+          if ((slot === 'drink' || slot === 'chopsticks') && !hasRight) {
+            pickedSlot = slot;
+            break;
+          }
+        }
+
+        if (pickedSlot) {
+          a.bagHistory = bagHist.filter((k) => k !== pickedSlot);
+          a.unpackingBag = a.bagHistory.length > 0;
+
+          if (pickedSlot === 'vessel') {
+            const picked = JSON.parse(JSON.stringify(a.vessel));
+            rt.activeVessel = picked;
+            rt.vesselHeldInLeft = true;
+            rt.sauceModeArmed = false;
+            a.vessel = null;
+            audio.playTapPop();
+            this.onToast('📦 Коробка вынута из пакета в левую руку.', '#00f5d4');
+            this.renderAllKitchen();
+            return { action: 'pickup', vessel: picked, fromBag: true };
+          }
+          if (pickedSlot === 'drink') {
+            const drinkId = a.drink;
+            a.drink = null;
+            rt.rightHandVessel = { type: 'drink', drinkId };
+            audio.playTapPop();
+            this.onToast(`${this.getItemLabel(rt.rightHandVessel)} вынута из пакета в правую руку.`, '#00f5d4');
+            this.renderAllKitchen();
+            return { action: 'pickup_accessory', itemType: 'drink', drinkId, fromBag: true };
+          }
+          if (pickedSlot === 'chopsticks') {
+            a.hasChopsticks = false;
+            rt.rightHandVessel = { type: 'chopsticks' };
+            audio.playTapPop();
+            this.onToast('🥢 Палочки вынуты из пакета в правую руку.', '#00f5d4');
+            this.renderAllKitchen();
+            return { action: 'pickup_accessory', itemType: 'chopsticks', fromBag: true };
+          }
+        } else if (a.unpackingBag) {
+          a.unpackingBag = false;
+          audio.playPenaltyBuzz();
+          this.onToast(
+            '🙌 Правая рука уже занята! Освободите её на столешнице справа ▶, чтобы достать остальное из пакета (или тапните ещё раз, чтобы вернуть).',
+            '#ffaa00'
+          );
+          return null;
+        }
+      }
+    }
+
     // 0А. Точечный тап по банке на подносе (когда правая рука свободна, и не мешаем постановке посуды из левой)
     if (preferredPart === 'drink' && !hasRight && a.drink && (!hasHand || a.vessel)) {
       const drinkId = a.drink;
       a.drink = null;
       rt.rightHandVessel = { type: 'drink', drinkId };
+    if (rt.assembly) rt.assembly.unpackingBag = false;
       audio.playTapPop();
       this.onToast(`${this.getItemLabel(rt.rightHandVessel)} взята с подноса в правую руку.`, '#00f5d4');
       this.renderAllKitchen();
@@ -1439,6 +1559,7 @@ export class KitchenSystem {
     if (preferredPart === 'chopsticks' && !hasRight && a.hasChopsticks && (!hasHand || a.vessel)) {
       a.hasChopsticks = false;
       rt.rightHandVessel = { type: 'chopsticks' };
+    if (rt.assembly) rt.assembly.unpackingBag = false;
       audio.playTapPop();
       this.onToast('🥢 Палочки взяты с подноса в правую руку.', '#00f5d4');
       this.renderAllKitchen();
@@ -1451,6 +1572,8 @@ export class KitchenSystem {
         if (!a.drink) {
           const drinkId = rightV.drinkId || 'cola';
           a.drink = drinkId;
+          if (a.hasBag) this.pushBagHistory('drink');
+          a.unpackingBag = false;
           rt.rightHandVessel = null;
           audio.playTapPop();
           this.onToast(
@@ -1471,6 +1594,8 @@ export class KitchenSystem {
       } else if (rightV.type === 'chopsticks') {
         if (!a.hasChopsticks) {
           a.hasChopsticks = true;
+          if (a.hasBag) this.pushBagHistory('chopsticks');
+          a.unpackingBag = false;
           rt.rightHandVessel = null;
           audio.playTapPop();
           this.onToast(
@@ -1498,6 +1623,8 @@ export class KitchenSystem {
         }
         const placedRight = JSON.parse(JSON.stringify(rightV));
         a.vessel = placedRight;
+        if (a.hasBag) this.pushBagHistory('vessel');
+        a.unpackingBag = false;
         rt.rightHandVessel = null;
         audio.playTapPop();
         this.onToast(
@@ -1527,6 +1654,8 @@ export class KitchenSystem {
 
       const placed = JSON.parse(JSON.stringify(handV));
       a.vessel = placed;
+      if (a.hasBag) this.pushBagHistory('vessel');
+      a.unpackingBag = false;
       rt.activeVessel = this.createEmptyVessel(null);
       rt.vesselHeldInLeft = false;
       rt.sauceModeArmed = false;
@@ -1562,6 +1691,7 @@ export class KitchenSystem {
         const drinkId = a.drink;
         a.drink = null;
         rt.rightHandVessel = { type: 'drink', drinkId };
+    if (rt.assembly) rt.assembly.unpackingBag = false;
         audio.playTapPop();
         this.onToast(
           a.hasBag
@@ -1575,6 +1705,7 @@ export class KitchenSystem {
       if (a.hasChopsticks) {
         a.hasChopsticks = false;
         rt.rightHandVessel = { type: 'chopsticks' };
+    if (rt.assembly) rt.assembly.unpackingBag = false;
         audio.playTapPop();
         this.onToast(
           a.hasBag ? '🥢 Палочки вынуты из пакета в правую руку.' : '🥢 Палочки взяты с подноса в правую руку.',
@@ -1706,6 +1837,7 @@ export class KitchenSystem {
     }
 
     rt.rightHandVessel = { type: 'chopsticks' };
+    if (rt.assembly) rt.assembly.unpackingBag = false;
     audio.playTapPop();
     this.onToast('🥢 Палочки Варибаси в правой руке! Положите их на поднос, в пакет или на любую столешницу.', '#00f5d4');
     this.renderAllKitchen();
@@ -1870,6 +2002,8 @@ export class KitchenSystem {
       a.vessel = null;
       a.hasChopsticks = false;
       a.drink = null;
+      a.bagHistory = [];
+      a.unpackingBag = false;
     } else {
       a.hasTray = false;
       a.hasBag = false;
@@ -1878,6 +2012,8 @@ export class KitchenSystem {
       a.vessel = null;
       a.hasChopsticks = false;
       a.drink = null;
+      a.bagHistory = [];
+      a.unpackingBag = false;
     }
     rt.carryingAssembly = false;
 
@@ -2603,6 +2739,8 @@ export class KitchenSystem {
       rt.assembly.hasBag = false;
       rt.assembly.hasChopsticks = false;
       rt.assembly.drink = null;
+      rt.assembly.bagHistory = [];
+      rt.assembly.unpackingBag = false;
     } else {
       rt.activeVessel = this.createEmptyVessel(null);
       rt.vesselHeldInLeft = false;
@@ -2710,6 +2848,7 @@ export class KitchenSystem {
     }
 
     rt.rightHandVessel = { type: 'drink', drinkId };
+    if (rt.assembly) rt.assembly.unpackingBag = false;
     rt.dailyStats.restockSpent = (rt.dailyStats.restockSpent || 0) + (cfg.restockUnitCost || 10);
     audio.playTapPop();
     this.onToast(

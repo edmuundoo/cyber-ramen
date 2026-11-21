@@ -1,4 +1,4 @@
-import { GAME_CONFIG } from './config.js?v=111';
+import { GAME_CONFIG } from './config.js?v=112';
 
 const BASE_SAVE_KEY = 'CR_NIGHT_YATAI_SAVE_V1';
 
@@ -142,7 +142,9 @@ export function createShiftRuntimeState() {
       dirtyTrayBroth: null,
       vessel: null,
       hasChopsticks: false,
-      drink: null
+      drink: null,
+      bagHistory: [],
+      unpackingBag: false
     },
     // Лужа пролитого бульона на рабочей поверхности столешницы (level: 0 = чисто, 1 = небольшой перелив, 2 = мощный потоп с лапшой!)
     tableSpill: {
