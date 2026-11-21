@@ -1,5 +1,5 @@
-import { GAME_CONFIG } from './config.js?v=100';
-import { gameState } from './state.js?v=100';
+import { GAME_CONFIG } from './config.js?v=101';
+import { gameState } from './state.js?v=101';
 import {
   createAlleyBackdropTexture,
   createBuildingFacadeTexture,
@@ -9,7 +9,7 @@ import {
   createWallMenuSignTexture,
   createPedestrianTextures,
   AnimeCustomerTextureRenderer
-} from './art3d.js?v=100';
+} from './art3d.js?v=101';
 
 /**
  * Полноэкранный WebGL 3D движок от первого лица с процедурной высокодетализированной
@@ -535,6 +535,7 @@ export class FirstPersonWebGLScene {
     this.trashLeakWipeAnim.duration = 0.78;
     this.trashLeakWipeAnim.prevSpread = res.prevSpread || 0.6;
     this.trashLeakWipeAnim.broth = res.broth || 'tonkotsu';
+    this.trashLeakWipeAnim.color = Array.isArray(res.color) ? [...res.color] : null;
   }
 
   triggerReserveAnim(res = {}) {
@@ -4688,8 +4689,8 @@ export class FirstPersonWebGLScene {
       this.registerHitbox('trash_bin', trashX, trashTopY - 0.02, trashZ, 88);
     }
 
-    // 1Г. КРАСИВАЯ ВЛАЖНАЯ СИНЕВАТАЯ ЛУЖИЦА, ТИХО И ПЛАВНО РАСПОЛЗАЮЩАЯСЯ ИЗ-ПОД МУСОРНОГО БАКА!
-    const tLeak = rt.trashLeak || { puddleLevel: 0, puddleSpread: 0, broth: 'tonkotsu' };
+    // 1Г. ГЛАДКАЯ ЛУЖИЦА БУЛЬОНА, ТИХО И ПЛАВНО РАСПОЛЗАЮЩАЯСЯ ИЗ-ПОД МУСОРНОГО БАКА (С ЦВЕТОМ БУЛЬОНА И СМЕШИВАНИЕМ!)
+    const tLeak = rt.trashLeak || { puddleLevel: 0, puddleSpread: 0, broth: 'tonkotsu', color: null };
     const tWipeActive = this.trashLeakWipeAnim.active;
     const tWipeP = tWipeActive ? Math.min(1, this.trashLeakWipeAnim.timer / this.trashLeakWipeAnim.duration) : 0;
     const rawSpread =
@@ -4700,34 +4701,44 @@ export class FirstPersonWebGLScene {
           : 0;
 
     if (rawSpread > 0.01) {
-      const s = rawSpread * rawSpread * (3 - 2 * rawSpread); // Супер-плавная кривая расползания
-      const ly = trashBaseY + 0.012;
-      // Благородный влажно-синий кибер-отлив с лёгким мягким глянцем (никаких пятен слякоти!)
-      const mainBlue = [0.14, 0.46, 0.78];
-      const highlightBlue = [0.34, 0.74, 0.96];
-      const baseAlpha = 0.72 * Math.min(1, rawSpread * 2.6);
+      const s = rawSpread * rawSpread * (3 - 2 * rawSpread);
+      const brothColFallback = {
+        tonkotsu: [0.88, 0.68, 0.38],
+        chili_broth: [0.88, 0.18, 0.16],
+        miso_mushroom: [0.58, 0.22, 0.76]
+      };
+      const targetCol =
+        (tLeak.puddleSpread || 0) > 0.005
+          ? (Array.isArray(tLeak.color) ? tLeak.color : brothColFallback[tLeak.broth] || brothColFallback.tonkotsu)
+          : (Array.isArray(this.trashLeakWipeAnim.color)
+              ? this.trashLeakWipeAnim.color
+              : brothColFallback[this.trashLeakWipeAnim.broth] || brothColFallback.tonkotsu);
 
-      // Единая цельная лужица: плавно выступает из-под самого основания бака и мягко растекается вперёд-вправо
-      const rMainX = 0.22 + 0.24 * s;
-      const rMainZ = 0.22 + 0.22 * s;
-      const mainX = trashX + 0.06 * s;
-      const mainZ = trashZ - 0.08 * s;
-      this.drawMesh('cylinder', mainX, ly, mainZ, rMainX, 0.003, rMainZ, mainBlue, 0.22, null, 0.98, 0, baseAlpha);
+      // Плавная интерполяция цвета лужи, чтобы при подливании другого бульона оттенок перетекал мягко и естественно
+      if (!this._trashLeakRenderCol) {
+        this._trashLeakRenderCol = [...targetCol];
+      } else {
+        for (let ci = 0; ci < 3; ci++) {
+          this._trashLeakRenderCol[ci] += (targetCol[ci] - this._trashLeakRenderCol[ci]) * 0.05;
+        }
+      }
+      const pCol = this._trashLeakRenderCol;
 
-      // Плавно вытекающий передне-правый «язычок» той же лужи (перекрывается с центром в один гладкий силуэт!)
-      const tongueX = trashX + 0.14 * s;
-      const tongueZ = trashZ - 0.17 * s;
-      const rTonX = 0.14 + 0.17 * s;
-      const rTonZ = 0.12 + 0.15 * s;
-      this.drawMesh('cylinder', tongueX, ly + 0.0004, tongueZ, rTonX, 0.0025, rTonZ, mainBlue, 0.24, null, 0.98, 0, baseAlpha * 0.92);
+      // Один чистый цельный глянцевый овал лужи без наложенных дисков (y = 0.128 — на 8 мм выше пола 0.120, ноль Z-fighting и полосок!)
+      const ly = trashBaseY + 0.018;
+      const rX = 0.24 + 0.3 * s;
+      const rZ = 0.22 + 0.28 * s;
+      const pX = trashX + 0.11 * s;
+      const pZ = trashZ - 0.12 * s;
+      const alpha = 0.88 * Math.min(1, rawSpread * 2.4);
 
-      // Тонкий влажный глянцевый блик света по центру лужицы
-      const shimmer = 0.28 + 0.08 * Math.sin(this.time * 2.4);
-      this.drawMesh('cylinder', tongueX - 0.02 * s, ly + 0.0012, tongueZ + 0.02 * s, rTonX * 0.62, 0.0016, rTonZ * 0.58, highlightBlue, shimmer, null, 1.0, 0, baseAlpha * 0.55);
+      this.drawMesh('cylinder', pX, ly, pZ, rX, 0.006, rZ, pCol, 0.22, null, 0.92, 0, alpha);
 
       if (rt.activeSector === -1 && (tLeak.puddleSpread || 0) > 0.04) {
-        this.registerHitbox('trash_leak', tongueX + 0.04, ly + 0.02, tongueZ - 0.02, 86);
+        this.registerHitbox('trash_leak', pX + 0.05, ly + 0.02, pZ - 0.04, 86);
       }
+    } else {
+      this._trashLeakRenderCol = null;
     }
 
     // 3D-анимация протирания пола под мусоркой тряпкой правой рукой

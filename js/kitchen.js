@@ -1,6 +1,6 @@
-import { GAME_CONFIG } from './config.js?v=100';
-import { gameState } from './state.js?v=100';
-import { audio } from './audio.js?v=100';
+import { GAME_CONFIG } from './config.js?v=101';
+import { gameState } from './state.js?v=101';
+import { audio } from './audio.js?v=101';
 
 export class KitchenSystem {
   constructor(callbacks) {
@@ -903,10 +903,36 @@ export class KitchenSystem {
 
     const hadFood = !this.isVesselEmptyOfFood(tossed);
     if (tossed && tossed.broth) {
+      const brothRgbMap = {
+        tonkotsu: [0.88, 0.68, 0.38],
+        chili_broth: [0.88, 0.18, 0.16],
+        miso_mushroom: [0.58, 0.22, 0.76]
+      };
+      const addCol = brothRgbMap[tossed.broth] || brothRgbMap.tonkotsu;
       if (!rt.trashLeak) {
-        rt.trashLeak = { brothCount: 0, leakTimer: 0, puddleLevel: 0, puddleSpread: 0, targetSpread: 0, broth: tossed.broth };
+        rt.trashLeak = {
+          brothCount: 0,
+          leakTimer: 0,
+          puddleLevel: 0,
+          puddleSpread: 0,
+          targetSpread: 0,
+          broth: tossed.broth,
+          color: [...addCol]
+        };
       }
-      rt.trashLeak.brothCount = (rt.trashLeak.brothCount || 0) + 1;
+      const prevN = rt.trashLeak.brothCount || 0;
+      if (!Array.isArray(rt.trashLeak.color) || prevN === 0) {
+        rt.trashLeak.color = [...addCol];
+      } else {
+        // Скрещиваем цвета разных бульонов в луже (взвешенное смешивание!)
+        const w = 1 / (prevN + 1);
+        rt.trashLeak.color = [
+          +(rt.trashLeak.color[0] * (1 - w) + addCol[0] * w).toFixed(3),
+          +(rt.trashLeak.color[1] * (1 - w) + addCol[1] * w).toFixed(3),
+          +(rt.trashLeak.color[2] * (1 - w) + addCol[2] * w).toFixed(3)
+        ];
+      }
+      rt.trashLeak.brothCount = prevN + 1;
       rt.trashLeak.broth = tossed.broth;
       if ((rt.trashLeak.puddleLevel || 0) === 0 && (rt.trashLeak.leakTimer || 0) <= 0) {
         rt.trashLeak.leakTimer = 4.5;
@@ -1684,7 +1710,8 @@ export class KitchenSystem {
     }
     const res = {
       prevSpread: Math.max(0.25, spread),
-      broth: rt.trashLeak.broth || 'tonkotsu'
+      broth: rt.trashLeak.broth || 'tonkotsu',
+      color: Array.isArray(rt.trashLeak.color) ? [...rt.trashLeak.color] : null
     };
     rt.trashLeak = {
       brothCount: 0,
@@ -1692,7 +1719,8 @@ export class KitchenSystem {
       puddleLevel: 0,
       puddleSpread: 0,
       targetSpread: 0,
-      broth: 'tonkotsu'
+      broth: 'tonkotsu',
+      color: null
     };
     audio.playTapPop();
     this.onToast('🧽 Лужица под мусоркой вытерта начисто!', '#10f56c');
