@@ -1,5 +1,5 @@
-import { GAME_CONFIG } from './config.js?v=93';
-import { gameState } from './state.js?v=93';
+import { GAME_CONFIG } from './config.js?v=94';
+import { gameState } from './state.js?v=94';
 import {
   createAlleyBackdropTexture,
   createBuildingFacadeTexture,
@@ -9,7 +9,7 @@ import {
   createWallMenuSignTexture,
   createPedestrianTextures,
   AnimeCustomerTextureRenderer
-} from './art3d.js?v=93';
+} from './art3d.js?v=94';
 
 /**
  * Полноэкранный WebGL 3D движок от первого лица с процедурной высокодетализированной
@@ -110,6 +110,12 @@ export class FirstPersonWebGLScene {
       timer: 0,
       duration: 0.84,
       clog: null
+    };
+    this.sinkDrainAnim = {
+      active: false,
+      timer: 0,
+      duration: 2.7,
+      broth: 'tonkotsu'
     };
     this.rackPickupAnim = {
       active: false,
@@ -490,8 +496,11 @@ export class FirstPersonWebGLScene {
     this.sinkDumpAnim.cloggedNow = Boolean(res.cloggedNow);
     this.sinkDumpAnim.wasCloggedBefore = Boolean(res.wasCloggedBefore);
     this.heldVesselAppear = 0;
-    if (!res.cloggedNow && !res.wasCloggedBefore) {
-      this.sinkFaucetFlowTimer = Math.max(this.sinkFaucetFlowTimer, 1.15);
+    if (!res.cloggedNow && !res.wasCloggedBefore && res.vessel && res.vessel.broth) {
+      this.sinkDrainAnim.active = true;
+      this.sinkDrainAnim.timer = 0;
+      this.sinkDrainAnim.duration = 2.75;
+      this.sinkDrainAnim.broth = res.vessel.broth;
     }
   }
 
@@ -1581,6 +1590,12 @@ export class FirstPersonWebGLScene {
       this.sinkUnclogAnim.timer += dt;
       if (this.sinkUnclogAnim.timer >= this.sinkUnclogAnim.duration) {
         this.sinkUnclogAnim.active = false;
+      }
+    }
+    if (this.sinkDrainAnim.active) {
+      this.sinkDrainAnim.timer += dt;
+      if (this.sinkDrainAnim.timer >= this.sinkDrainAnim.duration) {
+        this.sinkDrainAnim.active = false;
       }
     }
     if (this.rackPickupAnim.active) {
@@ -4479,6 +4494,79 @@ export class FirstPersonWebGLScene {
       const wH = 0.032 * waterFill;
       const wBob = Math.sin(this.time * 4.5) * 0.002;
       this.drawBox(sinkX, floorY + 0.008 + wH * 0.5 + wBob, sinkZ, 0.485, wH, 0.465, clogWaterCol, 0.28, null, 0.94, 4, 0.66);
+    }
+
+    // 1Б2. СТЕКАНИЕ ЧИСТОГО ВЫЛИТОГО БУЛЬОНА В СЛИВ (когда вылили только бульон без лапши/топпингов!):
+    // 1) Бульон разливается по дну чаши во время струи из миски/коробки;
+    // 2) Держится немного на дне, затем закручивается воронкой над решёткой слива и плавно стекает в слив!
+    if (this.sinkDrainAnim.active && !isClogged && waterFill <= 0.02) {
+      const dp = Math.min(1, this.sinkDrainAnim.timer / this.sinkDrainAnim.duration);
+      const drainBrothMap = {
+        tonkotsu: [0.9, 0.72, 0.42],
+        chili_broth: [0.94, 0.2, 0.18],
+        miso_mushroom: [0.68, 0.22, 0.88]
+      };
+      const dCol = drainBrothMap[this.sinkDrainAnim.broth] || drainBrothMap.tonkotsu;
+      const drainX = sinkX + 0.02;
+      const drainZ = sinkZ;
+
+      let poolFill = 0;
+      let swirlStrength = 0;
+      if (dp >= 0.09 && dp < 0.28) {
+        // Фаза 1: бульон стремительно растекается от центра слива по дну чаши
+        const t = (dp - 0.09) / 0.19;
+        poolFill = t * t * (3 - 2 * t);
+        swirlStrength = 0.35 * poolFill;
+      } else if (dp >= 0.28 && dp < 0.44) {
+        // Фаза 2: бульон колышется на дне раковины и начинает закручиваться к сливу
+        poolFill = 1.0;
+        swirlStrength = 0.35 + ((dp - 0.28) / 0.16) * 0.65;
+      } else if (dp >= 0.44) {
+        // Фаза 3: плавное стекание в слив — уровень падает, а лужа стягивается в решётку слива!
+        const t = (dp - 0.44) / 0.56;
+        const s = t * t * (3 - 2 * t);
+        poolFill = Math.max(0, 1.0 - s);
+        swirlStrength = Math.sin((1.0 - t) * Math.PI * 0.85);
+      }
+
+      if (poolFill > 0.015) {
+        const layerFill = Math.min(1, Math.max(0, (poolFill - 0.22) / 0.78));
+        const ripple = Math.sin(this.time * 8.5) * 0.0016 * poolFill;
+        if (layerFill > 0.02) {
+          // Основной слой бульона по дну чаши раковины (плавно опускается к решётке)
+          const lh = 0.024 * layerFill;
+          const spreadX = 0.26 + 0.225 * Math.sqrt(layerFill);
+          const spreadZ = 0.24 + 0.225 * Math.sqrt(layerFill);
+          const cx = drainX + (sinkX - drainX) * layerFill;
+          this.drawBox(cx, floorY + 0.008 + lh * 0.5 + ripple, drainZ, spreadX, lh, spreadZ, dCol, 0.34, null, 0.96, 4, 0.72 * Math.min(1, layerFill * 1.4));
+        }
+
+        // Стягивающаяся круглая лужица прямо поверх сливной решётки (остаётся до самого конца стекания!)
+        const puddleR = 0.055 + 0.175 * Math.sqrt(poolFill);
+        const puddleH = 0.004 + 0.012 * poolFill;
+        this.drawMesh('cylinder', drainX, floorY + 0.009 + puddleH * 0.5, drainZ, puddleR, puddleH, puddleR, dCol, 0.38, null, 0.98, 4, 0.78 * Math.min(1, poolFill * 2.2));
+
+        // 3D-ВОРОНКА (водоворот из закручивающихся колец и пузырьков, уходящих прямо в слив!)
+        if (swirlStrength > 0.08) {
+          const spin = this.time * 9.5;
+          const vY = floorY + 0.013 + 0.015 * layerFill;
+          const outerR = Math.max(0.036, 0.095 * Math.sqrt(poolFill));
+          const innerR = Math.max(0.022, 0.052 * Math.sqrt(poolFill));
+          const foamCol = [
+            Math.min(1, dCol[0] * 0.65 + 0.35),
+            Math.min(1, dCol[1] * 0.65 + 0.35),
+            Math.min(1, dCol[2] * 0.65 + 0.35)
+          ];
+          this.drawMesh('torus', drainX, vY + 0.002, drainZ, outerR, 0.0045, outerR, foamCol, 0.45, [0.06 * Math.sin(spin), spin, 0.06 * Math.cos(spin)], 0.95, 0, 0.75 * swirlStrength);
+          this.drawMesh('torus', drainX, vY - 0.001, drainZ, innerR, 0.004, innerR, foamCol, 0.55, [0.08 * Math.cos(spin * 1.4), -spin * 1.4, 0], 0.95, 0, 0.85 * swirlStrength);
+          // 4 мелкие закручивающиеся капли-пузырьки, идущие по спирали в центр слива
+          for (let b = 0; b < 4; b++) {
+            const ba = spin * 1.3 + b * (Math.PI * 0.5);
+            const br = innerR * 0.45 + outerR * 0.45 * ((b % 2 === 0 ? 0.85 : 0.55));
+            this.drawMesh('sphere', drainX + Math.cos(ba) * br, vY + 0.003, drainZ + Math.sin(ba) * br, 0.011, 0.007, 0.011, foamCol, 0.6, null, 0.95, 0, 0.8 * swirlStrength);
+          }
+        }
+      }
     }
 
     // 3D-кучка застрявшей лапши и остатков ингредиентов прямо поверх решётки слива
