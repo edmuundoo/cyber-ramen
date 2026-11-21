@@ -1,5 +1,5 @@
-import { GAME_CONFIG } from './config.js?v=88';
-import { gameState } from './state.js?v=88';
+import { GAME_CONFIG } from './config.js?v=89';
+import { gameState } from './state.js?v=89';
 import {
   createAlleyBackdropTexture,
   createBuildingFacadeTexture,
@@ -9,7 +9,7 @@ import {
   createWallMenuSignTexture,
   createPedestrianTextures,
   AnimeCustomerTextureRenderer
-} from './art3d.js?v=88';
+} from './art3d.js?v=89';
 
 /**
  * Полноэкранный WebGL 3D движок от первого лица с процедурной высокодетализированной
@@ -97,6 +97,19 @@ export class FirstPersonWebGLScene {
       bowl: null,
       sinkIndex: 0,
       rackIndex: 0
+    };
+    this.sinkDumpAnim = {
+      active: false,
+      timer: 0,
+      duration: 0.92,
+      vessel: null,
+      cloggedNow: false
+    };
+    this.sinkUnclogAnim = {
+      active: false,
+      timer: 0,
+      duration: 0.84,
+      clog: null
     };
     this.rackPickupAnim = {
       active: false,
@@ -452,6 +465,29 @@ export class FirstPersonWebGLScene {
     this.sinkWashAnim.rackIndex = bowl?.rackIndex ?? 0;
     // Вода из крана начинает лить при тапе на тарелочку и продолжает идти ещё 1 секунду после завершения мытья!
     this.sinkFaucetFlowTimer = this.sinkWashAnim.duration + 1.0;
+  }
+
+  triggerSinkDumpAnim(res = {}) {
+    this.sinkDumpAnim.active = true;
+    this.sinkDumpAnim.timer = 0;
+    this.sinkDumpAnim.duration = 0.92;
+    this.sinkDumpAnim.vessel = res.vessel
+      ? { ...res.vessel, toppings: [...(res.vessel.toppings || [])] }
+      : null;
+    this.sinkDumpAnim.cloggedNow = Boolean(res.cloggedNow);
+    this.heldVesselAppear = 0;
+    if (!res.cloggedNow) {
+      this.sinkFaucetFlowTimer = Math.max(this.sinkFaucetFlowTimer, 1.15);
+    }
+  }
+
+  triggerSinkUnclogAnim(prevClog = null) {
+    this.sinkUnclogAnim.active = true;
+    this.sinkUnclogAnim.timer = 0;
+    this.sinkUnclogAnim.duration = 0.84;
+    this.sinkUnclogAnim.clog = prevClog
+      ? { ...prevClog, toppings: [...(prevClog.toppings || [])] }
+      : { broth: 'tonkotsu', hasNoodles: true, toppings: [] };
   }
 
   triggerToppingPlaceAnim(toppingId = 'egg') {
@@ -1521,6 +1557,18 @@ export class FirstPersonWebGLScene {
         this.sinkWashAnim.active = false;
       }
     }
+    if (this.sinkDumpAnim.active) {
+      this.sinkDumpAnim.timer += dt;
+      if (this.sinkDumpAnim.timer >= this.sinkDumpAnim.duration) {
+        this.sinkDumpAnim.active = false;
+      }
+    }
+    if (this.sinkUnclogAnim.active) {
+      this.sinkUnclogAnim.timer += dt;
+      if (this.sinkUnclogAnim.timer >= this.sinkUnclogAnim.duration) {
+        this.sinkUnclogAnim.active = false;
+      }
+    }
     if (this.rackPickupAnim.active) {
       this.rackPickupAnim.timer += dt;
       if (this.rackPickupAnim.timer >= this.rackPickupAnim.duration) {
@@ -1643,8 +1691,8 @@ export class FirstPersonWebGLScene {
     //   * cameraFocus === 'customer': верхний ракурс на гостя (с возможностью покрутиться чуть влево -1 и чуть вправо +1 на полки с грязными мисками!)
     //   * cameraFocus === 'worktable': крупный план рабочего стола
     if (rt.activeSector === -1) {
-      this.camPosTarget = [-0.1, 1.68, 0.26];
-      this.lookAtTarget = [-0.88, 0.84 + this.dragPanY * 0.4, 0.72 + this.dragPanX];
+      this.camPosTarget = [-0.05, 1.68, 0.22];
+      this.lookAtTarget = [-0.84, 0.78 + this.dragPanY * 0.4, 0.65 + this.dragPanX];
     } else if (rt.activeSector === 0) {
       this.camPosTarget = [-0.04, 1.68, 0.46];
       this.lookAtTarget = [-0.86, 0.98 + this.dragPanY * 0.6, -0.16 + this.dragPanX];
@@ -2436,12 +2484,16 @@ export class FirstPersonWebGLScene {
     // Деревянная подставка-столешница на ЛЕВОЙ (x = -0.68) части передней стойки (слева от котика!) под грязные миски
     this.drawBox(-0.68, 1.072, -1.04, 0.58, 0.016, 0.24, [0.32, 0.2, 0.14], 0.08, null, 0.55);
 
-    // ЛЕВАЯ СТОЛЕШНИЦА ВАРОЧНОГО ЦЕХА И МОЙКИ ПОСУДЫ (с настоящим глубоким сквозным вырезом под чашу раковины на z = 0.48..0.96!)
-    // 1) Секция под варочной плитой (z от -1.13 до +0.48)
-    this.drawBox(-0.92, 0.44, -0.325, 0.92, 0.82, 1.61, woodMain, 0.0);
+    // ЛЕВАЯ СТОЛЕШНИЦА ВАРОЧНОГО ЦЕХА И МОЙКИ ПОСУДЫ (с настоящим глубоким сквозным вырезом под чашу раковины на z = 0.48..0.96
+    // и ОТКРЫТОЙ ПОДСВЕЧЕННОЙ НИШЕЙ ПОД РАКОВИНОЙ ДЛЯ МУСОРНОГО БАКА!)
+    // 1) Секция под варочной плитой (z от -1.13 до +0.34, чтобы справа от ниши раковины ничего не мешало мусорке!)
+    this.drawBox(-0.92, 0.44, -0.395, 0.92, 0.82, 1.47, woodMain, 0.0);
     this.drawBox(-0.92, 0.86, -0.325, 0.96, 0.07, 1.61, [0.22, 0.26, 0.32], 0.05, null, 0.45);
-    // 2) Нижняя тумба под глубокой чашей раковины и сушилкой (z от +0.48 до +1.25, верх тумбы ниже дна раковины y = 0.75)
-    this.drawBox(-0.92, 0.375, 0.865, 0.92, 0.75, 0.77, woodMain, 0.0);
+    // 2) Открытая ниша под глубокой чашей раковины (задняя стенка, дальняя тумба под сушилкой z = 0.96..1.25 и мягкая LED-подсветка)
+    this.drawBox(-1.24, 0.375, 0.65, 0.28, 0.75, 0.62, woodMain, 0.0);
+    this.drawBox(-0.92, 0.375, 1.105, 0.92, 0.75, 0.29, woodMain, 0.0);
+    this.drawBox(-0.88, 0.11, 0.65, 0.76, 0.02, 0.62, [0.14, 0.16, 0.2], 0.04, null, 0.5);
+    this.drawBox(-0.62, 0.73, 0.65, 0.02, 0.014, 0.52, [0.98, 0.84, 0.56], 0.75);
     // 3) Столешница вокруг выреза раковины (дальняя часть под сушилкой z = 0.96..1.25 и боковые перемычки)
     this.drawBox(-0.92, 0.86, 1.105, 0.96, 0.07, 0.29, [0.22, 0.26, 0.32], 0.05, null, 0.45);
     this.drawBox(-1.265, 0.86, 0.72, 0.27, 0.07, 0.48, [0.22, 0.26, 0.32], 0.05, null, 0.45);
@@ -2963,30 +3015,7 @@ export class FirstPersonWebGLScene {
       !hasHeldVessel &&
       hasAssembled;
 
-    // 0. ПОДСТОЛЬНЫЙ МЕТАЛЛИЧЕСКИЙ БАК-МУСОРКА СЛЕВА СПЕРЕДИ (x = -0.54, z = +0.06 — не мешает камере под прилавком!)
-    const trashGlow = hasHeldVessel ? 0.45 + 0.25 * Math.sin(this.time * 5.0) : 0.1;
-    const trashRimCol = hasHeldVessel ? [1.0, 0.28, 0.42] : [0.56, 0.62, 0.7];
-    this.drawMesh('cylinder', -0.54, 0.56, 0.06, 0.21, 0.34, 0.21, [0.22, 0.26, 0.32], 0.06, null, 0.78);
-    this.drawMesh('torus', -0.54, 0.73, 0.06, 0.218, 0.022, 0.218, trashRimCol, trashGlow, null, 0.9);
-    this.drawMesh('cylinder', -0.54, 0.725, 0.06, 0.19, 0.015, 0.19, [0.06, 0.07, 0.1], 0.02, null, 0.2);
     const isCenterWorktable = rt.activeSector === 1 && rt.cameraFocus === 'worktable';
-    if (isCenterWorktable) {
-      this.registerHitbox('trash_bin', -0.54, 0.72, 0.06, 74);
-    }
-
-    // Анимация выбрасывания посуды из левой руки в мусорку при тапе на бак
-    if (this.trashTossAnim.active && this.trashTossAnim.vessel) {
-      const p = Math.min(1, this.trashTossAnim.timer / this.trashTossAnim.duration);
-      const handPos = this.getLeftHandWorldPos();
-      const tx = handPos[0] + (-0.54 - handPos[0]) * p;
-      const tz = handPos[2] + (0.06 - handPos[2]) * p;
-      const ty =
-        handPos[1] * (1 - p) +
-        0.58 * p +
-        Math.sin(p * Math.PI) * 0.12;
-      const shrink = Math.max(0.32, 0.72 * (1 - Math.max(0, p - 0.5) * 1.1));
-      this.drawFilledVessel3D(tx, ty, tz, this.trashTossAnim.vessel, shrink);
-    }
 
     // 1. ЦЕНТРАЛЬНАЯ ЗОНА СБОРКИ ЗАКАЗА (БОЛЬШОЙ ПОДНОС / ПАКЕТ + МИСКА/КОРОБКА + ПАЛОЧКИ + ЛУЖА И ТРЯПКА)
     const asmX = 0.0;
@@ -4387,15 +4416,88 @@ export class FirstPersonWebGLScene {
     this.drawBox(sinkX - 0.27, rimY, sinkZ, 0.042, 0.02, 0.54, rimCol, 0.12, null, 0.92);
     this.drawBox(sinkX + 0.27, rimY, sinkZ, 0.042, 0.02, 0.54, rimCol, 0.12, null, 0.92);
 
-    const sinkLedCol =
-      dirtyList.length > 0
+    const isClogged = Boolean(rt.sinkClog && rt.sinkClog.clogged);
+    const sinkLedCol = isClogged
+      ? [1.0, 0.16, 0.28]
+      : dirtyList.length > 0
         ? [1.0, 0.68, 0.12]
         : [0.0, 0.96, 0.83];
-    const sinkLedPulse =
-      dirtyList.length > 0
+    const sinkLedPulse = isClogged
+      ? 0.58 + 0.42 * Math.sin(this.time * 9.5)
+      : dirtyList.length > 0
         ? 0.55 + 0.35 * Math.sin(this.time * 6.0)
         : 0.35;
     this.drawBox(sinkX + 0.295, rimY + 0.002, sinkZ, 0.012, 0.012, 0.46, sinkLedCol, sinkLedPulse);
+
+    // 1Б. ЗАСОР СЛИВА РАКОВИНЫ (СТОЯЧАЯ МУТНАЯ ВОДА + КУЧКА ЗАСТРЯВШЕЙ ЛАПШИ И ИНГРЕДИЕНТОВ НА РЕШЁТКЕ СЛИВА!)
+    const unclogActive = this.sinkUnclogAnim.active;
+    const unclogP = unclogActive ? Math.min(1, this.sinkUnclogAnim.timer / this.sinkUnclogAnim.duration) : 0;
+    const dumpClogVisible =
+      this.sinkDumpAnim.active &&
+      this.sinkDumpAnim.cloggedNow &&
+      this.sinkDumpAnim.timer / this.sinkDumpAnim.duration >= 0.48;
+    const showClogInDrain =
+      (isClogged && (!this.sinkDumpAnim.active || dumpClogVisible)) ||
+      (unclogActive && unclogP < 0.34);
+    const clogData = isClogged ? rt.sinkClog : this.sinkUnclogAnim.clog || { broth: 'tonkotsu', hasNoodles: true, toppings: [] };
+    const bMapSink = {
+      tonkotsu: [0.76, 0.6, 0.38],
+      chili_broth: [0.84, 0.22, 0.2],
+      miso_mushroom: [0.56, 0.24, 0.74]
+    };
+    const clogWaterCol = bMapSink[clogData.broth] || bMapSink.tonkotsu;
+
+    // Стоячая мутная вода при засоре (быстро стекает вниз, как только рука убирает засор!)
+    const waterFill = isClogged && (!this.sinkDumpAnim.active || dumpClogVisible)
+      ? 1.0
+      : unclogActive && unclogP < 0.74
+        ? Math.max(0, 1.0 - Math.max(0, (unclogP - 0.26) / 0.48))
+        : 0;
+    if (waterFill > 0.02) {
+      const wH = 0.032 * waterFill;
+      const wBob = Math.sin(this.time * 4.5) * 0.002;
+      this.drawBox(sinkX, floorY + 0.008 + wH * 0.5 + wBob, sinkZ, 0.485, wH, 0.465, clogWaterCol, 0.28, null, 0.94, 4, 0.66);
+    }
+
+    // 3D-кучка застрявшей лапши и остатков ингредиентов прямо поверх решётки слива
+    const drawClogClumpAt = (cx, cy, cz, sc = 1.0) => {
+      this.drawMesh('wavy_noodle', cx - 0.015 * sc, cy + 0.01 * sc, cz + 0.01 * sc, 0.13 * sc, 0.024 * sc, 0.12 * sc, [0.98, 0.82, 0.3], 0.26, [0.1, 0.4, -0.08]);
+      this.drawMesh('wavy_noodle', cx + 0.022 * sc, cy + 0.014 * sc, cz - 0.014 * sc, 0.11 * sc, 0.02 * sc, 0.1 * sc, [0.95, 0.78, 0.26], 0.24, [-0.08, -0.7, 0.12]);
+      this.draw3DScallionRing(cx - 0.03 * sc, cy + 0.022 * sc, cz - 0.02 * sc, 0.78 * sc, [0.2, 0.5, 0.1]);
+      this.draw3DScallionRing(cx + 0.032 * sc, cy + 0.02 * sc, cz + 0.026 * sc, 0.72 * sc, [-0.15, 1.1, 0.2]);
+      if ((clogData.toppings || []).length > 0) {
+        this.drawBox(cx + 0.005 * sc, cy + 0.022 * sc, cz - 0.005 * sc, 0.042 * sc, 0.018 * sc, 0.032 * sc, [0.74, 0.42, 0.28], 0.16, [0.2, 0.4, 0.15]);
+      }
+    };
+    if (showClogInDrain) {
+      drawClogClumpAt(sinkX + 0.02, floorY + 0.024 + 0.012 * waterFill, sinkZ, 1.0);
+      if (rt.activeSector === -1 && isClogged) {
+        this.registerHitbox('sink_clog', sinkX + 0.02, floorY + 0.045, sinkZ, 92);
+      }
+    }
+
+    // 1В. СТИЛЬНЫЙ 3D-МУСОРНЫЙ БАК В ОТКРЫТОЙ НИШЕ ПОД РАКОВИНОЙ (НЕ ВРЕЗАЕТСЯ В ТЕКСТУРЫ, ПОЛНОСТЬЮ ВИДЕН И КЛИКАБЕЛЕН!)
+    const trashX = -0.44;
+    const trashZ = 0.48;
+    const trashBaseY = 0.11;
+    const trashH = 0.49;
+    const trashTopY = trashBaseY + trashH; // 0.60
+    const heldV = rt.activeVessel;
+    const hasHeld = Boolean(heldV && heldV.type);
+    const trashPulse = hasHeld ? 0.48 + 0.34 * Math.sin(this.time * 6.0) : 0.14;
+    const trashRimCol = hasHeld ? [1.0, 0.28, 0.44] : [0.62, 0.68, 0.76];
+    // Корпус бака из тёмной рифлёной стали + декоративное кольцо + ножная педаль
+    this.drawMesh('cylinder', trashX, trashBaseY + trashH * 0.5, trashZ, 0.32, trashH, 0.32, [0.19, 0.23, 0.29], 0.06, null, 0.8);
+    this.drawMesh('torus', trashX, trashBaseY + trashH * 0.35, trashZ, 0.326, 0.012, 0.326, [0.32, 0.37, 0.44], 0.08, null, 0.88);
+    this.drawMesh('torus', trashX, trashTopY, trashZ, 0.338, 0.024, 0.338, trashRimCol, trashPulse, null, 0.92);
+    // Ножная педаль со стороны повара
+    this.drawBox(trashX + 0.175, trashBaseY + 0.032, trashZ, 0.055, 0.016, 0.095, [0.56, 0.62, 0.7], 0.14, null, 0.9);
+    // Чёрный мусорный пакет внутри открытого бака (глубина + мягкие края пакета по ободку)
+    this.drawMesh('cylinder', trashX, trashTopY - 0.02, trashZ, 0.29, 0.03, 0.29, [0.05, 0.06, 0.09], 0.02, null, 0.35);
+    this.drawMesh('torus', trashX, trashTopY - 0.008, trashZ, 0.305, 0.014, 0.305, [0.08, 0.1, 0.14], 0.04, null, 0.55);
+    if (rt.activeSector === -1) {
+      this.registerHitbox('trash_bin', trashX, trashTopY - 0.02, trashZ, 94);
+    }
 
     // 2. ВЫСОКИЙ ХРОМИРОВАННЫЙ КРАН-ГУСАК И ВЕНТИЛИ ГОРЯЧЕЙ/ХОЛОДНОЙ ВОДЫ (x = -1.10, z = +0.72)
     const faucetX = sinkX - 0.22;
@@ -4469,7 +4571,16 @@ export class FirstPersonWebGLScene {
       { dx: -0.03 - 0.009, dy: 0.072, dz: 0.12 + 0.006, rot: [0.2, 0.25, 0.22] }
     ];
     const flyingIntoSink =
-      this.collectDirtyAnim.active && this.collectDirtyAnim.timer / this.collectDirtyAnim.duration < 0.88;
+      (this.collectDirtyAnim.active && this.collectDirtyAnim.timer / this.collectDirtyAnim.duration < 0.88) ||
+      (this.sinkDumpAnim.active &&
+        this.sinkDumpAnim.vessel?.type === 'bowl' &&
+        this.sinkDumpAnim.timer / this.sinkDumpAnim.duration < 0.86) ||
+      (this.trashTossAnim.active &&
+        this.trashTossAnim.vessel?.type === 'bowl' &&
+        (this.trashTossAnim.vessel.broth ||
+          this.trashTossAnim.vessel.noodleState ||
+          (this.trashTossAnim.vessel.toppings || []).length > 0) &&
+        this.trashTossAnim.timer / this.trashTossAnim.duration < 0.88);
     const visibleDirty = Math.max(0, Math.min(10, dirtyList.length - (flyingIntoSink ? 1 : 0)));
     for (let i = 0; i < visibleDirty; i++) {
       const sp = sinkPyramid[i % sinkPyramid.length];
@@ -4708,6 +4819,158 @@ export class FirstPersonWebGLScene {
       this.drawMesh('torus', bx, by + 0.064 * sc, bz, 0.194 * sc, 0.011 * sc, 0.194 * sc, [0.86, 0.22, 0.32], 0.35, rot, 0.96);
       this.drawBox(bx + 0.07, by + 0.025, bz + 0.04, 0.07, 0.042, 0.128, [0.16, 0.14, 0.24], 0.22, [0.18, 1.15, 0]);
       this.drawBox(bx + 0.07, by + 0.048, bz + 0.04, 0.074, 0.012, 0.04, [0.0, 0.96, 0.83], 0.92, [0.18, 1.15, 0]);
+    }
+
+    // 9. АНИМАЦИЯ ВЫБРОСА ИЗ ЛЕВОЙ РУКИ В МУСОРНЫЙ БАК ПОД РАКОВИНОЙ (trashTossAnim)
+    if (this.trashTossAnim.active && this.trashTossAnim.vessel) {
+      const p = Math.min(1, this.trashTossAnim.timer / this.trashTossAnim.duration);
+      const handPos = this.getLeftHandWorldPos();
+      const tv = this.trashTossAnim.vessel;
+      const hadFood = Boolean(tv.broth || tv.noodleState || (tv.toppings && tv.toppings.length > 0));
+      if (tv.type === 'bowl' && hadFood) {
+        // Керамическая миска с едой: выносим над мусоркой, вываливаем содержимое в бак, затем опускаем миску в раковину!
+        const overTrashX = trashX;
+        const overTrashY = trashTopY + 0.16;
+        const overTrashZ = trashZ;
+        if (p < 0.34) {
+          const t = p / 0.34;
+          const s = t * t * (3 - 2 * t);
+          const bx = handPos[0] + (overTrashX - handPos[0]) * s;
+          const by = handPos[1] + (overTrashY - handPos[1]) * s + Math.sin(t * Math.PI) * 0.06;
+          const bz = handPos[2] + (overTrashZ - handPos[2]) * s;
+          this.drawFilledVessel3D(bx, by, bz, tv, 0.62, false);
+        } else if (p < 0.68) {
+          const t = (p - 0.34) / 0.34;
+          const tilt = Math.sin(t * Math.PI) * 1.15;
+          this.drawDirtyBowl3D(overTrashX, overTrashY, overTrashZ, tv.broth || 'tonkotsu', 0.56, [0.15, 0.3, tilt]);
+          // Падающие остатки в мусорку
+          const dropY = overTrashY - 0.04 - t * 0.24;
+          const bCol = bMapSink[tv.broth] || bMapSink.tonkotsu;
+          this.drawMesh('sphere', overTrashX, dropY, overTrashZ, 0.032, 0.044, 0.032, bCol, 0.65);
+          if (tv.noodleState) {
+            this.drawMesh('wavy_noodle', overTrashX, dropY + 0.02, overTrashZ, 0.09, 0.018, 0.09, [1.0, 0.84, 0.3], 0.28, [t * 2, 0.5, 0.3]);
+          }
+        } else {
+          const t = (p - 0.68) / 0.32;
+          const s = t * t * (3 - 2 * t);
+          const bx = overTrashX + (sinkX - overTrashX) * s;
+          const by = overTrashY + (floorY + 0.03 - overTrashY) * s + Math.sin(t * Math.PI) * 0.14;
+          const bz = overTrashZ + (sinkZ - overTrashZ) * s;
+          this.drawDirtyBowl3D(bx, by, bz, tv.broth || 'tonkotsu', 0.5, [0, 0.3 * s, 0]);
+        }
+      } else {
+        // Коробка (или пустая коробка): плавно улетает прямо внутрь мусорного бака!
+        const s = p * p * (3 - 2 * p);
+        const tx = handPos[0] + (trashX - handPos[0]) * s;
+        const tz = handPos[2] + (trashZ - handPos[2]) * s;
+        const ty = handPos[1] + (trashTopY - 0.08 - handPos[1]) * s + Math.sin(p * Math.PI) * 0.12;
+        const shrink = Math.max(0.32, 0.64 * (1 - Math.max(0, p - 0.55) * 1.1));
+        this.drawFilledVessel3D(tx, ty, tz, tv, shrink);
+      }
+    }
+
+    // 10. АНИМАЦИЯ ВЫЛИВАНИЯ ИЗ РУКИ В РАКОВИНУ (sinkDumpAnim):
+    // Левая рука выносит посуду над центром раковины, наклоняет её — бульон (и лапша/топпинги!) льются вниз на слив!
+    if (this.sinkDumpAnim.active && this.sinkDumpAnim.vessel) {
+      const p = Math.min(1, this.sinkDumpAnim.timer / this.sinkDumpAnim.duration);
+      const handPos = this.getLeftHandWorldPos();
+      const dv = this.sinkDumpAnim.vessel;
+      const pourX = sinkX + 0.04;
+      const pourY = rimY + 0.16;
+      const pourZ = sinkZ;
+      const bCol = bMapSink[dv.broth] || bMapSink.tonkotsu;
+      if (p < 0.24) {
+        const t = p / 0.24;
+        const s = t * t * (3 - 2 * t);
+        const bx = handPos[0] + (pourX - handPos[0]) * s;
+        const by = handPos[1] + (pourY - handPos[1]) * s + Math.sin(t * Math.PI) * 0.05;
+        const bz = handPos[2] + (pourZ - handPos[2]) * s;
+        this.drawFilledVessel3D(bx, by, bz, dv, 0.62, false);
+        this.drawBox(bx + 0.09, by - 0.02, bz - 0.04, 0.072, 0.036, 0.125, [0.16, 0.14, 0.24], 0.22, [0.1, 0.4, 0.1]);
+      } else if (p < 0.74) {
+        const t = (p - 0.24) / 0.5;
+        const curve = Math.sin(t * Math.PI);
+        const tilt = 1.08 * curve;
+        if (dv.type === 'bowl') {
+          this.drawDirtyBowl3D(pourX, pourY, pourZ, dv.broth || 'tonkotsu', 0.56, [0.15 * curve, 0.2, tilt]);
+        } else {
+          this.drawFilledVessel3D(pourX, pourY, pourZ, t < 0.5 ? dv : { type: 'box', broth: null, noodleState: null, toppings: [] }, 0.58, false);
+        }
+        this.drawBox(pourX + 0.09, pourY - 0.01, pourZ - 0.04, 0.072, 0.036, 0.125, [0.16, 0.14, 0.24], 0.22, [0.1, 0.4, 0.1 + tilt * 0.5]);
+        // 3D-струя выливаемого бульона + падающие нити лапши/топпингов прямо на решётку слива!
+        if (t > 0.1 && t < 0.88) {
+          const topY = pourY - 0.01;
+          const botY = floorY + 0.02;
+          const sh = Math.max(0.05, topY - botY);
+          this.drawMesh('cylinder', sinkX + 0.02, (topY + botY) * 0.5, sinkZ, 0.028, sh, 0.028, bCol, 0.78, null, 0.94, 4);
+          if (dv.noodleState) {
+            const nf = ((t - 0.1) / 0.78) % 1.0;
+            this.drawMesh('wavy_noodle', sinkX + 0.02, topY - nf * sh, sinkZ, 0.1, 0.02, 0.11, [1.0, 0.84, 0.3], 0.3, [0.4 + nf, this.time * 4, 0.3]);
+          }
+          if ((dv.toppings || []).length > 0) {
+            const tf = ((t - 0.1) * 1.4) % 1.0;
+            this.drawBox(sinkX + 0.03, topY - tf * sh, sinkZ + 0.015, 0.036, 0.018, 0.028, [0.82, 0.46, 0.28], 0.22, [tf * 3, 0.4, tf * 2]);
+          }
+        }
+      } else {
+        const t = (p - 0.74) / 0.26;
+        const s = t * t * (3 - 2 * t);
+        if (dv.type === 'bowl') {
+          // Опускаем опустевшую грязную миску на дно раковины
+          const bx = pourX + (sinkX - pourX) * s;
+          const by = pourY + (floorY + 0.03 - pourY) * s;
+          const bz = pourZ + (sinkZ - pourZ) * s;
+          this.drawDirtyBowl3D(bx, by, bz, dv.broth || 'tonkotsu', 0.5, [0, 0.2, 0]);
+        } else {
+          // Мокрая использованная коробка отправляется вниз в мусорку под раковиной!
+          const bx = pourX + (trashX - pourX) * s;
+          const by = pourY + (trashTopY - 0.06 - pourY) * s + Math.sin(t * Math.PI) * 0.08;
+          const bz = pourZ + (trashZ - pourZ) * s;
+          this.drawFilledVessel3D(bx, by, bz, { type: 'box', broth: null, noodleState: null, toppings: [] }, 0.54 * (1 - s * 0.35), false);
+        }
+      }
+    }
+
+    // 11. АНИМАЦИЯ ПРОЧИСТКИ ЗАСОРА РАКОВИНЫ (sinkUnclogAnim):
+    // Правая кибер-перчатка хватает кучку лапши и остатков со слива и забрасывает её в мусорный бак под раковиной!
+    if (unclogActive) {
+      const drainX = sinkX + 0.02;
+      const drainY = floorY + 0.024;
+      const drainZ = sinkZ;
+      const handOriginX = -0.35;
+      const handOriginY = 1.04;
+      const handOriginZ = 0.48;
+      let gx, gy, gz;
+      let holdingClump = false;
+      if (unclogP < 0.3) {
+        const t = unclogP / 0.3;
+        const s = t * t * (3 - 2 * t);
+        gx = handOriginX + (drainX - handOriginX) * s;
+        gy = handOriginY + (drainY + 0.03 - handOriginY) * s;
+        gz = handOriginZ + (drainZ - handOriginZ) * s;
+      } else if (unclogP < 0.78) {
+        const t = (unclogP - 0.3) / 0.48;
+        const s = t * t * (3 - 2 * t);
+        gx = drainX + (trashX - drainX) * s;
+        gy = drainY + 0.03 + (trashTopY + 0.04 - (drainY + 0.03)) * s + Math.sin(t * Math.PI) * 0.26;
+        gz = drainZ + (trashZ - drainZ) * s;
+        holdingClump = true;
+      } else {
+        const t = (unclogP - 0.78) / 0.22;
+        const s = t * t * (3 - 2 * t);
+        gx = trashX + (handOriginX - trashX) * s;
+        gy = trashTopY + 0.04 + (handOriginY - (trashTopY + 0.04)) * s;
+        gz = trashZ + (handOriginZ - trashZ) * s;
+        // Кучка падает внутрь мусорки
+        drawClogClumpAt(trashX, trashTopY - 0.02 - s * 0.14, trashZ, 0.85 * (1 - s * 0.4));
+      }
+      if (holdingClump) {
+        drawClogClumpAt(gx, gy - 0.025, gz, 0.92);
+      }
+      const gRot = [0.16, 0.45, -0.14];
+      this.drawBox(gx + 0.045, gy + 0.015, gz - 0.02, 0.072, 0.036, 0.125, [0.16, 0.14, 0.24], 0.22, gRot);
+      this.drawBox(gx + 0.045, gy + 0.035, gz - 0.02, 0.076, 0.011, 0.04, [0.0, 0.96, 0.83], 0.94, gRot);
+      this.drawBox(gx + 0.11, gy + 0.04, gz - 0.06, 0.078, 0.046, 0.135, [0.11, 0.13, 0.2], 0.15, gRot);
     }
 
     // Общий страховочный хитбокс по чаше раковины ТОЛЬКО когда камера в Секторе -1 (Мойка)
@@ -5343,6 +5606,7 @@ export class FirstPersonWebGLScene {
     if (
       this.droneDeliverAnim.active ||
       this.trashTossAnim.active ||
+      this.sinkDumpAnim.active ||
       rt.cameraFocus === 'under_counter' ||
       (rt.activeSector === -1 && (this.sinkWashAnim.active || this.rackPickupAnim.active))
     ) {

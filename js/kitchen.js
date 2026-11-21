@@ -1,6 +1,6 @@
-import { GAME_CONFIG } from './config.js?v=88';
-import { gameState } from './state.js?v=88';
-import { audio } from './audio.js?v=88';
+import { GAME_CONFIG } from './config.js?v=89';
+import { gameState } from './state.js?v=89';
+import { audio } from './audio.js?v=89';
 
 export class KitchenSystem {
   constructor(callbacks) {
@@ -1437,11 +1437,103 @@ export class KitchenSystem {
     return { side, bowl, remainingOnShelf: shelf.length };
   }
 
+  // Вылить/вывалить содержимое посуды из левой руки в раковину (Сектор -1):
+  // - Если внутри ТОЛЬКО бульон -> чисто стекает в слив!
+  // - Если есть лапша или топпинги -> слив раковины ЗАБИВАЕТСЯ, нужно убрать засор в мусорку по тапу!
+  dumpHeldVesselIntoSink() {
+    if (this.blockIfBothHandsBusy()) return null;
+    const rt = gameState.runtime;
+    const v = rt.activeVessel;
+    if (!v || !v.type || this.isVesselEmptyOfFood(v)) {
+      return null;
+    }
+
+    const dumped = JSON.parse(JSON.stringify(v));
+    const hasSolids = Boolean(dumped.noodleState || (dumped.toppings && dumped.toppings.length > 0));
+    const spillBroth = dumped.broth || 'tonkotsu';
+
+    rt.activeVessel = this.createEmptyVessel(null);
+    rt.vesselHeldInLeft = false;
+    rt.sauceModeArmed = false;
+
+    if (dumped.type === 'bowl') {
+      rt.dirtyInSink.push({ broth: spillBroth });
+    }
+
+    const wasteCost =
+      (dumped.broth ? 15 : 0) +
+      (dumped.noodleState ? 12 : 0) +
+      (dumped.toppings ? dumped.toppings.length * 10 : 0);
+    if (wasteCost > 0) {
+      rt.dailyStats.wastedFoodCost = (rt.dailyStats.wastedFoodCost || 0) + wasteCost;
+      rt.dailyStats.penalties += wasteCost;
+    }
+
+    if (hasSolids) {
+      if (!rt.sinkClog) {
+        rt.sinkClog = { clogged: false, broth: spillBroth, hasNoodles: false, toppings: [] };
+      }
+      rt.sinkClog.clogged = true;
+      rt.sinkClog.broth = spillBroth;
+      rt.sinkClog.hasNoodles = Boolean(rt.sinkClog.hasNoodles || dumped.noodleState);
+      rt.sinkClog.toppings = [...(rt.sinkClog.toppings || []), ...(dumped.toppings || [])].slice(0, 6);
+      audio.playSauceSizzle();
+      audio.playPenaltyBuzz();
+      this.onToast(
+        `🚿 Слив раковины ЗАБИЛСЯ лапшой и ингредиентами (-¥${wasteCost})! Тапните по засору в раковине, чтобы выкинуть его в мусорку!`,
+        '#ff385c'
+      );
+    } else {
+      audio.playSauceSizzle();
+      audio.playBoilBubble();
+      this.onToast(
+        dumped.type === 'bowl'
+          ? `🚿 Бульон вылит в раковину (-¥${wasteCost}), грязная миска осталась в мойке.`
+          : `🚿 Бульон вылит в раковину (-¥${wasteCost}), пустая коробка сброшена в мусорку.`,
+        '#ffaa00'
+      );
+    }
+
+    this.renderAllKitchen();
+    return {
+      action: 'dump_to_sink',
+      vessel: dumped,
+      cloggedNow: hasSolids
+    };
+  }
+
+  // Прочистить забитый слив раковины по тапу — выкидывает застрявшую лапшу и остатки в мусорку под раковиной!
+  unclogSinkDrain() {
+    if (this.blockIfBothHandsBusy()) return null;
+    const rt = gameState.runtime;
+    if (!rt.sinkClog || !rt.sinkClog.clogged) {
+      return null;
+    }
+
+    const prevClog = JSON.parse(JSON.stringify(rt.sinkClog));
+    rt.sinkClog = {
+      clogged: false,
+      broth: 'tonkotsu',
+      hasNoodles: false,
+      toppings: []
+    };
+    audio.playTapPop();
+    audio.playBoilBubble();
+    this.onToast('🗑️ Засор из раковины выброшен в мусорку под раковиной — слив снова чист!', '#10f56c');
+    this.renderAllKitchen();
+    return prevClog;
+  }
+
   // Помыть одну грязную миску в раковине (Сектор -1, левее плиты):
   // Руки протягиваются к миске, моют её губкой и кладут слева на площадку для чистой посуды (washedOnRack)!
   washOneBowlInSink() {
     if (this.blockIfBothHandsBusy()) return null;
     const rt = gameState.runtime;
+    if (rt.sinkClog && rt.sinkClog.clogged) {
+      audio.playPenaltyBuzz();
+      this.onToast('🚫 Слив раковины забит! Сначала тапните по засору, чтобы выкинуть остатки в мусорку!', '#ff385c');
+      return null;
+    }
     if (!rt.dirtyInSink || rt.dirtyInSink.length === 0) {
       audio.playTapPop();
       if ((rt.washedOnRack || 0) > 0) {

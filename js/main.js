@@ -1,16 +1,16 @@
-import { GAME_CONFIG } from './config.js?v=88';
-import { gameState, createShiftRuntimeState } from './state.js?v=88';
-import { audio } from './audio.js?v=88';
+import { GAME_CONFIG } from './config.js?v=89';
+import { gameState, createShiftRuntimeState } from './state.js?v=89';
+import { audio } from './audio.js?v=89';
 import {
   buildCustomerPortraitSVG,
   buildCourierDroneSVG,
   generateAppleTouchIcon
-} from './renderer.js?v=88';
-import { FirstPersonWebGLScene } from './webgl3d.js?v=88';
-import { CustomerAndDeliverySystem } from './customers.js?v=88';
-import { KitchenSystem } from './kitchen.js?v=88';
-import { EconomySystem } from './economy.js?v=88';
-import { TutorialSystem } from './tutorial.js?v=88';
+} from './renderer.js?v=89';
+import { FirstPersonWebGLScene } from './webgl3d.js?v=89';
+import { CustomerAndDeliverySystem } from './customers.js?v=89';
+import { KitchenSystem } from './kitchen.js?v=89';
+import { EconomySystem } from './economy.js?v=89';
+import { TutorialSystem } from './tutorial.js?v=89';
 
 class CyberRamenApp {
   constructor() {
@@ -352,7 +352,31 @@ class CyberRamenApp {
       return;
     }
 
+    if (hitId === 'sink_clog') {
+      const prevClog = this.kitchenSystem.unclogSinkDrain();
+      if (prevClog) {
+        this.scene3D.triggerSinkUnclogAnim(prevClog);
+      }
+      return;
+    }
+
     if (hitId === 'sink_wash') {
+      const rtSink = gameState.runtime;
+      const heldV = rtSink.activeVessel;
+      if (heldV && heldV.type && !this.kitchenSystem.isVesselEmptyOfFood(heldV)) {
+        const dumped = this.kitchenSystem.dumpHeldVesselIntoSink();
+        if (dumped) {
+          this.scene3D.triggerSinkDumpAnim(dumped);
+        }
+        return;
+      }
+      if (rtSink.sinkClog && rtSink.sinkClog.clogged) {
+        const prevClog = this.kitchenSystem.unclogSinkDrain();
+        if (prevClog) {
+          this.scene3D.triggerSinkUnclogAnim(prevClog);
+        }
+        return;
+      }
       const washed = this.kitchenSystem.washOneBowlInSink();
       if (washed) {
         this.scene3D.triggerSinkWashAnim(washed);
@@ -374,7 +398,7 @@ class CyberRamenApp {
 
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker
-        .register('./sw.js?v=88', { updateViaCache: 'none' })
+        .register('./sw.js?v=89', { updateViaCache: 'none' })
         .then((reg) => reg.update())
         .catch(() => {});
     }

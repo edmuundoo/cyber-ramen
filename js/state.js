@@ -1,4 +1,4 @@
-import { GAME_CONFIG } from './config.js?v=88';
+import { GAME_CONFIG } from './config.js?v=89';
 
 const BASE_SAVE_KEY = 'CR_NIGHT_YATAI_SAVE_V1';
 
@@ -94,6 +94,12 @@ export function createShiftRuntimeState() {
     dirtyShelfRight: [],
     dirtyInSink: [],
     washedOnRack: 0,
+    sinkClog: {
+      clogged: false,
+      broth: 'tonkotsu',
+      hasNoodles: false,
+      toppings: []
+    },
     nextDirtyShelfSide: 'left',
     baskets: [
       { index: 0, state: 'empty', elapsed: 0 },
