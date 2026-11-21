@@ -1,4 +1,4 @@
-import { GAME_CONFIG } from './config.js?v=101';
+import { GAME_CONFIG } from './config.js?v=102';
 
 const BASE_SAVE_KEY = 'CR_NIGHT_YATAI_SAVE_V1';
 
@@ -100,13 +100,15 @@ export function createShiftRuntimeState() {
       hasNoodles: false,
       toppings: []
     },
-    // Протекание мусорного бака под раковиной (если вылили/выбросили туда бульон — со временем вокруг бака плавно расползается лужица!)
+    // Протекание мусорного бака под раковиной (очередь порций бульона -> плавное органичное растекание и скрещивание цветов!)
     trashLeak: {
-      brothCount: 0,
-      leakTimer: 0,
-      puddleLevel: 0,
+      queue: [],
+      activeCount: 0,
       puddleSpread: 0,
       targetSpread: 0,
+      puddleMorph: 0,
+      targetMorph: 0,
+      seed: 1.37,
       broth: 'tonkotsu',
       color: null
     },

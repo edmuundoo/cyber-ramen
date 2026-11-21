@@ -1,6 +1,6 @@
-import { GAME_CONFIG } from './config.js?v=101';
-import { gameState } from './state.js?v=101';
-import { audio } from './audio.js?v=101';
+import { GAME_CONFIG } from './config.js?v=102';
+import { gameState } from './state.js?v=102';
+import { audio } from './audio.js?v=102';
 
 export class KitchenSystem {
   constructor(callbacks) {
@@ -102,32 +102,65 @@ export class KitchenSystem {
       }
     }
 
-    // 3Б. Таймер и тихое плавное расползание лужицы из-под мусорного бака (без резких скачков!)
+    // 3Б. Очередь протекания мусорного пакета под раковиной:
+    // Каждая выброшенная порция бульона созревает строго ПО ОЧЕРЕДИ (~5-6.5 сек после завершения предыдущего растекания),
+    // плавно расширяя лужу, меняя её органичную форму и скрещивая цвета разных бульонов!
     if (rt.trashLeak) {
-      if (rt.trashLeak.leakTimer > 0) {
-        rt.trashLeak.leakTimer -= dt;
-        if (rt.trashLeak.leakTimer <= 0) {
-          rt.trashLeak.leakTimer = 0;
-          const prevLvl = rt.trashLeak.puddleLevel || 0;
-          const nextLvl = Math.min(2, prevLvl + 1);
-          rt.trashLeak.puddleLevel = nextLvl;
-          rt.trashLeak.targetSpread = nextLvl >= 2 ? 1.0 : 0.56;
-          if (nextLvl < 2 && (rt.trashLeak.brothCount || 0) >= 2) {
-            rt.trashLeak.leakTimer = 6.5;
+      const tl = rt.trashLeak;
+      if (!Array.isArray(tl.queue)) tl.queue = [];
+      const curS = tl.puddleSpread || 0;
+      const tgtS = tl.targetSpread || 0;
+      const curM = tl.puddleMorph || 0;
+      const tgtM = tl.targetMorph || 0;
+
+      // 1) Неторопливое, физически правдоподобное расползание и плавная деформация контура лужи
+      const isSpreading = curS < tgtS - 0.002 || curM < tgtM - 0.002;
+      if (curS < tgtS) {
+        tl.puddleSpread = Math.min(tgtS, curS + dt * 0.062);
+      }
+      if (curM < tgtM) {
+        tl.puddleMorph = Math.min(tgtM, curM + dt * 0.14);
+      }
+
+      // 2) Только когда текущее растекание завершилось, начинает отсчитывать задержку СЛЕДУЮЩАЯ порция из очереди!
+      if (!isSpreading && tl.queue.length > 0) {
+        const nextLeak = tl.queue[0];
+        nextLeak.delay -= dt;
+        if (nextLeak.delay <= 0) {
+          tl.queue.shift();
+          const prevN = tl.activeCount || 0;
+          const addCol = Array.isArray(nextLeak.color) ? nextLeak.color : [0.88, 0.68, 0.38];
+
+          // Смешиваем цвет лужи только в момент, когда эта порция реально просочилась в лужу!
+          if (!Array.isArray(tl.color) || prevN === 0) {
+            tl.color = [...addCol];
+          } else {
+            const w = 1 / (prevN + 1);
+            tl.color = [
+              +(tl.color[0] * (1 - w) + addCol[0] * w).toFixed(3),
+              +(tl.color[1] * (1 - w) + addCol[1] * w).toFixed(3),
+              +(tl.color[2] * (1 - w) + addCol[2] * w).toFixed(3)
+            ];
           }
-          if (prevLvl === 0 && nextLvl > 0) {
+
+          tl.activeCount = prevN + 1;
+          tl.broth = nextLeak.broth || tl.broth || 'tonkotsu';
+
+          // Каждая новая порция плавно увеличивает площадь и сдвигает фазу формы (прорывая новые «языки» жидкости!)
+          const spreadSteps = [0.44, 0.74, 0.94, 1.0];
+          const morphSteps = [0.55, 1.38, 2.2, 2.85];
+          const stepIdx = Math.min(spreadSteps.length - 1, prevN);
+          tl.targetSpread = Math.max(tl.targetSpread || 0, spreadSteps[stepIdx]);
+          tl.targetMorph = Math.max(tl.targetMorph || 0, morphSteps[stepIdx]);
+
+          if (prevN === 0) {
             audio.playTapPop();
             this.onToast(
-              '💦 Из-под мусорки под раковиной тихо начала подтекать лужица — можно вытереть в мойке (Сектор -1).',
-              '#00bbf9'
+              '💦 Из-под мусорки под раковиной начал подтекать бульон — можно вытереть в мойке (Сектор -1).',
+              '#ffaa00'
             );
           }
         }
-      }
-      const curS = rt.trashLeak.puddleSpread || 0;
-      const tgtS = rt.trashLeak.targetSpread || 0;
-      if (curS < tgtS) {
-        rt.trashLeak.puddleSpread = Math.min(tgtS, curS + dt * 0.11);
       }
     }
 
@@ -904,43 +937,31 @@ export class KitchenSystem {
     const hadFood = !this.isVesselEmptyOfFood(tossed);
     if (tossed && tossed.broth) {
       const brothRgbMap = {
-        tonkotsu: [0.88, 0.68, 0.38],
-        chili_broth: [0.88, 0.18, 0.16],
-        miso_mushroom: [0.58, 0.22, 0.76]
+        tonkotsu: [0.88, 0.68, 0.36],
+        chili_broth: [0.88, 0.18, 0.15],
+        miso_mushroom: [0.56, 0.22, 0.72]
       };
       const addCol = brothRgbMap[tossed.broth] || brothRgbMap.tonkotsu;
       if (!rt.trashLeak) {
         rt.trashLeak = {
-          brothCount: 0,
-          leakTimer: 0,
-          puddleLevel: 0,
+          queue: [],
+          activeCount: 0,
           puddleSpread: 0,
           targetSpread: 0,
+          puddleMorph: 0,
+          targetMorph: 0,
+          seed: 1.37,
           broth: tossed.broth,
-          color: [...addCol]
+          color: null
         };
       }
-      const prevN = rt.trashLeak.brothCount || 0;
-      if (!Array.isArray(rt.trashLeak.color) || prevN === 0) {
-        rt.trashLeak.color = [...addCol];
-      } else {
-        // Скрещиваем цвета разных бульонов в луже (взвешенное смешивание!)
-        const w = 1 / (prevN + 1);
-        rt.trashLeak.color = [
-          +(rt.trashLeak.color[0] * (1 - w) + addCol[0] * w).toFixed(3),
-          +(rt.trashLeak.color[1] * (1 - w) + addCol[1] * w).toFixed(3),
-          +(rt.trashLeak.color[2] * (1 - w) + addCol[2] * w).toFixed(3)
-        ];
-      }
-      rt.trashLeak.brothCount = prevN + 1;
-      rt.trashLeak.broth = tossed.broth;
-      if ((rt.trashLeak.puddleLevel || 0) === 0 && (rt.trashLeak.leakTimer || 0) <= 0) {
-        rt.trashLeak.leakTimer = 4.5;
-      } else if ((rt.trashLeak.puddleLevel || 0) >= 1) {
-        // При повторном выливании бульона лужа просто тихо и плавно подрастает шире (без резкого появления!)
-        rt.trashLeak.puddleLevel = 2;
-        rt.trashLeak.targetSpread = Math.min(1.0, Math.max(rt.trashLeak.targetSpread || 0.56, 0.56 + (rt.trashLeak.brothCount - 1) * 0.24));
-      }
+      if (!Array.isArray(rt.trashLeak.queue)) rt.trashLeak.queue = [];
+      // Ставим каждую порцию бульона в ОЧЕРЕДЬ с собственной задержкой (~5-6.5 сек), чтобы протекания шли строго по очереди!
+      rt.trashLeak.queue.push({
+        delay: 4.8 + Math.random() * 1.6,
+        broth: tossed.broth,
+        color: [...addCol]
+      });
     }
     if (hadFood) {
       const wasteCost =
@@ -1705,20 +1726,24 @@ export class KitchenSystem {
     if (this.blockIfBothHandsBusy()) return null;
     const rt = gameState.runtime;
     const spread = rt.trashLeak?.puddleSpread || 0;
-    if (!rt.trashLeak || ((rt.trashLeak.puddleLevel || 0) <= 0 && spread <= 0.04)) {
+    if (!rt.trashLeak || spread <= 0.03) {
       return null;
     }
     const res = {
-      prevSpread: Math.max(0.25, spread),
+      prevSpread: Math.max(0.22, spread),
+      prevMorph: rt.trashLeak.puddleMorph || 0.5,
+      prevSeed: rt.trashLeak.seed || 1.37,
       broth: rt.trashLeak.broth || 'tonkotsu',
       color: Array.isArray(rt.trashLeak.color) ? [...rt.trashLeak.color] : null
     };
     rt.trashLeak = {
-      brothCount: 0,
-      leakTimer: 0,
-      puddleLevel: 0,
+      queue: [],
+      activeCount: 0,
       puddleSpread: 0,
       targetSpread: 0,
+      puddleMorph: 0,
+      targetMorph: 0,
+      seed: +(0.4 + Math.random() * 5.4).toFixed(3),
       broth: 'tonkotsu',
       color: null
     };

@@ -1,5 +1,5 @@
-import { GAME_CONFIG } from './config.js?v=101';
-import { gameState } from './state.js?v=101';
+import { GAME_CONFIG } from './config.js?v=102';
+import { gameState } from './state.js?v=102';
 import {
   createAlleyBackdropTexture,
   createBuildingFacadeTexture,
@@ -9,7 +9,7 @@ import {
   createWallMenuSignTexture,
   createPedestrianTextures,
   AnimeCustomerTextureRenderer
-} from './art3d.js?v=101';
+} from './art3d.js?v=102';
 
 /**
  * Полноэкранный WebGL 3D движок от первого лица с процедурной высокодетализированной
@@ -533,7 +533,9 @@ export class FirstPersonWebGLScene {
     this.trashLeakWipeAnim.active = true;
     this.trashLeakWipeAnim.timer = 0;
     this.trashLeakWipeAnim.duration = 0.78;
-    this.trashLeakWipeAnim.prevSpread = res.prevSpread || 0.6;
+    this.trashLeakWipeAnim.prevSpread = res.prevSpread || 0.55;
+    this.trashLeakWipeAnim.prevMorph = res.prevMorph || 0.6;
+    this.trashLeakWipeAnim.prevSeed = res.prevSeed || 1.37;
     this.trashLeakWipeAnim.broth = res.broth || 'tonkotsu';
     this.trashLeakWipeAnim.color = Array.isArray(res.color) ? [...res.color] : null;
   }
@@ -750,6 +752,7 @@ export class FirstPersonWebGLScene {
       uniform float uUseTex;
       uniform sampler2D uTex;
       uniform float uTime;
+      uniform vec4 uPuddleParams;
       uniform vec3 uCamPos;
       uniform vec3 uLightPos1;
       uniform vec3 uLightColor1;
@@ -817,6 +820,76 @@ export class FirstPersonWebGLScene {
           float edge = smoothstep(0.41, 0.5, max(abs(vLocalPos.y), abs(vLocalPos.z)));
           baseCol = mix(baseCol, vec3(0.84, 0.97, 1.0), clamp(stripe1 * 0.45 + stripe2 * 0.35 + edge * 0.5, 0.0, 1.0));
           alpha = clamp(uAlpha + stripe1 * 0.13 + stripe2 * 0.09 + edge * 0.2, 0.0, 0.85);
+        } else if (uPattern > 6.5 && uPattern < 7.5) {
+          // 7: Физическая органичная лужа бульона на 1 плоском floor_quad (метаболы + поверхностное натяжение + упор в стенки!)
+          vec2 p = vLocalPos.xz * 2.0;
+          float spread = clamp(uPuddleParams.x, 0.0, 1.0);
+          float morph = uPuddleParams.y;
+          float seed = uPuddleParams.z;
+          float ang = atan(p.y, p.x);
+
+          // Мягкое естественное искривление контура (убирает геометрическую округлость)
+          vec2 warp = vec2(
+            sin(p.y * 5.2 + seed + morph * 0.45) * 0.045 + cos(p.x * 3.8 - seed * 0.7) * 0.028,
+            cos(p.x * 5.4 - seed * 1.1 + morph * 0.35) * 0.045 + sin(p.y * 4.1 + seed) * 0.028
+          ) * clamp(spread * 1.6, 0.0, 1.0);
+          vec2 q = p + warp;
+
+          // 0) Базовая масса жидкости под основанием бака (выходит из-под кромки бака r ~ 0.29)
+          float r0 = 0.24 + 0.17 * spread;
+          float field = (r0 * r0) / (dot(q, q) + 0.025);
+
+          // 1) 1-я порция: асимметричный подтёк вперёд-вправо в открытый проём
+          float s1 = smoothstep(0.02, 0.48, spread);
+          vec2 c1 = vec2(0.18 + 0.16 * s1, -0.14 - 0.15 * s1);
+          float r1 = 0.22 * s1;
+          field += (r1 * r1) / (dot(q - c1, q - c1) + 0.022);
+
+          // 2) Боковой ручеёк к концу 1-й порции (вытянутая органичная капля)
+          float s2 = smoothstep(0.18, 0.62, spread);
+          vec2 c2 = vec2(0.06 + 0.08 * s2, -0.22 - 0.20 * s2);
+          float r2 = 0.20 * s2;
+          field += (r2 * r2) / (dot(q - c2, q - c2) + 0.024);
+
+          // 3) 2-я порция (morph растёт): прорывает поверхностное натяжение вперёд-влево — форма реально меняется!
+          float s3 = smoothstep(0.42, 0.80, spread) * smoothstep(0.65, 1.35, morph);
+          vec2 c3 = vec2(0.28 + 0.20 * s3, 0.04 + 0.10 * s3);
+          float r3 = 0.23 * s3;
+          field += (r3 * r3) / (dot(q - c3, q - c3) + 0.025);
+
+          // 4) 3-я порция (morph 1.4..2.4): прорывает новый плавный язык ещё шире вперёд-вправо!
+          float s4 = smoothstep(0.66, 1.0, spread) * smoothstep(1.40, 2.25, morph);
+          vec2 c4 = vec2(0.34 + 0.22 * s4, -0.24 - 0.20 * s4);
+          float r4 = 0.25 * s4;
+          field += (r4 * r4) / (dot(q - c4, q - c4) + 0.026);
+
+          float lobe = 1.0 + 0.075 * sin(ang * 3.0 + seed + morph * 0.55) + 0.045 * cos(ang * 5.0 - seed * 1.4 - morph * 0.4);
+          field *= lobe;
+
+          // Реальный физический упор жидкости в деревянные стенки проёма под раковиной!
+          if (uPuddleParams.w > 0.5) {
+            float mLeft = 1.0 - smoothstep(0.915, 0.955, vWorldPos.z);
+            float mRight = smoothstep(0.345, 0.385, vWorldPos.z);
+            float mBack = smoothstep(-1.09, -1.03, vWorldPos.x);
+            field *= mLeft * mRight * mBack;
+          }
+
+          if (field < 0.98) discard;
+
+          float edgeMask = smoothstep(0.98, 1.08, field);
+          float depthGrad = clamp((field - 1.05) * 0.48, 0.0, 1.0);
+          vec3 deepCol = baseCol * 0.80;
+          vec3 thinCol = mix(baseCol, baseCol * 1.18 + vec3(0.05, 0.04, 0.02), 0.35);
+          float swirlTex = sin(q.x * 7.5 + q.y * 5.0 + seed) * cos(q.y * 6.5 - q.x * 4.5);
+          baseCol = mix(thinCol, deepCol, depthGrad) * (1.0 + swirlTex * 0.045);
+
+          // Физический мениск поверхностного натяжения и перелив света по выпуклой кромке лужи!
+          float meniscus = smoothstep(0.99, 1.06, field) * (1.0 - smoothstep(1.07, 1.24, field));
+          baseCol += vec3(0.24, 0.22, 0.18) * meniscus * 0.42;
+          vec2 gradDir = normalize(q + vec2(0.0001));
+          N = normalize(vec3(gradDir.x * meniscus * 0.38, 1.0, gradDir.y * meniscus * 0.38));
+
+          alpha = uAlpha * edgeMask * (0.78 + 0.18 * depthGrad);
         }
 
         vec3 Ldir = normalize(vec3(0.32, 0.9, 0.48));
@@ -889,6 +962,14 @@ export class FirstPersonWebGLScene {
        0.5,  0.5, 0.0,  0, 0, 1,
       -0.5,  0.5, 0.0,  0, 0, 1
     ]);
+    registerMesh('floor_quad', [
+      -0.5, 0.0, -0.5,  0, 1, 0,
+       0.5, 0.0, -0.5,  0, 1, 0,
+       0.5, 0.0,  0.5,  0, 1, 0,
+      -0.5, 0.0, -0.5,  0, 1, 0,
+       0.5, 0.0,  0.5,  0, 1, 0,
+      -0.5, 0.0,  0.5,  0, 1, 0
+    ]);
     registerMesh('cylinder', this.buildCylinderGeometry(24, 1.0, 1.0));
     registerMesh('cone', this.buildCylinderGeometry(20, 0.04, 1.0));
     registerMesh('hemisphere', this.buildHemisphereGeometry(20, 10));
@@ -921,6 +1002,8 @@ export class FirstPersonWebGLScene {
     gl.uniform1f(this.uAlpha, 1.0);
     this.uTex = gl.getUniformLocation(prog, 'uTex');
     this.uTime = gl.getUniformLocation(prog, 'uTime');
+    this.uPuddleParams = gl.getUniformLocation(prog, 'uPuddleParams');
+    gl.uniform4f(this.uPuddleParams, 0.0, 0.0, 0.0, 0.0);
     this.uCamPos = gl.getUniformLocation(prog, 'uCamPos');
     this.uLightPos1 = gl.getUniformLocation(prog, 'uLightPos1');
     this.uLightColor1 = gl.getUniformLocation(prog, 'uLightColor1');
@@ -2587,7 +2670,7 @@ export class FirstPersonWebGLScene {
     // 2) Открытая ниша под глубокой чашей раковины (задняя стенка, дальняя тумба под сушилкой z = 0.96..1.25 и мягкая LED-подсветка)
     this.drawBox(-1.24, 0.375, 0.65, 0.28, 0.75, 0.62, woodMain, 0.0);
     this.drawBox(-0.92, 0.375, 1.105, 0.92, 0.75, 0.29, woodMain, 0.0);
-    this.drawBox(-0.88, 0.11, 0.65, 0.76, 0.02, 0.62, [0.14, 0.16, 0.2], 0.04, null, 0.5);
+    this.drawBox(-0.88, 0.101, 0.65, 0.76, 0.004, 0.62, [0.14, 0.16, 0.2], 0.04, null, 0.5);
     this.drawBox(-0.62, 0.73, 0.65, 0.02, 0.014, 0.52, [0.98, 0.84, 0.56], 0.75);
     // 3) Столешница вокруг выреза раковины (дальняя часть под сушилкой z = 0.96..1.25 и боковые перемычки)
     this.drawBox(-0.92, 0.86, 1.105, 0.96, 0.07, 0.29, [0.22, 0.26, 0.32], 0.05, null, 0.45);
@@ -4670,12 +4753,85 @@ export class FirstPersonWebGLScene {
       }
     }
 
-    // 1В. СТИЛЬНЫЙ 3D-МУСОРНЫЙ БАК ВНУТРИ ОТКРЫТОГО ПРОЁМА ПОД РАКОВИНОЙ, ПРИЖАТЫЙ К ЛЕВОЙ СТЕНКЕ ПРОЁМА (z = 0.96)!
+    // 1В. СТИЛЬНЫЙ 3D-МУСОРНЫЙ БАК ВНУТРИ ОТКРЫТОГО ПРОЁМА ПОД РАКОВИНОЙ + ФИЗИЧЕСКАЯ ОРГАНИЧНАЯ ЛУЖА БУЛЬОНА!
     const trashX = -0.58;
     const trashZ = 0.78;
-    const trashBaseY = 0.11;
-    const trashH = 0.45;
-    const trashTopY = trashBaseY + trashH; // 0.56
+    const trashBaseY = 0.103;
+    const trashH = 0.455;
+    const trashTopY = trashBaseY + trashH; // 0.558
+
+    // СНАЧАЛА рисуем плоскую попиксельную метабол-лужу на 1 floor_quad (0 полосок, 0 углов!),
+    // чтобы мусорный бак и педаль стояли ровно ПОВЕРХ лужи, а бульон физически вытекал из-под бака!
+    const tLeak = rt.trashLeak || { puddleSpread: 0, puddleMorph: 0, seed: 1.37, broth: 'tonkotsu', color: null };
+    const tWipeActive = this.trashLeakWipeAnim.active;
+    const tWipeP = tWipeActive ? Math.min(1, this.trashLeakWipeAnim.timer / this.trashLeakWipeAnim.duration) : 0;
+    const rawSpread =
+      (tLeak.puddleSpread || 0) > 0.005
+        ? tLeak.puddleSpread
+        : tWipeActive && tWipeP < 0.86
+          ? (this.trashLeakWipeAnim.prevSpread || 0.55) * Math.max(0, 1.0 - Math.max(0, (tWipeP - 0.14) / 0.72))
+          : 0;
+    const rawMorph =
+      (tLeak.puddleSpread || 0) > 0.005
+        ? tLeak.puddleMorph || 0.5
+        : this.trashLeakWipeAnim.prevMorph || 0.6;
+    const rawSeed =
+      (tLeak.puddleSpread || 0) > 0.005
+        ? tLeak.seed || 1.37
+        : this.trashLeakWipeAnim.prevSeed || 1.37;
+
+    if (rawSpread > 0.01) {
+      const brothColFallback = {
+        tonkotsu: [0.88, 0.68, 0.36],
+        chili_broth: [0.88, 0.18, 0.15],
+        miso_mushroom: [0.56, 0.22, 0.72]
+      };
+      const targetCol =
+        (tLeak.puddleSpread || 0) > 0.005
+          ? (Array.isArray(tLeak.color) ? tLeak.color : brothColFallback[tLeak.broth] || brothColFallback.tonkotsu)
+          : (Array.isArray(this.trashLeakWipeAnim.color)
+              ? this.trashLeakWipeAnim.color
+              : brothColFallback[this.trashLeakWipeAnim.broth] || brothColFallback.tonkotsu);
+
+      // Плавное перетекание оттенка при скрещивании разных бульонов
+      if (!this._trashLeakRenderCol) {
+        this._trashLeakRenderCol = [...targetCol];
+      } else {
+        for (let ci = 0; ci < 3; ci++) {
+          this._trashLeakRenderCol[ci] += (targetCol[ci] - this._trashLeakRenderCol[ci]) * 0.035;
+        }
+      }
+      const pCol = this._trashLeakRenderCol;
+      const ly = trashBaseY + 0.004;
+      const puddleAlpha = 0.92 * Math.min(1, rawSpread * 2.5);
+
+      this.drawFloorPuddle3D(
+        trashX,
+        ly,
+        trashZ,
+        1.06,
+        1.06,
+        pCol,
+        puddleAlpha,
+        rawSpread,
+        rawMorph,
+        rawSeed,
+        1.0
+      );
+
+      if (rt.activeSector === -1 && (tLeak.puddleSpread || 0) > 0.04) {
+        this.registerHitbox(
+          'trash_leak',
+          trashX + 0.15 * rawSpread + 0.06,
+          ly + 0.02,
+          trashZ - 0.16 * rawSpread - 0.04,
+          88
+        );
+      }
+    } else {
+      this._trashLeakRenderCol = null;
+    }
+
     // Корпус бака из тёмной рифлёной стали + декоративное кольцо + спокойный стальной ободок без подсветки + ножная педаль
     this.drawMesh('cylinder', trashX, trashBaseY + trashH * 0.5, trashZ, 0.3, trashH, 0.3, [0.19, 0.23, 0.29], 0.06, null, 0.8);
     this.drawMesh('torus', trashX, trashBaseY + trashH * 0.35, trashZ, 0.306, 0.012, 0.306, [0.32, 0.37, 0.44], 0.08, null, 0.88);
@@ -4687,58 +4843,6 @@ export class FirstPersonWebGLScene {
     this.drawMesh('torus', trashX, trashTopY - 0.008, trashZ, 0.288, 0.014, 0.288, [0.08, 0.1, 0.14], 0.04, null, 0.55);
     if (rt.activeSector === -1) {
       this.registerHitbox('trash_bin', trashX, trashTopY - 0.02, trashZ, 88);
-    }
-
-    // 1Г. ГЛАДКАЯ ЛУЖИЦА БУЛЬОНА, ТИХО И ПЛАВНО РАСПОЛЗАЮЩАЯСЯ ИЗ-ПОД МУСОРНОГО БАКА (С ЦВЕТОМ БУЛЬОНА И СМЕШИВАНИЕМ!)
-    const tLeak = rt.trashLeak || { puddleLevel: 0, puddleSpread: 0, broth: 'tonkotsu', color: null };
-    const tWipeActive = this.trashLeakWipeAnim.active;
-    const tWipeP = tWipeActive ? Math.min(1, this.trashLeakWipeAnim.timer / this.trashLeakWipeAnim.duration) : 0;
-    const rawSpread =
-      (tLeak.puddleSpread || 0) > 0.005
-        ? tLeak.puddleSpread
-        : tWipeActive && tWipeP < 0.86
-          ? (this.trashLeakWipeAnim.prevSpread || 0.6) * Math.max(0, 1.0 - Math.max(0, (tWipeP - 0.14) / 0.72))
-          : 0;
-
-    if (rawSpread > 0.01) {
-      const s = rawSpread * rawSpread * (3 - 2 * rawSpread);
-      const brothColFallback = {
-        tonkotsu: [0.88, 0.68, 0.38],
-        chili_broth: [0.88, 0.18, 0.16],
-        miso_mushroom: [0.58, 0.22, 0.76]
-      };
-      const targetCol =
-        (tLeak.puddleSpread || 0) > 0.005
-          ? (Array.isArray(tLeak.color) ? tLeak.color : brothColFallback[tLeak.broth] || brothColFallback.tonkotsu)
-          : (Array.isArray(this.trashLeakWipeAnim.color)
-              ? this.trashLeakWipeAnim.color
-              : brothColFallback[this.trashLeakWipeAnim.broth] || brothColFallback.tonkotsu);
-
-      // Плавная интерполяция цвета лужи, чтобы при подливании другого бульона оттенок перетекал мягко и естественно
-      if (!this._trashLeakRenderCol) {
-        this._trashLeakRenderCol = [...targetCol];
-      } else {
-        for (let ci = 0; ci < 3; ci++) {
-          this._trashLeakRenderCol[ci] += (targetCol[ci] - this._trashLeakRenderCol[ci]) * 0.05;
-        }
-      }
-      const pCol = this._trashLeakRenderCol;
-
-      // Один чистый цельный глянцевый овал лужи без наложенных дисков (y = 0.128 — на 8 мм выше пола 0.120, ноль Z-fighting и полосок!)
-      const ly = trashBaseY + 0.018;
-      const rX = 0.24 + 0.3 * s;
-      const rZ = 0.22 + 0.28 * s;
-      const pX = trashX + 0.11 * s;
-      const pZ = trashZ - 0.12 * s;
-      const alpha = 0.88 * Math.min(1, rawSpread * 2.4);
-
-      this.drawMesh('cylinder', pX, ly, pZ, rX, 0.006, rZ, pCol, 0.22, null, 0.92, 0, alpha);
-
-      if (rt.activeSector === -1 && (tLeak.puddleSpread || 0) > 0.04) {
-        this.registerHitbox('trash_leak', pX + 0.05, ly + 0.02, pZ - 0.04, 86);
-      }
-    } else {
-      this._trashLeakRenderCol = null;
     }
 
     // 3D-анимация протирания пола под мусоркой тряпкой правой рукой
@@ -7511,6 +7615,14 @@ export class FirstPersonWebGLScene {
 
   drawBox(x, y, z, sx, sy, sz, color, emissive = 0.0, rot = null, specular = 0.15, pattern = 0, alpha = 1.0) {
     this.drawMesh('box', x, y, z, sx, sy, sz, color, emissive, rot, specular, pattern, alpha);
+  }
+
+  // Процедурная физическая 3D-лужа на одном плоском floor_quad (2 треугольника = 0 радиальных полосок!)
+  drawFloorPuddle3D(x, y, z, sx, sz, color, alpha, spread, morph, seed, wallClip = 1.0) {
+    const gl = this.gl;
+    if (!gl || !this.uPuddleParams) return;
+    gl.uniform4f(this.uPuddleParams, spread, morph, seed, wallClip);
+    this.drawMesh('floor_quad', x, y, z, sx, 1.0, sz, color, 0.2, null, 0.96, 7, alpha);
   }
 
   drawTexturedQuad(tex, x, y, z, sx, sy, emissive = 0.75, rot = null) {
