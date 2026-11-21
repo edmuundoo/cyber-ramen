@@ -1,16 +1,16 @@
-import { GAME_CONFIG } from './config.js?v=103';
-import { gameState, createShiftRuntimeState } from './state.js?v=103';
-import { audio } from './audio.js?v=103';
+import { GAME_CONFIG } from './config.js?v=104';
+import { gameState, createShiftRuntimeState } from './state.js?v=104';
+import { audio } from './audio.js?v=104';
 import {
   buildCustomerPortraitSVG,
   buildCourierDroneSVG,
   generateAppleTouchIcon
-} from './renderer.js?v=103';
-import { FirstPersonWebGLScene } from './webgl3d.js?v=103';
-import { CustomerAndDeliverySystem } from './customers.js?v=103';
-import { KitchenSystem } from './kitchen.js?v=103';
-import { EconomySystem } from './economy.js?v=103';
-import { TutorialSystem } from './tutorial.js?v=103';
+} from './renderer.js?v=104';
+import { FirstPersonWebGLScene } from './webgl3d.js?v=104';
+import { CustomerAndDeliverySystem } from './customers.js?v=104';
+import { KitchenSystem } from './kitchen.js?v=104';
+import { EconomySystem } from './economy.js?v=104';
+import { TutorialSystem } from './tutorial.js?v=104';
 
 class CyberRamenApp {
   constructor() {
@@ -442,7 +442,7 @@ class CyberRamenApp {
 
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker
-        .register('./sw.js?v=103', { updateViaCache: 'none' })
+        .register('./sw.js?v=104', { updateViaCache: 'none' })
         .then((reg) => reg.update())
         .catch(() => {});
     }
