@@ -1,16 +1,16 @@
-import { GAME_CONFIG } from './config.js?v=105';
-import { gameState, createShiftRuntimeState } from './state.js?v=105';
-import { audio } from './audio.js?v=105';
+import { GAME_CONFIG } from './config.js?v=106';
+import { gameState, createShiftRuntimeState } from './state.js?v=106';
+import { audio } from './audio.js?v=106';
 import {
   buildCustomerPortraitSVG,
   buildCourierDroneSVG,
   generateAppleTouchIcon
-} from './renderer.js?v=105';
-import { FirstPersonWebGLScene } from './webgl3d.js?v=105';
-import { CustomerAndDeliverySystem } from './customers.js?v=105';
-import { KitchenSystem } from './kitchen.js?v=105';
-import { EconomySystem } from './economy.js?v=105';
-import { TutorialSystem } from './tutorial.js?v=105';
+} from './renderer.js?v=106';
+import { FirstPersonWebGLScene } from './webgl3d.js?v=106';
+import { CustomerAndDeliverySystem } from './customers.js?v=106';
+import { KitchenSystem } from './kitchen.js?v=106';
+import { EconomySystem } from './economy.js?v=106';
+import { TutorialSystem } from './tutorial.js?v=106';
 
 class CyberRamenApp {
   constructor() {
@@ -170,9 +170,9 @@ class CyberRamenApp {
     }
 
     if (hitId === 'under_tray_stack') {
-      const ok = this.kitchenSystem.takeTrayFromUnderCounter();
-      if (ok) {
-        this.scene3D.triggerTrayPlaceAnim();
+      const res = this.kitchenSystem.takeTrayFromUnderCounter();
+      if (res) {
+        this.scene3D.triggerTrayPlaceAnim(res);
       }
       return;
     }
@@ -442,7 +442,7 @@ class CyberRamenApp {
 
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker
-        .register('./sw.js?v=105', { updateViaCache: 'none' })
+        .register('./sw.js?v=106', { updateViaCache: 'none' })
         .then((reg) => reg.update())
         .catch(() => {});
     }

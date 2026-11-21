@@ -1,6 +1,6 @@
-import { GAME_CONFIG } from './config.js?v=105';
-import { gameState } from './state.js?v=105';
-import { audio } from './audio.js?v=105';
+import { GAME_CONFIG } from './config.js?v=106';
+import { gameState } from './state.js?v=106';
+import { audio } from './audio.js?v=106';
 
 export class KitchenSystem {
   constructor(callbacks) {
@@ -1083,6 +1083,8 @@ export class KitchenSystem {
   }
 
   // Достать поднос из-под прилавка и поставить на центральную столешницу
+  // Если на столе стоит ровно 1 миска/коробка и руки свободны — левая рука приподнимает её,
+  // правая выставляет поднос, и сразу после этого посуда аккуратно ставится прямо на поднос!
   takeTrayFromUnderCounter() {
     if (this.blockIfBothHandsBusy()) return false;
     const rt = gameState.runtime;
@@ -1094,13 +1096,33 @@ export class KitchenSystem {
       this.onToast('🍱 Поднос уже стоит на столешнице!', '#ffaa00');
       return false;
     }
-    if (Array.isArray(rt.centerItems) && rt.centerItems.length > 0) {
+
+    const centerCount = Array.isArray(rt.centerItems) ? rt.centerItems.length : 0;
+    const hasAnyInHands = Boolean(
+      (rt.activeVessel && rt.activeVessel.type) || (rt.rightHandVessel && rt.rightHandVessel.type)
+    );
+
+    if (centerCount > 1) {
       audio.playPenaltyBuzz();
       this.onToast(
-        `🚫 Сначала уберите стоящую на столе посуду (${rt.centerItems.length} шт.) — освободите место под поднос!`,
+        `🚫 На столе слишком много посуды (${centerCount} шт.) — оставьте максимум 1 предмет или освободите место под поднос!`,
         '#ffaa00'
       );
       return false;
+    }
+
+    let autoMoveItem = null;
+    if (centerCount === 1) {
+      if (hasAnyInHands) {
+        audio.playPenaltyBuzz();
+        this.onToast(
+          '🚫 Освободите левую руку, чтобы приподнять стоящую на столе посуду под поднос!',
+          '#ffaa00'
+        );
+        return false;
+      }
+      autoMoveItem = rt.centerItems.pop();
+      rt.assembly.vessel = JSON.parse(JSON.stringify(autoMoveItem.vessel));
     }
 
     rt.assembly.hasTray = true;
@@ -1113,17 +1135,24 @@ export class KitchenSystem {
       rt.assembly.dirtyTrayBroth = rt.tableSpill.broth || 'tonkotsu';
       audio.playPenaltyBuzz();
       this.onToast(
-        '💦 Поднос поставлен прямо на грязную лужу и испачкался! Вытрите стол и поднос тряпкой 🧽 перед подачей!',
+        autoMoveItem
+          ? '💦 Поднос поставлен прямо на грязную лужу и испачкался! Посуда переставлена на поднос — вытрите стол и поднос тряпкой 🧽!'
+          : '💦 Поднос поставлен прямо на грязную лужу и испачкался! Вытрите стол и поднос тряпкой 🧽 перед подачей!',
         '#ff385c'
       );
     } else {
       rt.assembly.isDirtyTray = false;
       rt.assembly.dirtyTrayBroth = null;
       audio.playTapPop();
-      this.onToast('🍱 Поднос поставлен на стол! Ставьте на него блюдо и кладите палочки.', '#00f5d4');
+      if (autoMoveItem) {
+        const vLabel = autoMoveItem.vessel?.type === 'box' ? 'коробка поставлена' : 'тарелка поставлена';
+        this.onToast(`🍱 Поднос доставлен, ${vLabel} прямо на него!`, '#00f5d4');
+      } else {
+        this.onToast('🍱 Поднос поставлен на стол! Ставьте на него блюдо и кладите палочки.', '#00f5d4');
+      }
     }
     this.renderAllKitchen();
-    return true;
+    return { autoMoveItem };
   }
 
   // Вытереть пролитый бульон на столешнице (и грязный поднос, если он стоит в луже) кухонной тряпкой!
@@ -1164,7 +1193,8 @@ export class KitchenSystem {
     return res;
   }
 
-  // Достать бумажный пакет для заказа «с собой» из-под прилавка (ставит пакет на стол или прямо на поднос с перекладыванием!)
+  // Достать бумажный пакет для заказа «с собой» из-под прилавка
+  // (ставит пакет на стол, на поднос с перекладыванием ИЛИ приподнимает 1 одиночную коробку со стола и сразу пакует в пакет!)
   takeBagFromUnderCounter() {
     if (this.blockIfBothHandsBusy()) return null;
     const rt = gameState.runtime;
@@ -1176,13 +1206,42 @@ export class KitchenSystem {
       this.onToast('🛍️ Пакет уже стоит на столе!', '#ffaa00');
       return null;
     }
-    if (!rt.assembly.hasTray && Array.isArray(rt.centerItems) && rt.centerItems.length > 0) {
+
+    const centerCount = !rt.assembly.hasTray && Array.isArray(rt.centerItems) ? rt.centerItems.length : 0;
+    const hasAnyInHands = Boolean(
+      (rt.activeVessel && rt.activeVessel.type) || (rt.rightHandVessel && rt.rightHandVessel.type)
+    );
+
+    if (centerCount > 1) {
       audio.playPenaltyBuzz();
       this.onToast(
-        `🚫 Сначала уберите стоящую на столе посуду (${rt.centerItems.length} шт.) — освободите место под пакет!`,
+        `🚫 На столе слишком много посуды (${centerCount} шт.) — оставьте максимум 1 📦 Коробку или освободите место под пакет!`,
         '#ffaa00'
       );
       return null;
+    }
+
+    let fromCenterItem = null;
+    if (centerCount === 1) {
+      const solo = rt.centerItems[0];
+      if (solo?.vessel?.type === 'bowl') {
+        audio.playPenaltyBuzz();
+        this.onToast(
+          '🚫 Тарелку нельзя положить в пакет — только 📦 Коробку! Заберите миску со стола или перелейте в коробку на складе!',
+          '#ff385c'
+        );
+        return null;
+      }
+      if (hasAnyInHands) {
+        audio.playPenaltyBuzz();
+        this.onToast(
+          '🚫 Освободите левую руку, чтобы приподнять коробку со стола и положить её в пакет!',
+          '#ffaa00'
+        );
+        return null;
+      }
+      fromCenterItem = rt.centerItems.pop();
+      rt.assembly.vessel = JSON.parse(JSON.stringify(fromCenterItem.vessel));
     }
 
     // Запрещаем перекладывать керамическую миску в пакет — в пакет можно класть ТОЛЬКО коробки!
@@ -1205,7 +1264,13 @@ export class KitchenSystem {
     rt.cameraFocus = 'worktable';
     rt.underCounterSide = 0;
     audio.playTapPop();
-    if (hadItems) {
+    if (fromCenterItem) {
+      audio.playSealerPress();
+      this.onToast(
+        '🛍️ Коробка приподнята левой рукой, пакет выставлен и аккуратно упакован!',
+        '#00f5d4'
+      );
+    } else if (hadItems) {
       audio.playSealerPress();
       this.onToast(
         '🛍️ Заказ переложен с подноса в пакет! Пакет стоит на подносе — поднимитесь к гостю!',
@@ -1217,7 +1282,7 @@ export class KitchenSystem {
       this.onToast('🛍️ Пакет для заказа с собой поставлен на столешницу!', '#00f5d4');
     }
     this.renderAllKitchen();
-    return { hadItems, onTray, prevVessel, prevChopsticks, prevDrink };
+    return { hadItems, onTray, fromCenterItem, prevVessel, prevChopsticks, prevDrink };
   }
 
   // Поставить посуду (полную или даже пустую!) из левой руки на поднос / в пакет, или забрать обратно в руку

@@ -1,5 +1,5 @@
-import { GAME_CONFIG } from './config.js?v=105';
-import { gameState } from './state.js?v=105';
+import { GAME_CONFIG } from './config.js?v=106';
+import { gameState } from './state.js?v=106';
 import {
   createAlleyBackdropTexture,
   createBuildingFacadeTexture,
@@ -9,7 +9,7 @@ import {
   createWallMenuSignTexture,
   createPedestrianTextures,
   AnimeCustomerTextureRenderer
-} from './art3d.js?v=105';
+} from './art3d.js?v=106';
 
 /**
  * Полноэкранный WebGL 3D движок от первого лица с процедурной высокодетализированной
@@ -164,13 +164,14 @@ export class FirstPersonWebGLScene {
       timer: 0,
       duration: 0.68
     };
-    this.trayPlaceAnim = { active: false, timer: 0, duration: 0.56, rightHandOnly: false };
+    this.trayPlaceAnim = { active: false, timer: 0, duration: 0.56, rightHandOnly: false, autoMoveItem: null };
     this.bagPackAnim = {
       active: false,
       timer: 0,
       duration: 0.94,
       hadItems: false,
       onTray: false,
+      fromCenterItem: null,
       prevVessel: null,
       prevChopsticks: false,
       prevDrink: null
@@ -564,23 +565,33 @@ export class FirstPersonWebGLScene {
     this.vesselBounce = 0.75;
   }
 
-  triggerTrayPlaceAnim() {
+  triggerTrayPlaceAnim(info = {}) {
     const v = gameState.runtime.activeVessel;
+    const autoItem = info && info.autoMoveItem ? JSON.parse(JSON.stringify(info.autoMoveItem)) : null;
     this.trayPlaceAnim.active = true;
     this.trayPlaceAnim.timer = 0;
-    this.trayPlaceAnim.duration = 0.62;
-    this.trayPlaceAnim.rightHandOnly = Boolean(v && v.type);
+    this.trayPlaceAnim.duration = autoItem ? 1.24 : 0.62;
+    this.trayPlaceAnim.rightHandOnly = Boolean(autoItem || (v && v.type));
+    this.trayPlaceAnim.autoMoveItem = autoItem;
+    if (autoItem) {
+      this.reserveAnim.active = false;
+    }
   }
 
   triggerBagPackAnim(info = {}) {
+    const fromCenter = info && info.fromCenterItem ? JSON.parse(JSON.stringify(info.fromCenterItem)) : null;
     this.bagPackAnim.active = true;
     this.bagPackAnim.timer = 0;
-    this.bagPackAnim.duration = info.hadItems ? 0.96 : 0.56;
+    this.bagPackAnim.duration = fromCenter ? 1.38 : info.hadItems ? 0.96 : 0.56;
     this.bagPackAnim.hadItems = Boolean(info.hadItems);
     this.bagPackAnim.onTray = Boolean(info.onTray);
+    this.bagPackAnim.fromCenterItem = fromCenter;
     this.bagPackAnim.prevVessel = info.prevVessel || null;
     this.bagPackAnim.prevChopsticks = Boolean(info.prevChopsticks);
     this.bagPackAnim.prevDrink = info.prevDrink || null;
+    if (fromCenter) {
+      this.reserveAnim.active = false;
+    }
   }
 
   triggerFridgeDoorAnim(action = 'open') {
@@ -1781,12 +1792,14 @@ export class FirstPersonWebGLScene {
       this.trayPlaceAnim.timer += dt;
       if (this.trayPlaceAnim.timer >= this.trayPlaceAnim.duration) {
         this.trayPlaceAnim.active = false;
+        this.trayPlaceAnim.autoMoveItem = null;
       }
     }
     if (this.bagPackAnim.active) {
       this.bagPackAnim.timer += dt;
       if (this.bagPackAnim.timer >= this.bagPackAnim.duration) {
         this.bagPackAnim.active = false;
+        this.bagPackAnim.fromCenterItem = null;
       }
     }
     if (this.assemblyVesselAnim.active) {
@@ -3331,39 +3344,151 @@ export class FirstPersonWebGLScene {
     }
 
     // Анимация выкладывания подноса из-под прилавка на столешницу:
-    // - Если левая рука занята тарелкой/коробкой -> герой достаёт и ставит поднос ОДНОЙ ПРАВОЙ РУКОЙ!
-    // - Если левая рука свободна -> достаёт поднос обеими руками по бокам.
+    // - Если на столе стояла 1 одиночная тарелка/коробка -> 3-фазная хореография:
+    //   левая рука приподнимает блюдо со стола, правая достаёт и ставит поднос, затем левая ставит блюдо прямо на поднос!
+    // - Если левая рука уже занята тарелкой/коробкой -> герой достаёт и ставит поднос ОДНОЙ ПРАВОЙ РУКОЙ!
+    // - Если всё пусто -> достаёт поднос обеими руками по бокам.
+    const smooth01 = (t) => {
+      const c = Math.max(0, Math.min(1, t));
+      return c * c * (3 - 2 * c);
+    };
+    const drawCyberGlove = (gx, gy, gz, sideSign, rot) => {
+      this.drawBox(gx, gy, gz, 0.074, 0.034, 0.13, [0.16, 0.14, 0.24], 0.22, rot);
+      this.drawBox(gx, gy + 0.018, gz, 0.078, 0.011, 0.04, [0.0, 0.96, 0.83], 0.92, rot);
+      this.drawBox(
+        gx + 0.052 * sideSign,
+        gy - 0.024,
+        gz + 0.088,
+        0.08,
+        0.048,
+        0.135,
+        [0.11, 0.13, 0.2],
+        0.15,
+        rot
+      );
+    };
+
     if (this.trayPlaceAnim.active) {
       const p = Math.min(1, this.trayPlaceAnim.timer / this.trayPlaceAnim.duration);
-      const s = p * p * (3 - 2 * p);
-      const oneHand = Boolean(this.trayPlaceAnim.rightHandOnly || hasHeldVessel);
-      const tx = oneHand ? 0.14 * (1 - s) : 0.0;
-      const ty = 0.62 + (asmY - 0.62) * s + Math.sin(p * Math.PI) * 0.12;
-      const tz = 0.06 + (asmZ - 0.06) * s;
-      const trayRot = oneHand
-        ? [0.22 * (1 - s), -0.16 * (1 - s), 0.11 * (1 - s)]
-        : [0.22 * (1 - s), 0, 0];
-      const stainedOnLanding = Boolean(a.isDirtyTray && p > 0.72);
-      this.draw3DRamenTray(tx, ty, tz, 0.92 + 0.08 * s, trayRot, stainedOnLanding, a.dirtyTrayBroth || 'tonkotsu');
+      const autoIt = this.trayPlaceAnim.autoMoveItem;
 
-      if (oneHand) {
-        // Только ПРАВАЯ кибер-перчатка достаёт поднос за правый бортик и плавно кладёт его на стол!
-        const rhX = tx + 0.27;
-        const rhY = ty + 0.012;
-        const rhZ = tz + 0.04;
-        const rhRot = [0.14, 0.22 - 0.06 * s, -0.14];
-        this.drawBox(rhX, rhY, rhZ, 0.072, 0.036, 0.125, [0.16, 0.14, 0.24], 0.22, rhRot);
-        this.drawBox(rhX, rhY + 0.019, rhZ, 0.076, 0.011, 0.04, [0.0, 0.96, 0.83], 0.92, rhRot);
-        this.drawBox(rhX + 0.05, rhY - 0.025, rhZ + 0.095, 0.078, 0.046, 0.13, [0.11, 0.13, 0.2], 0.15, rhRot);
+      if (autoIt && autoIt.vessel) {
+        const startX = autoIt.x;
+        const startY = 0.896;
+        const startZ = autoIt.z;
+        const startRotY = autoIt.rotY || 0;
+        const holdX = -0.27;
+        const holdY = 1.16;
+        const holdZ = -0.09;
+        const landX = asmX - 0.13;
+        const landY = asmY + 0.017;
+        const landZ = asmZ;
+
+        // 1) Правая рука достаёт поднос из-под прилавка (p: 0.14 -> 0.64) и ставит его на центр столешницы
+        if (p >= 0.10) {
+          const trayP = Math.max(0, Math.min(1, (p - 0.14) / 0.50));
+          const ts = smooth01(trayP);
+          const tx = 0.22 * (1 - ts);
+          const ty = 0.60 + (asmY - 0.60) * ts + Math.sin(trayP * Math.PI) * 0.10;
+          const tz = 0.10 + (asmZ - 0.10) * ts;
+          const trayRot = trayP < 1 ? [0.22 * (1 - ts), -0.18 * (1 - ts), 0.12 * (1 - ts)] : null;
+          const stainedOnLanding = Boolean(a.isDirtyTray && trayP > 0.72);
+          this.draw3DRamenTray(tx, ty, tz, 0.92 + 0.08 * ts, trayRot, stainedOnLanding, a.dirtyTrayBroth || 'tonkotsu');
+
+          if (p < 0.78) {
+            const relR = p > 0.64 ? smooth01((p - 0.64) / 0.14) : 0;
+            const rhX = tx + 0.27 + relR * 0.18;
+            const rhY = ty + 0.014 - relR * 0.10;
+            const rhZ = tz + 0.04 + relR * 0.16;
+            drawCyberGlove(rhX, rhY, rhZ, 1, [0.14, 0.22 - 0.06 * ts, -0.14]);
+          }
+        }
+
+        // 2) Левая рука берёт миску/коробку со стола, придерживает в воздухе и сразу ставит на приземлившийся поднос!
+        let vx = startX;
+        let vy = startY;
+        let vz = startZ;
+        let vsc = 0.7;
+        let vRotY = startRotY;
+        let lhX = startX - 0.088;
+        let lhY = startY + 0.03;
+        let lhZ = startZ + 0.052;
+        let showLeftHand = true;
+
+        if (p < 0.12) {
+          const u = smooth01(p / 0.12);
+          lhX = -0.42 + (startX - 0.088 + 0.42) * u;
+          lhY = 1.06 + (startY + 0.03 - 1.06) * u;
+          lhZ = 0.10 + (startZ + 0.052 - 0.10) * u;
+        } else if (p < 0.36) {
+          const t = (p - 0.12) / 0.24;
+          const u = smooth01(t);
+          vx = startX + (holdX - startX) * u;
+          vy = startY + (holdY - startY) * u + Math.sin(t * Math.PI) * 0.05;
+          vz = startZ + (holdZ - startZ) * u;
+          vsc = 0.7 + (0.65 - 0.7) * u;
+          vRotY = startRotY * (1 - u);
+          lhX = vx - 0.088;
+          lhY = vy + 0.03 - 0.014 * u;
+          lhZ = vz + 0.052;
+        } else if (p < 0.66) {
+          const bob = Math.sin(((p - 0.36) / 0.30) * Math.PI * 2.0) * 0.005;
+          vx = holdX;
+          vy = holdY + bob;
+          vz = holdZ;
+          vsc = 0.65;
+          vRotY = 0;
+          lhX = vx - 0.088;
+          lhY = vy + 0.016;
+          lhZ = vz + 0.052;
+        } else {
+          const placeT = Math.min(1, (p - 0.66) / 0.26);
+          const u = smooth01(placeT);
+          vx = holdX + (landX - holdX) * u;
+          vy = holdY + (landY - holdY) * u + Math.sin(placeT * Math.PI) * 0.055;
+          vz = holdZ + (landZ - holdZ) * u;
+          vsc = 0.65 + (0.76 - 0.65) * u;
+          vRotY = 0;
+          const relL = p > 0.90 ? smooth01((p - 0.90) / 0.10) : 0;
+          lhX = vx - 0.088 - relL * 0.18;
+          lhY = vy + 0.016 + 0.016 * u + relL * 0.04;
+          lhZ = vz + 0.052 + relL * 0.16;
+          showLeftHand = relL < 0.98;
+        }
+
+        this.drawFilledVessel3D(vx, vy, vz, autoIt.vessel, vsc, false, [0, vRotY, 0]);
+        if (showLeftHand) {
+          drawCyberGlove(lhX, lhY, lhZ, -1, [0.08, -0.26, 0.14]);
+        }
       } else {
-        // Обе кибер-перчатки по краям подноса, ставящие его на стол
-        for (const side of [-1, 1]) {
-          const hx = tx + 0.3 * side;
-          const hy = ty + 0.01;
-          const hz = tz + 0.03;
-          const hRot = [0.12, 0.2 * side, -0.1 * side];
-          this.drawBox(hx, hy, hz, 0.068, 0.036, 0.12, [0.16, 0.14, 0.24], 0.22, hRot);
-          this.drawBox(hx, hy + 0.019, hz, 0.072, 0.011, 0.038, [0.0, 0.96, 0.83], 0.92, hRot);
+        const s = smooth01(p);
+        const oneHand = Boolean(this.trayPlaceAnim.rightHandOnly || hasHeldVessel);
+        const tx = oneHand ? 0.14 * (1 - s) : 0.0;
+        const ty = 0.62 + (asmY - 0.62) * s + Math.sin(p * Math.PI) * 0.12;
+        const tz = 0.06 + (asmZ - 0.06) * s;
+        const trayRot = oneHand
+          ? [0.22 * (1 - s), -0.16 * (1 - s), 0.11 * (1 - s)]
+          : [0.22 * (1 - s), 0, 0];
+        const stainedOnLanding = Boolean(a.isDirtyTray && p > 0.72);
+        this.draw3DRamenTray(tx, ty, tz, 0.92 + 0.08 * s, trayRot, stainedOnLanding, a.dirtyTrayBroth || 'tonkotsu');
+
+        if (oneHand) {
+          // Только ПРАВАЯ кибер-перчатка достаёт поднос за правый бортик и плавно кладёт его на стол!
+          const rhX = tx + 0.27;
+          const rhY = ty + 0.012;
+          const rhZ = tz + 0.04;
+          const rhRot = [0.14, 0.22 - 0.06 * s, -0.14];
+          drawCyberGlove(rhX, rhY, rhZ, 1, rhRot);
+        } else {
+          // Обе кибер-перчатки по краям подноса, ставящие его на стол
+          for (const side of [-1, 1]) {
+            const hx = tx + 0.3 * side;
+            const hy = ty + 0.01;
+            const hz = tz + 0.03;
+            const hRot = [0.12, 0.2 * side, -0.1 * side];
+            this.drawBox(hx, hy, hz, 0.068, 0.036, 0.12, [0.16, 0.14, 0.24], 0.22, hRot);
+            this.drawBox(hx, hy + 0.019, hz, 0.072, 0.011, 0.038, [0.0, 0.96, 0.83], 0.92, hRot);
+          }
         }
       }
     }
@@ -3393,10 +3518,129 @@ export class FirstPersonWebGLScene {
       );
     }
 
-    // Анимация появления пакета из-под холодильника И ПЕРЕКЛАДЫВАНИЯ КОРОБКИ, НАПИТКА И ПАЛОЧЕК С ПОДНОСА В ПОЛЫЙ ПАКЕТ!
+    // Анимация появления пакета из-под холодильника:
+    // - Если на столе стояла 1 одиночная коробка -> левая рука приподнимает её, правая ставит пакет, затем левая запечатывает и опускает коробку в пакет!
+    // - Если стоял поднос с заказом -> перекладывание с подноса в полый пакет!
     if (this.bagPackAnim.active) {
       const p = Math.min(1, this.bagPackAnim.timer / this.bagPackAnim.duration);
-      if (!this.bagPackAnim.hadItems) {
+      const centerIt = this.bagPackAnim.fromCenterItem;
+      if (centerIt && centerIt.vessel) {
+        const startX = centerIt.x;
+        const startY = 0.896;
+        const startZ = centerIt.z;
+        const startRotY = centerIt.rotY || 0;
+        const holdX = -0.28;
+        const holdY = 1.21;
+        const holdZ = -0.07;
+        const aboveBagX = asmX - 0.075;
+        const aboveBagY = bagBaseY + 0.34;
+        const aboveBagZ = asmZ - 0.01;
+        const inBagX = asmX - 0.075;
+        const inBagY = bagBaseY + 0.016;
+        const inBagZ = asmZ - 0.01;
+        const boxSeatedInBag = p >= 0.90;
+
+        // 1) Правая рука достаёт крафт-пакет из-под холодильника (p: 0.12 -> 0.56) и ставит его на центр стола
+        if (p >= 0.10) {
+          const bagP = Math.max(0, Math.min(1, (p - 0.12) / 0.44));
+          const bs = smooth01(bagP);
+          const bx = 0.38 + (asmX - 0.38) * bs;
+          const by = 0.60 + (bagBaseY - 0.60) * bs + Math.sin(bagP * Math.PI) * 0.10;
+          const bz = 0.10 + (asmZ - 0.10) * bs;
+          this.draw3DTakeoutBag(
+            bx,
+            by,
+            bz,
+            0.96 + 0.04 * bs,
+            boxSeatedInBag ? centerIt.vessel : false,
+            false,
+            false,
+            null,
+            null
+          );
+
+          if (p < 0.70) {
+            const relR = p > 0.56 ? smooth01((p - 0.56) / 0.14) : 0;
+            const rhX = bx + 0.165 + relR * 0.18;
+            const rhY = by + 0.23 - relR * 0.08;
+            const rhZ = bz + 0.03 + relR * 0.16;
+            drawCyberGlove(rhX, rhY, rhZ, 1, [0.14, 0.24 - 0.06 * bs, -0.15]);
+          }
+        }
+
+        // 2) Левая рука берёт коробку со стола, придерживает в воздухе, затем складывает клапаны над пакетом и опускает её внутрь!
+        let vx = startX;
+        let vy = startY;
+        let vz = startZ;
+        let vsc = 0.7;
+        let vRotY = startRotY;
+        let sealP = 0;
+        let lhX = startX - 0.088;
+        let lhY = startY + 0.036;
+        let lhZ = startZ + 0.052;
+        let showLeftHand = true;
+
+        if (p < 0.11) {
+          const u = smooth01(p / 0.11);
+          lhX = -0.42 + (startX - 0.088 + 0.42) * u;
+          lhY = 1.06 + (startY + 0.036 - 1.06) * u;
+          lhZ = 0.10 + (startZ + 0.052 - 0.10) * u;
+        } else if (p < 0.34) {
+          const t = (p - 0.11) / 0.23;
+          const u = smooth01(t);
+          vx = startX + (holdX - startX) * u;
+          vy = startY + (holdY - startY) * u + Math.sin(t * Math.PI) * 0.05;
+          vz = startZ + (holdZ - startZ) * u;
+          vsc = 0.7 + (0.65 - 0.7) * u;
+          vRotY = startRotY * (1 - u);
+          lhX = vx - 0.088;
+          lhY = vy + 0.036 - 0.012 * u;
+          lhZ = vz + 0.052;
+        } else if (p < 0.58) {
+          const bob = Math.sin(((p - 0.34) / 0.24) * Math.PI * 2.0) * 0.005;
+          vx = holdX;
+          vy = holdY + bob;
+          vz = holdZ;
+          vsc = 0.65;
+          vRotY = 0;
+          lhX = vx - 0.088;
+          lhY = vy + 0.024;
+          lhZ = vz + 0.052;
+        } else if (p < 0.76) {
+          const t = (p - 0.58) / 0.18;
+          const u = smooth01(t);
+          vx = holdX + (aboveBagX - holdX) * u;
+          vy = holdY + (aboveBagY - holdY) * u + Math.sin(t * Math.PI) * 0.03;
+          vz = holdZ + (aboveBagZ - holdZ) * u;
+          vsc = 0.65 + (0.7 - 0.65) * u;
+          vRotY = 0;
+          sealP = u;
+          lhX = vx - 0.085;
+          lhY = vy + 0.024 + 0.048 * u;
+          lhZ = vz + 0.045;
+        } else {
+          const dropT = Math.min(1, (p - 0.76) / 0.14);
+          const u = smooth01(dropT);
+          vx = aboveBagX;
+          vy = aboveBagY + (inBagY - aboveBagY) * u;
+          vz = aboveBagZ;
+          vsc = 0.7 + (0.78 - 0.7) * u;
+          vRotY = 0;
+          sealP = 1.0;
+          const relL = p > 0.88 ? smooth01((p - 0.88) / 0.12) : 0;
+          lhX = vx - 0.085 - relL * 0.20;
+          lhY = Math.max(bagBaseY + 0.26, vy + 0.072) + relL * 0.06;
+          lhZ = vz + 0.045 + relL * 0.16;
+          showLeftHand = relL < 0.98;
+        }
+
+        if (!boxSeatedInBag) {
+          this.drawFilledVessel3D(vx, vy, vz, centerIt.vessel, vsc, sealP, [0, vRotY, 0]);
+        }
+        if (showLeftHand) {
+          drawCyberGlove(lhX, lhY, lhZ, -1, [0.08, -0.26, 0.14]);
+        }
+      } else if (!this.bagPackAnim.hadItems) {
         const s = p * p * (3 - 2 * p);
         const bx = 0.36 + (asmX - 0.36) * s;
         const by = 0.64 + (bagBaseY - 0.64) * s + Math.sin(p * Math.PI) * 0.12;
@@ -3468,7 +3712,10 @@ export class FirstPersonWebGLScene {
     if (!a.hasBag && a.hasTray && !this.bagPackAnim.active && !isCarryingOrder) {
       const vesselOnTrayX = asmX - 0.13;
       const vesselOnTrayY = asmY + 0.016;
-      if (a.vessel && !(this.assemblyVesselAnim.active && this.assemblyVesselAnim.action === 'place')) {
+      const vesselAnimHidden =
+        (this.assemblyVesselAnim.active && this.assemblyVesselAnim.action === 'place') ||
+        (this.trayPlaceAnim.active && Boolean(this.trayPlaceAnim.autoMoveItem));
+      if (a.vessel && !vesselAnimHidden) {
         this.drawFilledVessel3D(vesselOnTrayX, vesselOnTrayY, asmZ, a.vessel, 0.76);
       }
       const drinkNotLandedOnTray =
@@ -3540,7 +3787,10 @@ export class FirstPersonWebGLScene {
       this.drawBox(cx + 0.05, cy + 0.03, cz + 0.05, 0.066, 0.034, 0.11, [0.16, 0.14, 0.24], 0.22, [0.15, 0.25, -0.15]);
     }
 
-    if (isCenterWorktable && (a.hasTray || a.hasBag)) {
+    const autoPlacingSolo =
+      (this.trayPlaceAnim.active && Boolean(this.trayPlaceAnim.autoMoveItem)) ||
+      (this.bagPackAnim.active && Boolean(this.bagPackAnim.fromCenterItem));
+    if (isCenterWorktable && (a.hasTray || a.hasBag) && !autoPlacingSolo) {
       this.registerHitbox('assembly_zone', asmX, asmY + 0.08, asmZ, 116);
     }
 
