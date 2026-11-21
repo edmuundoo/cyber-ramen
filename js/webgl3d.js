@@ -1,5 +1,5 @@
-import { GAME_CONFIG } from './config.js?v=90';
-import { gameState } from './state.js?v=90';
+import { GAME_CONFIG } from './config.js?v=91';
+import { gameState } from './state.js?v=91';
 import {
   createAlleyBackdropTexture,
   createBuildingFacadeTexture,
@@ -9,7 +9,7 @@ import {
   createWallMenuSignTexture,
   createPedestrianTextures,
   AnimeCustomerTextureRenderer
-} from './art3d.js?v=90';
+} from './art3d.js?v=91';
 
 /**
  * Полноэкранный WebGL 3D движок от первого лица с процедурной высокодетализированной
@@ -486,8 +486,9 @@ export class FirstPersonWebGLScene {
       ? { ...res.vessel, toppings: [...(res.vessel.toppings || [])] }
       : null;
     this.sinkDumpAnim.cloggedNow = Boolean(res.cloggedNow);
+    this.sinkDumpAnim.wasCloggedBefore = Boolean(res.wasCloggedBefore);
     this.heldVesselAppear = 0;
-    if (!res.cloggedNow) {
+    if (!res.cloggedNow && !res.wasCloggedBefore) {
       this.sinkFaucetFlowTimer = Math.max(this.sinkFaucetFlowTimer, 1.15);
     }
   }
@@ -4443,12 +4444,12 @@ export class FirstPersonWebGLScene {
     // 1Б. ЗАСОР СЛИВА РАКОВИНЫ (СТОЯЧАЯ МУТНАЯ ВОДА + КУЧКА ЗАСТРЯВШЕЙ ЛАПШИ И ИНГРЕДИЕНТОВ НА РЕШЁТКЕ СЛИВА!)
     const unclogActive = this.sinkUnclogAnim.active;
     const unclogP = unclogActive ? Math.min(1, this.sinkUnclogAnim.timer / this.sinkUnclogAnim.duration) : 0;
-    const dumpClogVisible =
-      this.sinkDumpAnim.active &&
-      this.sinkDumpAnim.cloggedNow &&
-      this.sinkDumpAnim.timer / this.sinkDumpAnim.duration >= 0.48;
+    const clogVisibleDuringDump =
+      !this.sinkDumpAnim.active ||
+      Boolean(this.sinkDumpAnim.wasCloggedBefore) ||
+      (this.sinkDumpAnim.cloggedNow && this.sinkDumpAnim.timer / this.sinkDumpAnim.duration >= 0.48);
     const showClogInDrain =
-      (isClogged && (!this.sinkDumpAnim.active || dumpClogVisible)) ||
+      (isClogged && clogVisibleDuringDump) ||
       (unclogActive && unclogP < 0.34);
     const clogData = isClogged ? rt.sinkClog : this.sinkUnclogAnim.clog || { broth: 'tonkotsu', hasNoodles: true, toppings: [] };
     const bMapSink = {
@@ -4458,8 +4459,8 @@ export class FirstPersonWebGLScene {
     };
     const clogWaterCol = bMapSink[clogData.broth] || bMapSink.tonkotsu;
 
-    // Стоячая мутная вода при засоре (быстро стекает вниз, как только рука убирает засор!)
-    const waterFill = isClogged && (!this.sinkDumpAnim.active || dumpClogVisible)
+    // Стоячая мутная вода при засоре (не исчезает при повторном выливании, стекает вниз ТОЛЬКО когда рука вытаскивает засор!)
+    const waterFill = isClogged && clogVisibleDuringDump
       ? 1.0
       : unclogActive && unclogP < 0.74
         ? Math.max(0, 1.0 - Math.max(0, (unclogP - 0.26) / 0.48))

@@ -1,6 +1,6 @@
-import { GAME_CONFIG } from './config.js?v=90';
-import { gameState } from './state.js?v=90';
-import { audio } from './audio.js?v=90';
+import { GAME_CONFIG } from './config.js?v=91';
+import { gameState } from './state.js?v=91';
+import { audio } from './audio.js?v=91';
 
 export class KitchenSystem {
   constructor(callbacks) {
@@ -1486,6 +1486,7 @@ export class KitchenSystem {
     const dumped = JSON.parse(JSON.stringify(v));
     const hasSolids = Boolean(dumped.noodleState || (dumped.toppings && dumped.toppings.length > 0));
     const spillBroth = dumped.broth || 'tonkotsu';
+    const wasCloggedBefore = Boolean(rt.sinkClog && rt.sinkClog.clogged);
 
     rt.activeVessel = this.createEmptyVessel(null);
     rt.vesselHeldInLeft = false;
@@ -1515,8 +1516,18 @@ export class KitchenSystem {
       audio.playSauceSizzle();
       audio.playPenaltyBuzz();
       this.onToast(
-        `🚿 Слив раковины ЗАБИЛСЯ лапшой и ингредиентами (-¥${wasteCost})! Тапните по засору в раковине, чтобы выкинуть его в мусорку!`,
+        wasCloggedBefore
+          ? `🚿 Раковина ещё сильнее забилась лапшой и остатками (-¥${wasteCost})! Вытащите засор в мусорку!`
+          : `🚿 Слив раковины ЗАБИЛСЯ лапшой и ингредиентами (-¥${wasteCost})! Тапните по засору в раковине, чтобы выкинуть его в мусорку!`,
         '#ff385c'
+      );
+    } else if (wasCloggedBefore) {
+      rt.sinkClog.broth = spillBroth;
+      audio.playSauceSizzle();
+      audio.playPenaltyBuzz();
+      this.onToast(
+        `🚿 Бульон вылит в забитую раковину (-¥${wasteCost}) — вода не уходит, сначала вытащите засор!`,
+        '#ffaa00'
       );
     } else {
       audio.playSauceSizzle();
@@ -1533,7 +1544,8 @@ export class KitchenSystem {
     return {
       action: 'dump_to_sink',
       vessel: dumped,
-      cloggedNow: hasSolids
+      cloggedNow: hasSolids,
+      wasCloggedBefore
     };
   }
 

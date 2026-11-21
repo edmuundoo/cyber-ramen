@@ -1,16 +1,16 @@
-import { GAME_CONFIG } from './config.js?v=90';
-import { gameState, createShiftRuntimeState } from './state.js?v=90';
-import { audio } from './audio.js?v=90';
+import { GAME_CONFIG } from './config.js?v=91';
+import { gameState, createShiftRuntimeState } from './state.js?v=91';
+import { audio } from './audio.js?v=91';
 import {
   buildCustomerPortraitSVG,
   buildCourierDroneSVG,
   generateAppleTouchIcon
-} from './renderer.js?v=90';
-import { FirstPersonWebGLScene } from './webgl3d.js?v=90';
-import { CustomerAndDeliverySystem } from './customers.js?v=90';
-import { KitchenSystem } from './kitchen.js?v=90';
-import { EconomySystem } from './economy.js?v=90';
-import { TutorialSystem } from './tutorial.js?v=90';
+} from './renderer.js?v=91';
+import { FirstPersonWebGLScene } from './webgl3d.js?v=91';
+import { CustomerAndDeliverySystem } from './customers.js?v=91';
+import { KitchenSystem } from './kitchen.js?v=91';
+import { EconomySystem } from './economy.js?v=91';
+import { TutorialSystem } from './tutorial.js?v=91';
 
 class CyberRamenApp {
   constructor() {
@@ -352,15 +352,7 @@ class CyberRamenApp {
       return;
     }
 
-    if (hitId === 'sink_clog') {
-      const prevClog = this.kitchenSystem.unclogSinkDrain();
-      if (prevClog) {
-        this.scene3D.triggerSinkUnclogAnim(prevClog);
-      }
-      return;
-    }
-
-    if (hitId === 'sink_wash') {
+    if (hitId === 'sink_clog' || hitId === 'sink_wash') {
       const rtSink = gameState.runtime;
       const heldV = rtSink.activeVessel;
       if (heldV && heldV.type && !this.kitchenSystem.isVesselEmptyOfFood(heldV)) {
@@ -377,9 +369,11 @@ class CyberRamenApp {
         }
         return;
       }
-      const washed = this.kitchenSystem.washOneBowlInSink();
-      if (washed) {
-        this.scene3D.triggerSinkWashAnim(washed);
+      if (hitId === 'sink_wash') {
+        const washed = this.kitchenSystem.washOneBowlInSink();
+        if (washed) {
+          this.scene3D.triggerSinkWashAnim(washed);
+        }
       }
       return;
     }
@@ -398,7 +392,7 @@ class CyberRamenApp {
 
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker
-        .register('./sw.js?v=90', { updateViaCache: 'none' })
+        .register('./sw.js?v=91', { updateViaCache: 'none' })
         .then((reg) => reg.update())
         .catch(() => {});
     }
