@@ -1,5 +1,5 @@
-import { GAME_CONFIG } from './config.js?v=92';
-import { gameState } from './state.js?v=92';
+import { GAME_CONFIG } from './config.js?v=93';
+import { gameState } from './state.js?v=93';
 import {
   createAlleyBackdropTexture,
   createBuildingFacadeTexture,
@@ -9,7 +9,7 @@ import {
   createWallMenuSignTexture,
   createPedestrianTextures,
   AnimeCustomerTextureRenderer
-} from './art3d.js?v=92';
+} from './art3d.js?v=93';
 
 /**
  * Полноэкранный WebGL 3D движок от первого лица с процедурной высокодетализированной
@@ -4504,19 +4504,10 @@ export class FirstPersonWebGLScene {
     const trashBaseY = 0.11;
     const trashH = 0.45;
     const trashTopY = trashBaseY + trashH; // 0.56
-    const heldV = rt.activeVessel;
-    const rightHeldV = rt.rightHandVessel;
-    const isFilled = (vv) => Boolean(vv && (vv.broth || vv.noodleState || (vv.toppings && vv.toppings.length > 0)));
-    const hasTrashableInHands = Boolean(
-      (heldV && (heldV.type === 'box' || (heldV.type === 'bowl' && isFilled(heldV)))) ||
-        (rightHeldV && (rightHeldV.type === 'box' || (rightHeldV.type === 'bowl' && isFilled(rightHeldV))))
-    );
-    const trashPulse = hasTrashableInHands ? 0.48 + 0.34 * Math.sin(this.time * 6.0) : 0.14;
-    const trashRimCol = hasTrashableInHands ? [1.0, 0.28, 0.44] : [0.62, 0.68, 0.76];
-    // Корпус бака из тёмной рифлёной стали + декоративное кольцо + ножная педаль
+    // Корпус бака из тёмной рифлёной стали + декоративное кольцо + спокойный стальной ободок без подсветки + ножная педаль
     this.drawMesh('cylinder', trashX, trashBaseY + trashH * 0.5, trashZ, 0.3, trashH, 0.3, [0.19, 0.23, 0.29], 0.06, null, 0.8);
     this.drawMesh('torus', trashX, trashBaseY + trashH * 0.35, trashZ, 0.306, 0.012, 0.306, [0.32, 0.37, 0.44], 0.08, null, 0.88);
-    this.drawMesh('torus', trashX, trashTopY, trashZ, 0.318, 0.024, 0.318, trashRimCol, trashPulse, null, 0.92);
+    this.drawMesh('torus', trashX, trashTopY, trashZ, 0.318, 0.024, 0.318, [0.56, 0.62, 0.7], 0.08, null, 0.9);
     // Ножная педаль со стороны повара
     this.drawBox(trashX + 0.165, trashBaseY + 0.03, trashZ, 0.052, 0.016, 0.09, [0.56, 0.62, 0.7], 0.14, null, 0.9);
     // Чёрный мусорный пакет внутри открытого бака (глубина + мягкие края пакета по ободку)
@@ -4921,15 +4912,15 @@ export class FirstPersonWebGLScene {
       const { F } = this.getCameraBasis();
       const yawAngle = Math.atan2(-F[0], -F[2]);
       const dv = this.sinkDumpAnim.vessel;
-      const pourX = sinkX + 0.04;
-      const pourY = rimY + 0.18;
+      const pourX = sinkX + 0.03;
+      const pourY = rimY - 0.015;
       const pourZ = sinkZ;
       const bCol = bMapSink[dv.broth] || bMapSink.tonkotsu;
       if (p < 0.24) {
         const t = p / 0.24;
         const s = t * t * (3 - 2 * t);
         const bx = handPos[0] + (pourX - handPos[0]) * s;
-        const by = handPos[1] + (pourY - handPos[1]) * s + Math.sin(t * Math.PI) * 0.05;
+        const by = handPos[1] + (pourY - handPos[1]) * s + Math.sin(t * Math.PI) * 0.04;
         const bz = handPos[2] + (pourZ - handPos[2]) * s;
         this.drawFilledVessel3D(bx, by, bz, dv, 0.6, false, [0, yawAngle * s, 0]);
         this.drawBox(bx + 0.09, by - 0.02, bz - 0.04, 0.072, 0.036, 0.125, [0.16, 0.14, 0.24], 0.22, [0.1, yawAngle + 0.25, 0.1]);
@@ -4958,9 +4949,9 @@ export class FirstPersonWebGLScene {
         this.drawBox(pourX + 0.085, pourY - 0.01, pourZ - 0.035, 0.072, 0.036, 0.125, [0.16, 0.14, 0.24], 0.22, [0.12, yawAngle + 0.25, -0.75 * curve]);
         // 3D-струя выливаемого бульона + падающие нити лапши/топпингов прямо на решётку слива!
         if (t > 0.1 && t < 0.88) {
-          const topY = pourY - 0.01;
+          const topY = pourY - 0.015;
           const botY = floorY + 0.02;
-          const sh = Math.max(0.05, topY - botY);
+          const sh = Math.max(0.04, topY - botY);
           this.drawMesh('cylinder', sinkX + 0.02, (topY + botY) * 0.5, sinkZ, 0.028, sh, 0.028, bCol, 0.78, null, 0.94, 4);
           if (dv.noodleState) {
             const nf = ((t - 0.1) / 0.78) % 1.0;
