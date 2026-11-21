@@ -1,5 +1,5 @@
-import { GAME_CONFIG } from './config.js?v=113';
-import { gameState } from './state.js?v=113';
+import { GAME_CONFIG } from './config.js?v=114';
+import { gameState } from './state.js?v=114';
 import {
   createAlleyBackdropTexture,
   createBuildingFacadeTexture,
@@ -9,7 +9,7 @@ import {
   createWallMenuSignTexture,
   createPedestrianTextures,
   AnimeCustomerTextureRenderer
-} from './art3d.js?v=113';
+} from './art3d.js?v=114';
 
 /**
  * Полноэкранный WebGL 3D движок от первого лица с процедурной высокодетализированной
@@ -595,14 +595,13 @@ export class FirstPersonWebGLScene {
   }
 
   triggerTrayPlaceAnim(info = {}) {
-    const v = gameState.runtime.activeVessel;
     const autoItem = info && info.autoMoveItem ? JSON.parse(JSON.stringify(info.autoMoveItem)) : null;
     const leftOnly = Boolean(info && info.leftHandOnly);
     this.trayPlaceAnim.active = true;
     this.trayPlaceAnim.timer = 0;
-    this.trayPlaceAnim.duration = autoItem ? 1.24 : 0.62;
+    this.trayPlaceAnim.duration = autoItem ? 1.24 : 0.7;
     this.trayPlaceAnim.leftHandOnly = leftOnly;
-    this.trayPlaceAnim.rightHandOnly = Boolean(!leftOnly && (autoItem || (v && v.type)));
+    this.trayPlaceAnim.rightHandOnly = !leftOnly;
     this.trayPlaceAnim.autoMoveItem = autoItem;
     if (autoItem) {
       this.reserveAnim.active = false;
@@ -3405,7 +3404,7 @@ export class FirstPersonWebGLScene {
             iy,
             iz,
             sc,
-            [0.18 * (1 - s), (yawAngle - 0.16) * (1 - s), 0.18 * (1 - s)],
+            [0.04 * (1 - s), (yawAngle - 0.1) * (1 - s), 0.03 * (1 - s)],
             Boolean(this.underReturnAnim.tray?.isDirtyTray),
             this.underReturnAnim.tray?.dirtyTrayBroth || 'tonkotsu'
           );
@@ -3801,45 +3800,25 @@ export class FirstPersonWebGLScene {
           drawCyberGlove(lhX, lhY, lhZ, -1, [0.08, -0.26, 0.14]);
         }
       } else {
-        const s = smooth01(p);
+        // Всегда достаём поднос ОДНОЙ рукой (правой по умолчанию или левой, если правая занята банкой/палочками/пакетом),
+        // а после постановки пустая рука плавно отъезжает обратно к игроку!
         const leftOnly = Boolean(this.trayPlaceAnim.leftHandOnly);
-        const rightOnly = Boolean(!leftOnly && (this.trayPlaceAnim.rightHandOnly || hasHeldVessel));
-        const tx = leftOnly ? -0.14 * (1 - s) : rightOnly ? 0.14 * (1 - s) : 0.0;
-        const ty = 0.62 + (asmY - 0.62) * s + Math.sin(p * Math.PI) * 0.12;
+        const sideSign = leftOnly ? -1 : 1;
+        const moveP = Math.min(1, p / 0.74);
+        const s = smooth01(moveP);
+        const tx = 0.14 * sideSign * (1 - s);
+        const ty = 0.62 + (asmY - 0.62) * s + Math.sin(moveP * Math.PI) * 0.11;
         const tz = 0.06 + (asmZ - 0.06) * s;
-        const trayRot = leftOnly
-          ? [0.22 * (1 - s), 0.16 * (1 - s), -0.11 * (1 - s)]
-          : rightOnly
-            ? [0.22 * (1 - s), -0.16 * (1 - s), 0.11 * (1 - s)]
-            : [0.22 * (1 - s), 0, 0];
-        const stainedOnLanding = Boolean(a.isDirtyTray && p > 0.72);
+        const trayRot = moveP < 1 ? [0.1 * (1 - s), -0.1 * sideSign * (1 - s), 0.05 * sideSign * (1 - s)] : null;
+        const stainedOnLanding = Boolean(a.isDirtyTray && moveP > 0.72);
         this.draw3DRamenTray(tx, ty, tz, 0.92 + 0.08 * s, trayRot, stainedOnLanding, a.dirtyTrayBroth || 'tonkotsu');
 
-        if (leftOnly) {
-          // Только ЛЕВАЯ кибер-перчатка достаёт поднос за левый бортик (пока правая держит банку или палочки!)
-          const lhX = tx - 0.27;
-          const lhY = ty + 0.012;
-          const lhZ = tz + 0.04;
-          const lhRot = [0.14, -0.22 + 0.06 * s, 0.14];
-          drawCyberGlove(lhX, lhY, lhZ, -1, lhRot);
-        } else if (rightOnly) {
-          // Только ПРАВАЯ кибер-перчатка достаёт поднос за правый бортик и плавно кладёт его на стол!
-          const rhX = tx + 0.27;
-          const rhY = ty + 0.012;
-          const rhZ = tz + 0.04;
-          const rhRot = [0.14, 0.22 - 0.06 * s, -0.14];
-          drawCyberGlove(rhX, rhY, rhZ, 1, rhRot);
-        } else {
-          // Обе кибер-перчатки по краям подноса, ставящие его на стол
-          for (const side of [-1, 1]) {
-            const hx = tx + 0.3 * side;
-            const hy = ty + 0.01;
-            const hz = tz + 0.03;
-            const hRot = [0.12, 0.2 * side, -0.1 * side];
-            this.drawBox(hx, hy, hz, 0.068, 0.036, 0.12, [0.16, 0.14, 0.24], 0.22, hRot);
-            this.drawBox(hx, hy + 0.019, hz, 0.072, 0.011, 0.038, [0.0, 0.96, 0.83], 0.92, hRot);
-          }
-        }
+        const relT = p > 0.74 ? smooth01((p - 0.74) / 0.26) : 0;
+        const hX = tx + 0.27 * sideSign + 0.18 * sideSign * relT;
+        const hY = ty + 0.012 + Math.sin(relT * Math.PI) * 0.03 - 0.12 * relT;
+        const hZ = tz + 0.04 + 0.22 * relT;
+        const hRot = [0.14, (0.22 - 0.06 * s) * sideSign, -0.14 * sideSign];
+        drawCyberGlove(hX, hY, hZ, sideSign, hRot);
       }
     }
 
@@ -4355,7 +4334,7 @@ export class FirstPersonWebGLScene {
             ay,
             az,
             sc,
-            [0.24 * (1 - u), (yawAngle - 0.18) * (1 - u), 0.22 * (1 - u)],
+            [0.04 * (1 - u), (yawAngle - 0.1) * (1 - u), 0.03 * (1 - u)],
             Boolean(aa.tray?.isDirtyTray),
             aa.tray?.dirtyTrayBroth || 'tonkotsu'
           );
@@ -8353,20 +8332,20 @@ export class FirstPersonWebGLScene {
       const sc = inUnder ? 0.42 : 0.54;
       this.draw3DRamenTray(
         rx - R[0] * 0.04,
-        ry - 0.01,
+        ry - 0.008,
         rz - R[2] * 0.04,
         sc,
-        [0.24, yawAngle - 0.18, 0.22],
+        [0.04, yawAngle - 0.1, 0.03],
         Boolean(rv.isDirtyTray),
         rv.dirtyTrayBroth || 'tonkotsu'
       );
-      // Правая кибер-перчатка держит пустой поднос за правый алый бортик!
-      rhX = rx + R[0] * (0.21 * sc) - F[0] * 0.03;
-      rhY = ry + 0.008;
-      rhZ = rz + R[2] * (0.21 * sc) - F[2] * 0.03;
-      thumbX = rx + R[0] * (0.16 * sc) + F[0] * 0.01;
-      thumbY = ry + 0.026;
-      thumbZ = rz + R[2] * (0.16 * sc) + F[2] * 0.01;
+      // Правая кибер-перчатка держит пустой поднос почти ровно за правый алый бортик!
+      rhX = rx + R[0] * (0.22 * sc) - F[0] * 0.03;
+      rhY = ry + 0.006;
+      rhZ = rz + R[2] * (0.22 * sc) - F[2] * 0.03;
+      thumbX = rx + R[0] * (0.17 * sc) + F[0] * 0.01;
+      thumbY = ry + 0.022;
+      thumbZ = rz + R[2] * (0.17 * sc) + F[2] * 0.01;
     } else if (isDrink) {
       this.draw3DDrinkCan(rx, ry - 0.025, rz, rv.drinkId || 'cola', 0.92, [0.06, yawAngle, -0.08]);
       rhX = rx + R[0] * 0.056 - F[0] * 0.042;
