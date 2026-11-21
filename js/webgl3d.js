@@ -1,5 +1,5 @@
-import { GAME_CONFIG } from './config.js?v=104';
-import { gameState } from './state.js?v=104';
+import { GAME_CONFIG } from './config.js?v=105';
+import { gameState } from './state.js?v=105';
 import {
   createAlleyBackdropTexture,
   createBuildingFacadeTexture,
@@ -9,7 +9,7 @@ import {
   createWallMenuSignTexture,
   createPedestrianTextures,
   AnimeCustomerTextureRenderer
-} from './art3d.js?v=104';
+} from './art3d.js?v=105';
 
 /**
  * Полноэкранный WebGL 3D движок от первого лица с процедурной высокодетализированной
@@ -870,42 +870,41 @@ export class FirstPersonWebGLScene {
 
           if (field < 0.99) discard;
 
-          // Стилизованная 3D-разнослойность жидкости (тонкий полупрозрачный край -> средний слой -> плотный центр!)
+          // Стилизованная 3D-разнослойность жидкости (тонкий полупрозрачный край -> сочный средний слой -> густой глубокий центр!)
           float edgeMask = smoothstep(0.99, 1.03, field);
           float midLayer = smoothstep(1.18, 1.38, field);
           float deepLayer = smoothstep(1.68, 2.05, field);
 
-          // Мягкая игра оттенка по слоям: тонкий край светлее и прозрачнее, глубина — насыщеннее и плотнее
-          vec3 colThin = baseCol * 1.12;
-          vec3 colMid = baseCol * 0.96;
-          vec3 colDeep = baseCol * 0.80;
+          // Насыщенные слои реального бульона (без пересвета в белый!)
+          vec3 colThin = baseCol * 0.88;
+          vec3 colMid = baseCol * 0.72;
+          vec3 colDeep = baseCol * 0.54;
           baseCol = mix(colThin, colMid, midLayer);
-          baseCol = mix(baseCol, colDeep, deepLayer * 0.85);
+          baseCol = mix(baseCol, colDeep, deepLayer * 0.9);
 
-          // Аккуратные стилизованные глянцевые «глазки» бульонного масла (в том же стиле, что в кастрюлях, но мягче!)
-          float oilSpots = smoothstep(0.70, 0.88, sin(q.x * 13.0 + seed) * cos(q.y * 13.0 - seed * 0.8));
-          baseCol = mix(baseCol, baseCol * 1.24 + vec3(0.08, 0.06, 0.02), oilSpots * 0.34 * midLayer);
+          // Деликатные стилизованные «глазки» бульонного масла (сохраняют цвет бульона!)
+          float oilSpots = smoothstep(0.74, 0.90, sin(q.x * 13.0 + seed) * cos(q.y * 13.0 - seed * 0.8));
+          baseCol = mix(baseCol, baseCol * 1.28, oilSpots * 0.35 * midLayer);
 
-          // Живой влажный 3D-блеск: отражение тёплой LED-лампы ниши + бирюзового неона края столешницы + Френель!
+          // Острые локальные влажные 3D-блики (не выбеливают всю лужу, а дают точечный «мокрый» глянец!)
           vec3 L_niche = normalize(vec3(-0.60, 0.73, 0.66) - vWorldPos);
           vec3 H_niche = normalize(L_niche + V);
-          float specNiche = pow(max(dot(N, H_niche), 0.0), 42.0);
+          float specNiche = pow(max(dot(N, H_niche), 0.0), 96.0);
 
           vec3 L_neon = normalize(vec3(-0.45, 0.90, 0.62) - vWorldPos);
           vec3 H_neon = normalize(L_neon + V);
-          float specNeon = pow(max(dot(N, H_neon), 0.0), 34.0);
+          float specNeon = pow(max(dot(N, H_neon), 0.0), 84.0);
 
-          float fresnel = pow(1.0 - max(dot(N, V), 0.0), 2.8);
-          float wetRim = smoothstep(1.01, 1.06, field) * (1.0 - smoothstep(1.08, 1.18, field));
+          float wetRim = smoothstep(1.01, 1.05, field) * (1.0 - smoothstep(1.06, 1.15, field));
 
-          baseCol += vec3(1.0, 0.95, 0.82) * (specNiche * 0.58 + oilSpots * specNiche * 0.28);
-          baseCol += vec3(0.18, 0.96, 0.90) * (specNeon * 0.24 + fresnel * 0.14);
-          baseCol += vec3(0.95, 0.94, 0.88) * wetRim * 0.16;
+          baseCol += vec3(0.95, 0.88, 0.72) * (specNiche * 0.34 + oilSpots * specNiche * 0.18);
+          baseCol += vec3(0.14, 0.88, 0.84) * (specNeon * 0.16);
+          baseCol += baseCol * wetRim * 0.22;
 
-          // Разнослойная полупрозрачность: край (~0.56) просвечивает пол -> середина (~0.80) -> центр (~0.92) + блик плотнее!
-          float layerAlpha = mix(0.56, 0.82, midLayer);
+          // Разнослойная полупрозрачность: край (~0.52) просвечивает пол -> середина (~0.80) -> центр (~0.93)
+          float layerAlpha = mix(0.52, 0.80, midLayer);
           layerAlpha = mix(layerAlpha, 0.93, deepLayer);
-          layerAlpha = clamp(layerAlpha + (specNiche * 0.22 + specNeon * 0.12), 0.0, 0.98);
+          layerAlpha = clamp(layerAlpha + specNiche * 0.25 + specNeon * 0.12, 0.0, 0.96);
           alpha = uAlpha * edgeMask * layerAlpha;
         }
 
@@ -7639,7 +7638,7 @@ export class FirstPersonWebGLScene {
     const gl = this.gl;
     if (!gl || !this.uPuddleParams) return;
     gl.uniform4f(this.uPuddleParams, spread, morph, seed, wallClip);
-    this.drawMesh('floor_quad', x, y, z, sx, 1.0, sz, color, 0.16, null, 0.92, 7, alpha);
+    this.drawMesh('floor_quad', x, y, z, sx, 1.0, sz, color, 0.08, null, 0.26, 7, alpha);
   }
 
   drawTexturedQuad(tex, x, y, z, sx, sy, emissive = 0.75, rot = null) {
