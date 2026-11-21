@@ -1,5 +1,5 @@
-import { GAME_CONFIG } from './config.js?v=96';
-import { gameState } from './state.js?v=96';
+import { GAME_CONFIG } from './config.js?v=97';
+import { gameState } from './state.js?v=97';
 import {
   createAlleyBackdropTexture,
   createBuildingFacadeTexture,
@@ -9,7 +9,7 @@ import {
   createWallMenuSignTexture,
   createPedestrianTextures,
   AnimeCustomerTextureRenderer
-} from './art3d.js?v=96';
+} from './art3d.js?v=97';
 
 /**
  * Полноэкранный WebGL 3D движок от первого лица с процедурной высокодетализированной
@@ -4522,7 +4522,37 @@ export class FirstPersonWebGLScene {
       if (poolFill > 0.015) {
         const lh = 0.028 * poolFill;
         const alpha = 0.76 * Math.min(1, poolFill * 2.4);
+        const surfY = floorY + 0.008 + lh;
         this.drawBox(sinkX, floorY + 0.008 + lh * 0.5, sinkZ, 0.485, lh, 0.465, dCol, 0.26, null, 0.94, 0, alpha);
+
+        // Лёгкие пузырьки бульона на поверхности, спокойно плывущие к решётке слива по мере стекания
+        const foamCol = [
+          Math.min(1, dCol[0] * 0.62 + 0.38),
+          Math.min(1, dCol[1] * 0.62 + 0.38),
+          Math.min(1, dCol[2] * 0.62 + 0.38)
+        ];
+        const drainX = sinkX + 0.02;
+        const drainZ = sinkZ;
+        const bubbles = [
+          [-0.14, -0.09, 0.012],
+          [0.12, -0.11, 0.01],
+          [-0.11, 0.12, 0.011],
+          [0.15, 0.08, 0.009],
+          [0.03, -0.06, 0.013],
+          [-0.05, 0.05, 0.01]
+        ];
+        const pull = dp >= 0.32 ? Math.min(1, (dp - 0.32) / 0.68) : 0;
+        const distK = 1.0 - pull * 0.85;
+        for (let b = 0; b < bubbles.length; b++) {
+          const [ox, oz, br] = bubbles[b];
+          const wob = Math.sin(this.time * 4.5 + b * 1.7) * 0.006 * distK;
+          const bx = drainX + ox * distK + wob;
+          const bz = drainZ + oz * distK - wob;
+          const sc = br * Math.min(1, poolFill * 2.0);
+          if (sc > 0.002) {
+            this.drawMesh('sphere', bx, surfY + 0.002, bz, sc, sc * 0.65, sc, foamCol, 0.52, null, 0.96, 0, 0.82 * Math.min(1, poolFill * 2.2));
+          }
+        }
       }
     }
 
