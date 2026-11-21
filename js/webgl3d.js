@@ -1,5 +1,5 @@
-import { GAME_CONFIG } from './config.js?v=108';
-import { gameState } from './state.js?v=108';
+import { GAME_CONFIG } from './config.js?v=109';
+import { gameState } from './state.js?v=109';
 import {
   createAlleyBackdropTexture,
   createBuildingFacadeTexture,
@@ -9,7 +9,7 @@ import {
   createWallMenuSignTexture,
   createPedestrianTextures,
   AnimeCustomerTextureRenderer
-} from './art3d.js?v=108';
+} from './art3d.js?v=109';
 
 /**
  * Полноэкранный WebGL 3D движок от первого лица с процедурной высокодетализированной
@@ -220,7 +220,7 @@ export class FirstPersonWebGLScene {
     };
     this.fridgeDoorOpenT = 0; // 0 = дверца закрыта, 1 = дверца распахнута на 110°
     this.dualStanceT = 0; // 0 = одна рука, 1 = естественная асимметричная стойка двумя руками
-    this.fridgeDoorHandAnim = { active: false, action: 'open', timer: 0, duration: 0.56 };
+    this.fridgeDoorHandAnim = { active: false, action: 'open', useLeftHand: false, timer: 0, duration: 0.56 };
     this.fridgeRestockAnim = { active: false, toppingId: 'egg', timer: 0, duration: 0.58 };
     this.wipeSpillAnim = {
       active: false,
@@ -642,8 +642,17 @@ export class FirstPersonWebGLScene {
   }
 
   triggerFridgeDoorAnim(action = 'open') {
+    const rt = gameState.runtime;
+    const hasLeft = Boolean(rt.activeVessel && rt.activeVessel.type);
+    const hasRight = Boolean(rt.rightHandVessel && rt.rightHandVessel.type);
+    // Если обе руки заняты (например, миска в левой и банка в правой) — дверца плавно закрывается сама, без «третьей» руки!
+    if (hasLeft && hasRight) {
+      this.fridgeDoorHandAnim.active = false;
+      return;
+    }
     this.fridgeDoorHandAnim.active = true;
     this.fridgeDoorHandAnim.action = action;
+    this.fridgeDoorHandAnim.useLeftHand = Boolean(!hasLeft && hasRight);
     this.fridgeDoorHandAnim.timer = 0;
     this.fridgeDoorHandAnim.duration = 0.56;
   }
@@ -6424,18 +6433,24 @@ export class FirstPersonWebGLScene {
     // НАСТОЯЩЕЕ ПРОЗРАЧНОЕ СТЕКЛО ВИТРИНЫ (pattern = 6, alpha = 0.22 — сквозь него чётко видны все 3 полки!)
     this.drawBox(fcx, doorMidY, fcz, 0.005, doorH - 0.046, doorW - 0.046, [0.32, 0.84, 1.0], 0.26, doorRot, 0.98, 6, 0.22);
 
-    // 3З. ПРАВАЯ РУКА ГЕРОЯ, ОТКРЫВАЮЩАЯ И ЗАКРЫВАЮЩАЯ ДВЕРЦУ ЗА ХРОМИРОВАННУЮ РУЧКУ!
-    if (this.fridgeDoorHandAnim.active) {
+    // 3З. СВОБОДНАЯ РУКА ГЕРОЯ, ОТКРЫВАЮЩАЯ И ЗАКРЫВАЮЩАЯ ДВЕРЦУ ЗА ХРОМИРОВАННУЮ РУЧКУ
+    // (Если обе руки заняты — дверца закрывается сама на доводчике, без появления лишней руки!)
+    const bothBusyForDoor = Boolean(
+      rt.activeVessel && rt.activeVessel.type && rt.rightHandVessel && rt.rightHandVessel.type
+    );
+    if (this.fridgeDoorHandAnim.active && !bothBusyForDoor) {
       const p = Math.min(1, this.fridgeDoorHandAnim.timer / this.fridgeDoorHandAnim.duration);
       const wave = Math.sin(p * Math.PI);
+      const useLeft = Boolean(this.fridgeDoorHandAnim.useLeftHand);
+      const sideSign = useLeft ? -1 : 1;
       const grabX = hx - 0.055 * (1 - wave) - 0.025;
       const grabY = doorMidY - 0.06 * (1 - wave);
-      const grabZ = hz + 0.02;
-      const handRot = [0.08, doorAng + 0.35, -0.14];
-      // Кибер-перчатка правой руки на ручке дверцы + предплечье
+      const grabZ = hz + 0.02 * sideSign;
+      const handRot = [0.08, doorAng + (useLeft ? -0.25 : 0.35), -0.14 * sideSign];
+      // Кибер-перчатка свободной руки на ручке дверцы + предплечье
       this.drawBox(grabX, grabY, grabZ, 0.115, 0.042, 0.072, [0.16, 0.14, 0.24], 0.24, handRot);
       this.drawBox(grabX, grabY + 0.022, grabZ, 0.04, 0.012, 0.076, [0.0, 0.96, 0.83], 0.95, handRot);
-      this.drawBox(grabX - 0.09, grabY - 0.03, grabZ + 0.04, 0.13, 0.048, 0.078, [0.11, 0.13, 0.2], 0.16, handRot);
+      this.drawBox(grabX - 0.09, grabY - 0.03, grabZ + 0.04 * sideSign, 0.13, 0.048, 0.078, [0.11, 0.13, 0.2], 0.16, handRot);
     }
 
     if (isWarehouseInteract) {
