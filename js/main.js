@@ -1,16 +1,16 @@
-import { GAME_CONFIG } from './config.js?v=114';
-import { gameState, createShiftRuntimeState } from './state.js?v=114';
-import { audio } from './audio.js?v=114';
+import { GAME_CONFIG } from './config.js?v=115';
+import { gameState, createShiftRuntimeState } from './state.js?v=115';
+import { audio } from './audio.js?v=115';
 import {
   buildCustomerPortraitSVG,
   buildCourierDroneSVG,
   generateAppleTouchIcon
-} from './renderer.js?v=114';
-import { FirstPersonWebGLScene } from './webgl3d.js?v=114';
-import { CustomerAndDeliverySystem } from './customers.js?v=114';
-import { KitchenSystem } from './kitchen.js?v=114';
-import { EconomySystem } from './economy.js?v=114';
-import { TutorialSystem } from './tutorial.js?v=114';
+} from './renderer.js?v=115';
+import { FirstPersonWebGLScene } from './webgl3d.js?v=115';
+import { CustomerAndDeliverySystem } from './customers.js?v=115';
+import { KitchenSystem } from './kitchen.js?v=115';
+import { EconomySystem } from './economy.js?v=115';
+import { TutorialSystem } from './tutorial.js?v=115';
 
 class CyberRamenApp {
   constructor() {
@@ -272,6 +272,14 @@ class CyberRamenApp {
       return;
     }
 
+    if (hitId === 'reserve_cloth') {
+      const wiped = this.kitchenSystem.wipeReserveTrayWithCloth();
+      if (wiped) {
+        this.scene3D.triggerReserveTrayWipeAnim(wiped);
+      }
+      return;
+    }
+
     if (hitId === 'reserve_counter_surface') {
       const res = this.kitchenSystem.handleReserveSurfaceTap();
       if (res) {
@@ -428,7 +436,11 @@ class CyberRamenApp {
       const side = hitId === 'dirty_bowl_right' ? 'right' : 'left';
       const res = this.kitchenSystem.collectDirtyBowlFromShelf(side);
       if (res) {
-        this.scene3D.triggerCollectDirtyBowlAnim(res.side, res.bowl);
+        if (res.kind === 'tray') {
+          this.scene3D.triggerCollectDirtyTrayAnim(res);
+        } else {
+          this.scene3D.triggerCollectDirtyBowlAnim(res.side, res.bowl);
+        }
       }
       return;
     }
@@ -473,7 +485,7 @@ class CyberRamenApp {
 
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker
-        .register('./sw.js?v=114', { updateViaCache: 'none' })
+        .register('./sw.js?v=115', { updateViaCache: 'none' })
         .then((reg) => reg.update())
         .catch(() => {});
     }

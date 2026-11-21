@@ -1,4 +1,4 @@
-import { GAME_CONFIG } from './config.js?v=114';
+import { GAME_CONFIG } from './config.js?v=115';
 
 const BASE_SAVE_KEY = 'CR_NIGHT_YATAI_SAVE_V1';
 
@@ -86,11 +86,14 @@ export function createShiftRuntimeState() {
     sauceModeArmed: false,
     vesselHeldInLeft: false,
     pendingVesselChoice: null,
-    // Круговорот из 10 керамических мисок (Чистые -> В заказе -> Едят -> Грязные на полке -> Грязные в мойке -> Чистые)
+    // Круговорот из 10 керамических мисок и 6 подносов (Чистые -> В заказе -> Едят -> Грязные на полке -> Мойка / Правая столешница с тряпкой -> Чистые)
     maxCleanBowls: 10,
     cleanBowls: 10,
+    maxCleanTrays: 6,
+    cleanTrays: 6,
     eatingTimers: [],
     dirtyShelfLeft: [],
+    dirtyTraysOnShelf: [],
     dirtyShelfRight: [],
     dirtyInSink: [],
     washedOnRack: 0,
