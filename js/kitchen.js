@@ -1,6 +1,6 @@
-import { GAME_CONFIG } from './config.js?v=91';
-import { gameState } from './state.js?v=91';
-import { audio } from './audio.js?v=91';
+import { GAME_CONFIG } from './config.js?v=92';
+import { gameState } from './state.js?v=92';
+import { audio } from './audio.js?v=92';
 
 export class KitchenSystem {
   constructor(callbacks) {
@@ -777,11 +777,9 @@ export class KitchenSystem {
   }
 
   // Выбрасывание в мусорку под раковиной (Сектор -1):
-  // - Керамические миски в мусорку НЕ выбрасываются и не выливаются (вылить из миски можно в раковину!).
-  // - В мусорку выбрасывается ТОЛЬКО вок-коробка:
-  //   1) одна коробка в левой руке -> выбрасываем её;
-  //   2) коробка в правой руке, миска (или 2-я коробка) в левой -> выбрасываем правую коробку, левая остаётся;
-  //   3) коробка в левой руке, миска в правой -> выбрасываем левую коробку, и миска из правой перекладывается в левую!
+  // - Коробка (пустая или полная): выбрасывается целиком в мусорку (если была в левой при миске в правой -> миска переходит в левую!).
+  // - Наполненная миска (когда коробок в руках нет): содержимое вываливается в мусорку, а сама грязная миска ставится в мойку!
+  // - Пустая чистая миска: не выбрасывается (верните в стопку на складе).
   disposeHeldVesselToTrash() {
     const rt = gameState.runtime;
     const left = rt.activeVessel;
@@ -791,16 +789,18 @@ export class KitchenSystem {
 
     if (!hasLeft && !hasRight) {
       audio.playPenaltyBuzz();
-      this.onToast('🗑️ В руках ничего нет — в мусорку можно выбросить только 📦 Коробку!', '#ffaa00');
+      this.onToast('🗑️ В руках ничего нет — возьмите 📦 Коробку или наполненную 🍜 Миску!', '#ffaa00');
       return null;
     }
 
     const leftIsBox = hasLeft && left.type === 'box';
     const rightIsBox = hasRight && right.type === 'box';
+    const leftFilledBowl = hasLeft && left.type === 'bowl' && !this.isVesselEmptyOfFood(left);
+    const rightFilledBowl = hasRight && right.type === 'bowl' && !this.isVesselEmptyOfFood(right);
 
-    if (!leftIsBox && !rightIsBox) {
+    if (!leftIsBox && !rightIsBox && !leftFilledBowl && !rightFilledBowl) {
       audio.playPenaltyBuzz();
-      this.onToast('🍜 Керамические миски не выбрасывают в мусорку! Вылить содержимое можно в раковину 🚿.', '#ffaa00');
+      this.onToast('🍜 Пустую чистую миску не выбрасывают — верните её в стопку на складе ▶!', '#ffaa00');
       return null;
     }
 
@@ -808,6 +808,7 @@ export class KitchenSystem {
     let fromRight = false;
     let handoffBack = false;
     let rightBowl = null;
+    let isBowlDumpToTrash = false;
 
     if (rightIsBox) {
       // В правой руке коробка (в левой миска или вторая коробка) -> выбрасываем коробку из ПРАВОЙ руки, левая остаётся!
@@ -823,12 +824,38 @@ export class KitchenSystem {
       rt.vesselHeldInLeft = true;
       rt.sauceModeArmed = false;
       handoffBack = true;
-    } else {
+    } else if (leftIsBox) {
       // В левой руке одна коробка, правая свободна -> выбрасываем коробку из левой руки!
       tossed = JSON.parse(JSON.stringify(left));
       rt.activeVessel = this.createEmptyVessel(null);
       rt.vesselHeldInLeft = false;
       rt.sauceModeArmed = false;
+    } else if (rightFilledBowl) {
+      // Наполненная миска в правой руке -> вываливаем содержимое в мусорку, а грязную миску ставим в мойку!
+      tossed = JSON.parse(JSON.stringify(right));
+      rt.rightHandVessel = null;
+      rt.dirtyInSink.push({ broth: tossed.broth || 'tonkotsu' });
+      fromRight = true;
+      isBowlDumpToTrash = true;
+    } else if (leftFilledBowl && hasRight) {
+      // Наполненная миска в левой руке, в правой пустая миска -> вываливаем левую в мусорку, ставим её в мойку, правую перекладываем в левую!
+      tossed = JSON.parse(JSON.stringify(left));
+      rightBowl = JSON.parse(JSON.stringify(right));
+      rt.activeVessel = rightBowl;
+      rt.rightHandVessel = null;
+      rt.vesselHeldInLeft = true;
+      rt.sauceModeArmed = false;
+      rt.dirtyInSink.push({ broth: tossed.broth || 'tonkotsu' });
+      handoffBack = true;
+      isBowlDumpToTrash = true;
+    } else {
+      // Одна наполненная миска в левой руке -> вываливаем содержимое в мусорку, а саму грязную миску ставим в мойку!
+      tossed = JSON.parse(JSON.stringify(left));
+      rt.activeVessel = this.createEmptyVessel(null);
+      rt.vesselHeldInLeft = false;
+      rt.sauceModeArmed = false;
+      rt.dirtyInSink.push({ broth: tossed.broth || 'tonkotsu' });
+      isBowlDumpToTrash = true;
     }
 
     const hadFood = !this.isVesselEmptyOfFood(tossed);
@@ -841,9 +868,11 @@ export class KitchenSystem {
       rt.dailyStats.penalties += wasteCost;
       audio.playPenaltyBuzz();
       this.onToast(
-        handoffBack
-          ? `🗑️ Коробка выброшена (-¥${wasteCost}), миска переложена в левую руку!`
-          : `🗑️ Коробка выброшена в мусорку! Списаны продукты (-¥${wasteCost})`,
+        isBowlDumpToTrash
+          ? `🗑️ Содержимое миски выброшено в мусорку (-¥${wasteCost}), грязная миска поставлена в мойку!`
+          : handoffBack
+            ? `🗑️ Коробка выброшена (-¥${wasteCost}), миска переложена в левую руку!`
+            : `🗑️ Коробка выброшена в мусорку! Списаны продукты (-¥${wasteCost})`,
         '#ff385c'
       );
     } else {
@@ -861,7 +890,8 @@ export class KitchenSystem {
       vessel: tossed,
       fromRight,
       handoffBack,
-      rightBowl
+      rightBowl,
+      isBowlDumpToTrash
     };
   }
 
