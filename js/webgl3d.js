@@ -1,5 +1,5 @@
-import { GAME_CONFIG } from './config.js?v=102';
-import { gameState } from './state.js?v=102';
+import { GAME_CONFIG } from './config.js?v=103';
+import { gameState } from './state.js?v=103';
 import {
   createAlleyBackdropTexture,
   createBuildingFacadeTexture,
@@ -9,7 +9,7 @@ import {
   createWallMenuSignTexture,
   createPedestrianTextures,
   AnimeCustomerTextureRenderer
-} from './art3d.js?v=102';
+} from './art3d.js?v=103';
 
 /**
  * Полноэкранный WebGL 3D движок от первого лица с процедурной высокодетализированной
@@ -821,52 +821,46 @@ export class FirstPersonWebGLScene {
           baseCol = mix(baseCol, vec3(0.84, 0.97, 1.0), clamp(stripe1 * 0.45 + stripe2 * 0.35 + edge * 0.5, 0.0, 1.0));
           alpha = clamp(uAlpha + stripe1 * 0.13 + stripe2 * 0.09 + edge * 0.2, 0.0, 0.85);
         } else if (uPattern > 6.5 && uPattern < 7.5) {
-          // 7: Физическая органичная лужа бульона на 1 плоском floor_quad (метаболы + поверхностное натяжение + упор в стенки!)
+          // 7: Стильная чистая лужа бульона в едином стиле игры (1 плоский floor_quad = 0 полосок + живая деформация формы!)
           vec2 p = vLocalPos.xz * 2.0;
           float spread = clamp(uPuddleParams.x, 0.0, 1.0);
           float morph = uPuddleParams.y;
           float seed = uPuddleParams.z;
           float ang = atan(p.y, p.x);
 
-          // Мягкое естественное искривление контура (убирает геометрическую округлость)
+          // Лёгкая плавная асимметрия контура
           vec2 warp = vec2(
-            sin(p.y * 5.2 + seed + morph * 0.45) * 0.045 + cos(p.x * 3.8 - seed * 0.7) * 0.028,
-            cos(p.x * 5.4 - seed * 1.1 + morph * 0.35) * 0.045 + sin(p.y * 4.1 + seed) * 0.028
-          ) * clamp(spread * 1.6, 0.0, 1.0);
+            sin(p.y * 4.4 + seed + morph * 0.55) * 0.048,
+            cos(p.x * 4.6 - seed * 1.1 + morph * 0.45) * 0.048
+          ) * clamp(spread * 1.5, 0.0, 1.0);
           vec2 q = p + warp;
 
-          // 0) Базовая масса жидкости под основанием бака (выходит из-под кромки бака r ~ 0.29)
-          float r0 = 0.24 + 0.17 * spread;
-          float field = (r0 * r0) / (dot(q, q) + 0.025);
+          // 0) Базовое пятно под основанием бака (компактное, выступает ровно из-под кромки бака)
+          float r0 = 0.34 + 0.14 * spread;
+          float field = (r0 * r0) / (dot(q, q) + 0.032);
 
-          // 1) 1-я порция: асимметричный подтёк вперёд-вправо в открытый проём
+          // 1) 1-я порция: аккуратный органичный подтёк вперёд-вправо
           float s1 = smoothstep(0.02, 0.48, spread);
-          vec2 c1 = vec2(0.18 + 0.16 * s1, -0.14 - 0.15 * s1);
-          float r1 = 0.22 * s1;
-          field += (r1 * r1) / (dot(q - c1, q - c1) + 0.022);
+          vec2 c1 = vec2(0.18 + 0.17 * s1, -0.14 - 0.16 * s1);
+          float r1 = 0.24 * s1;
+          field += (r1 * r1) / (dot(q - c1, q - c1) + 0.026);
 
-          // 2) Боковой ручеёк к концу 1-й порции (вытянутая органичная капля)
-          float s2 = smoothstep(0.18, 0.62, spread);
-          vec2 c2 = vec2(0.06 + 0.08 * s2, -0.22 - 0.20 * s2);
-          float r2 = 0.20 * s2;
-          field += (r2 * r2) / (dot(q - c2, q - c2) + 0.024);
+          // 2) 2-я порция (morph растёт): заметно деформирует форму — прорывает новый плавный выступ вперёд-влево!
+          float s2 = smoothstep(0.40, 0.78, spread) * smoothstep(0.60, 1.38, morph);
+          vec2 c2 = vec2(0.24 + 0.20 * s2, 0.08 + 0.12 * s2);
+          float r2 = 0.25 * s2;
+          field += (r2 * r2) / (dot(q - c2, q - c2) + 0.028);
 
-          // 3) 2-я порция (morph растёт): прорывает поверхностное натяжение вперёд-влево — форма реально меняется!
-          float s3 = smoothstep(0.42, 0.80, spread) * smoothstep(0.65, 1.35, morph);
-          vec2 c3 = vec2(0.28 + 0.20 * s3, 0.04 + 0.10 * s3);
-          float r3 = 0.23 * s3;
-          field += (r3 * r3) / (dot(q - c3, q - c3) + 0.025);
+          // 3) 3-я порция (morph 1.4..2.3): ещё одна мягкая асимметричная доля чуть правее и глубже в проём
+          float s3 = smoothstep(0.66, 1.0, spread) * smoothstep(1.38, 2.25, morph);
+          vec2 c3 = vec2(0.10 + 0.14 * s3, -0.26 - 0.20 * s3);
+          float r3 = 0.24 * s3;
+          field += (r3 * r3) / (dot(q - c3, q - c3) + 0.028);
 
-          // 4) 3-я порция (morph 1.4..2.4): прорывает новый плавный язык ещё шире вперёд-вправо!
-          float s4 = smoothstep(0.66, 1.0, spread) * smoothstep(1.40, 2.25, morph);
-          vec2 c4 = vec2(0.34 + 0.22 * s4, -0.24 - 0.20 * s4);
-          float r4 = 0.25 * s4;
-          field += (r4 * r4) / (dot(q - c4, q - c4) + 0.026);
-
-          float lobe = 1.0 + 0.075 * sin(ang * 3.0 + seed + morph * 0.55) + 0.045 * cos(ang * 5.0 - seed * 1.4 - morph * 0.4);
+          float lobe = 1.0 + 0.09 * sin(ang * 3.0 + seed + morph * 0.75) + 0.05 * cos(ang * 4.0 - seed * 1.2 - morph * 0.5);
           field *= lobe;
 
-          // Реальный физический упор жидкости в деревянные стенки проёма под раковиной!
+          // Упор в деревянные стенки проёма под раковиной (не проходит сквозь тумбу!)
           if (uPuddleParams.w > 0.5) {
             float mLeft = 1.0 - smoothstep(0.915, 0.955, vWorldPos.z);
             float mRight = smoothstep(0.345, 0.385, vWorldPos.z);
@@ -874,22 +868,11 @@ export class FirstPersonWebGLScene {
             field *= mLeft * mRight * mBack;
           }
 
-          if (field < 0.98) discard;
+          if (field < 0.99) discard;
 
-          float edgeMask = smoothstep(0.98, 1.08, field);
-          float depthGrad = clamp((field - 1.05) * 0.48, 0.0, 1.0);
-          vec3 deepCol = baseCol * 0.80;
-          vec3 thinCol = mix(baseCol, baseCol * 1.18 + vec3(0.05, 0.04, 0.02), 0.35);
-          float swirlTex = sin(q.x * 7.5 + q.y * 5.0 + seed) * cos(q.y * 6.5 - q.x * 4.5);
-          baseCol = mix(thinCol, deepCol, depthGrad) * (1.0 + swirlTex * 0.045);
-
-          // Физический мениск поверхностного натяжения и перелив света по выпуклой кромке лужи!
-          float meniscus = smoothstep(0.99, 1.06, field) * (1.0 - smoothstep(1.07, 1.24, field));
-          baseCol += vec3(0.24, 0.22, 0.18) * meniscus * 0.42;
-          vec2 gradDir = normalize(q + vec2(0.0001));
-          N = normalize(vec3(gradDir.x * meniscus * 0.38, 1.0, gradDir.y * meniscus * 0.38));
-
-          alpha = uAlpha * edgeMask * (0.78 + 0.18 * depthGrad);
+          // Чистый, плотный, стильный материал ровно в стиле нашей low-poly графики (без акварели и белой каймы!)
+          float edgeMask = smoothstep(0.99, 1.03, field);
+          alpha = uAlpha * edgeMask;
         }
 
         vec3 Ldir = normalize(vec3(0.32, 0.9, 0.48));
@@ -4809,8 +4792,8 @@ export class FirstPersonWebGLScene {
         trashX,
         ly,
         trashZ,
-        1.06,
-        1.06,
+        0.74,
+        0.74,
         pCol,
         puddleAlpha,
         rawSpread,
@@ -7622,7 +7605,7 @@ export class FirstPersonWebGLScene {
     const gl = this.gl;
     if (!gl || !this.uPuddleParams) return;
     gl.uniform4f(this.uPuddleParams, spread, morph, seed, wallClip);
-    this.drawMesh('floor_quad', x, y, z, sx, 1.0, sz, color, 0.2, null, 0.96, 7, alpha);
+    this.drawMesh('floor_quad', x, y, z, sx, 1.0, sz, color, 0.18, null, 0.72, 7, alpha);
   }
 
   drawTexturedQuad(tex, x, y, z, sx, sy, emissive = 0.75, rot = null) {
