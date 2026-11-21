@@ -1,16 +1,16 @@
-import { GAME_CONFIG } from './config.js?v=99';
-import { gameState, createShiftRuntimeState } from './state.js?v=99';
-import { audio } from './audio.js?v=99';
+import { GAME_CONFIG } from './config.js?v=100';
+import { gameState, createShiftRuntimeState } from './state.js?v=100';
+import { audio } from './audio.js?v=100';
 import {
   buildCustomerPortraitSVG,
   buildCourierDroneSVG,
   generateAppleTouchIcon
-} from './renderer.js?v=99';
-import { FirstPersonWebGLScene } from './webgl3d.js?v=99';
-import { CustomerAndDeliverySystem } from './customers.js?v=99';
-import { KitchenSystem } from './kitchen.js?v=99';
-import { EconomySystem } from './economy.js?v=99';
-import { TutorialSystem } from './tutorial.js?v=99';
+} from './renderer.js?v=100';
+import { FirstPersonWebGLScene } from './webgl3d.js?v=100';
+import { CustomerAndDeliverySystem } from './customers.js?v=100';
+import { KitchenSystem } from './kitchen.js?v=100';
+import { EconomySystem } from './economy.js?v=100';
+import { TutorialSystem } from './tutorial.js?v=100';
 
 class CyberRamenApp {
   constructor() {
@@ -272,6 +272,27 @@ class CyberRamenApp {
       return;
     }
 
+    if (hitId === 'center_counter_surface') {
+      const res = this.kitchenSystem.handleCenterSurfaceTap();
+      if (res) {
+        this.scene3D.triggerReserveAnim(res);
+      }
+      return;
+    }
+
+    if (hitId.startsWith('center_item_')) {
+      const itemId = hitId.slice('center_item_'.length);
+      const res = this.kitchenSystem.handleCenterItemTap(itemId);
+      if (res) {
+        if (res.action === 'pickup_tray_right' || res.action === 'handoff_and_pickup_tray_left') {
+          this.scene3D.triggerDualHandAnim(res.action, res);
+        } else {
+          this.scene3D.triggerReserveAnim(res);
+        }
+      }
+      return;
+    }
+
     if (hitId === 'customer_serve') {
       if (gameState.runtime.cameraFocus === 'customer') {
         const hasHeld = Boolean(gameState.runtime.activeVessel && gameState.runtime.activeVessel.type);
@@ -421,7 +442,7 @@ class CyberRamenApp {
 
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker
-        .register('./sw.js?v=99', { updateViaCache: 'none' })
+        .register('./sw.js?v=100', { updateViaCache: 'none' })
         .then((reg) => reg.update())
         .catch(() => {});
     }

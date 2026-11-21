@@ -1,5 +1,5 @@
-import { GAME_CONFIG } from './config.js?v=99';
-import { gameState } from './state.js?v=99';
+import { GAME_CONFIG } from './config.js?v=100';
+import { gameState } from './state.js?v=100';
 import {
   createAlleyBackdropTexture,
   createBuildingFacadeTexture,
@@ -9,7 +9,7 @@ import {
   createWallMenuSignTexture,
   createPedestrianTextures,
   AnimeCustomerTextureRenderer
-} from './art3d.js?v=99';
+} from './art3d.js?v=100';
 
 /**
  * Полноэкранный WebGL 3D движок от первого лица с процедурной высокодетализированной
@@ -3160,7 +3160,8 @@ export class FirstPersonWebGLScene {
         this.drawMesh('wavy_noodle', asmX + 0.12, sy + 0.006, asmZ - 0.02, 0.095 * spillScale, 0.012, 0.08 * spillScale, [1.0, 0.84, 0.3], 0.22, [0, -0.9, 0]);
       }
 
-      if (isCenterWorktable && !a.hasTray && !a.hasBag && spill.level > 0) {
+      const anyHeldForSpill = hasHeldVessel || Boolean(rt.rightHandVessel && rt.rightHandVessel.type);
+      if (isCenterWorktable && !a.hasTray && !a.hasBag && spill.level > 0 && !anyHeldForSpill) {
         this.registerHitbox('table_spill', asmX, asmY + 0.02, asmZ, 94);
       }
     }
@@ -3441,6 +3442,44 @@ export class FirstPersonWebGLScene {
 
     if (isCenterWorktable && (a.hasTray || a.hasBag)) {
       this.registerHitbox('assembly_zone', asmX, asmY + 0.08, asmZ, 116);
+    }
+
+    // 1В. СВОБОДНАЯ РАССТАНОВКА ДО 3 ПРЕДМЕТОВ НА ЦЕНТРАЛЬНОЙ СТОЛЕШНИЦЕ (КОГДА НЕТ ПОДНОСА И ПАКЕТА):
+    // 3 живые зоны (слева, по центру, справа) с хаотичным случайным смещением и гарантией непересечения!
+    if (!a.hasTray && !a.hasBag) {
+      const centerItems = Array.isArray(rt.centerItems) ? rt.centerItems : [];
+      const hidingCenterId =
+        this.reserveAnim.active &&
+        this.reserveAnim.action === 'place' &&
+        this.reserveAnim.item
+          ? this.reserveAnim.item.id
+          : null;
+      const centerSurfaceY = 0.896;
+
+      for (const item of centerItems) {
+        if (!item || !item.vessel || item.id === hidingCenterId) continue;
+        this.drawFilledVessel3D(
+          item.x,
+          centerSurfaceY,
+          item.z,
+          item.vessel,
+          0.7,
+          false,
+          [0, item.rotY || 0, 0]
+        );
+        if (isCenterWorktable) {
+          this.registerHitbox(`center_item_${item.id}`, item.x, centerSurfaceY + 0.06, item.z, 48);
+        }
+      }
+
+      if (isCenterWorktable) {
+        const hasAnyInHands = hasHeldVessel || Boolean(rt.rightHandVessel && rt.rightHandVessel.type);
+        if (hasAnyInHands || spill.level <= 0) {
+          for (const cx of [-0.25, 0.0, 0.25]) {
+            this.registerHitbox('center_counter_surface', cx, centerSurfaceY + 0.03, -0.24, 84, true);
+          }
+        }
+      }
     }
 
     // 2. 6 УВЕЛИЧЕННЫХ И ВЫСОКОДЕТАЛИЗИРОВАННЫХ 3D-ГАСТРОЕМКОСТЕЙ (GN-КОНТЕЙНЕРОВ) В 2 ШИРОКИХ РЯДА

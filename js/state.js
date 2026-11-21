@@ -1,4 +1,4 @@
-import { GAME_CONFIG } from './config.js?v=99';
+import { GAME_CONFIG } from './config.js?v=100';
 
 const BASE_SAVE_KEY = 'CR_NIGHT_YATAI_SAVE_V1';
 
@@ -109,6 +109,8 @@ export function createShiftRuntimeState() {
       targetSpread: 0,
       broth: 'tonkotsu'
     },
+    // Посуда (полная и пустая), свободно расставленная на центральной столешнице (до 3 предметов без подноса)
+    centerItems: [],
     // Посуда (полная и пустая), свободно расставленная на новой правой столешнице справа от холодильника (Сектор 3)
     reserveItems: [],
     nextDirtyShelfSide: 'left',
