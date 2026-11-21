@@ -1,5 +1,5 @@
-import { GAME_CONFIG } from './config.js?v=106';
-import { gameState } from './state.js?v=106';
+import { GAME_CONFIG } from './config.js?v=107';
+import { gameState } from './state.js?v=107';
 import {
   createAlleyBackdropTexture,
   createBuildingFacadeTexture,
@@ -9,7 +9,7 @@ import {
   createWallMenuSignTexture,
   createPedestrianTextures,
   AnimeCustomerTextureRenderer
-} from './art3d.js?v=106';
+} from './art3d.js?v=107';
 
 /**
  * Полноэкранный WebGL 3D движок от первого лица с процедурной высокодетализированной
@@ -776,6 +776,8 @@ export class FirstPersonWebGLScene {
         vec3 V = normalize(uCamPos - vWorldPos);
         vec3 baseCol = uColor;
         float alpha = uAlpha;
+        bool isPuddle = false;
+        vec3 puddleLit = vec3(0.0);
 
         if (uUseTex > 0.5) {
           vec2 uv = vec2(vLocalPos.x + 0.5, 0.5 - vLocalPos.y);
@@ -881,41 +883,44 @@ export class FirstPersonWebGLScene {
 
           if (field < 0.99) discard;
 
-          // Стилизованная 3D-разнослойность жидкости (тонкий полупрозрачный край -> сочный средний слой -> густой глубокий центр!)
+          // Стилизованная 3D-разнослойность жидкости в точном цвете брызг бульона при переливании!
           float edgeMask = smoothstep(0.99, 1.03, field);
-          float midLayer = smoothstep(1.18, 1.38, field);
-          float deepLayer = smoothstep(1.68, 2.05, field);
+          float midLayer = smoothstep(1.16, 1.38, field);
+          float deepLayer = smoothstep(1.68, 2.08, field);
 
-          // Насыщенные слои реального бульона (без пересвета в белый!)
-          vec3 colThin = baseCol * 0.88;
-          vec3 colMid = baseCol * 0.72;
-          vec3 colDeep = baseCol * 0.54;
-          baseCol = mix(colThin, colMid, midLayer);
-          baseCol = mix(baseCol, colDeep, deepLayer * 0.9);
+          vec3 brothRgb = uColor;
+          vec3 colThin = brothRgb * 1.12;
+          vec3 colMid = brothRgb * 1.02;
+          vec3 colDeep = brothRgb * 0.82;
+          vec3 puddleCol = mix(colThin, colMid, midLayer);
+          puddleCol = mix(puddleCol, colDeep, deepLayer * 0.85);
 
-          // Деликатные стилизованные «глазки» бульонного масла (сохраняют цвет бульона!)
-          float oilSpots = smoothstep(0.74, 0.90, sin(q.x * 13.0 + seed) * cos(q.y * 13.0 - seed * 0.8));
-          baseCol = mix(baseCol, baseCol * 1.28, oilSpots * 0.35 * midLayer);
+          // Капельки ароматного масла внутри бульона (в том же стиле, что на брызгах и луже на столе!)
+          float oilSpots = smoothstep(0.72, 0.90, sin(q.x * 14.0 + seed) * cos(q.y * 14.0 - seed * 0.85));
+          puddleCol = mix(puddleCol, min(brothRgb * 1.26 + vec3(0.08, 0.05, 0.01), vec3(1.0)), oilSpots * 0.36 * midLayer);
 
-          // Острые локальные влажные 3D-блики (не выбеливают всю лужу, а дают точечный «мокрый» глянец!)
-          vec3 L_niche = normalize(vec3(-0.60, 0.73, 0.66) - vWorldPos);
+          // Мягкий объёмный свет ниши + точечный мокрый 3D-глянец (в тёплом тоне самого бульона, без выбеливания!)
+          float nicheAtt = 1.0 / (1.0 + 0.35 * length(vec3(-0.58, 0.72, 0.68) - vWorldPos));
+          vec3 L_niche = normalize(vec3(-0.56, 0.76, 0.64) - vWorldPos);
           vec3 H_niche = normalize(L_niche + V);
-          float specNiche = pow(max(dot(N, H_niche), 0.0), 96.0);
+          float specMain = pow(max(dot(N, H_niche), 0.0), 88.0);
 
-          vec3 L_neon = normalize(vec3(-0.45, 0.90, 0.62) - vWorldPos);
-          vec3 H_neon = normalize(L_neon + V);
-          float specNeon = pow(max(dot(N, H_neon), 0.0), 84.0);
+          vec3 L_side = normalize(vec3(0.25, 1.35, 0.22) - vWorldPos);
+          vec3 H_side = normalize(L_side + V);
+          float specSide = pow(max(dot(N, H_side), 0.0), 64.0);
 
           float wetRim = smoothstep(1.01, 1.05, field) * (1.0 - smoothstep(1.06, 1.15, field));
+          vec3 glintCol = mix(brothRgb, vec3(1.0, 0.96, 0.86), 0.58);
 
-          baseCol += vec3(0.95, 0.88, 0.72) * (specNiche * 0.34 + oilSpots * specNiche * 0.18);
-          baseCol += vec3(0.14, 0.88, 0.84) * (specNeon * 0.16);
-          baseCol += baseCol * wetRim * 0.22;
+          puddleLit = puddleCol * (0.84 + 0.18 * nicheAtt)
+                    + glintCol * (specMain * 0.42 + specSide * 0.22 + oilSpots * specMain * 0.20)
+                    + brothRgb * wetRim * 0.24;
+          isPuddle = true;
 
-          // Разнослойная полупрозрачность: край (~0.52) просвечивает пол -> середина (~0.80) -> центр (~0.93)
-          float layerAlpha = mix(0.52, 0.80, midLayer);
-          layerAlpha = mix(layerAlpha, 0.93, deepLayer);
-          layerAlpha = clamp(layerAlpha + specNiche * 0.25 + specNeon * 0.12, 0.0, 0.96);
+          // Разнослойная полупрозрачность: край (~0.62) слегка просвечивает пол -> середина (~0.88) -> густой центр (~0.96)
+          float layerAlpha = mix(0.62, 0.88, midLayer);
+          layerAlpha = mix(layerAlpha, 0.96, deepLayer);
+          layerAlpha = clamp(layerAlpha + specMain * 0.18 + specSide * 0.10, 0.0, 0.98);
           alpha = uAlpha * edgeMask * layerAlpha;
         }
 
@@ -947,6 +952,9 @@ export class FirstPersonWebGLScene {
 
         if (uUseTex > 0.5) {
           litColor = mix(litColor, baseCol, clamp(uEmissive, 0.0, 1.0));
+        }
+        if (isPuddle) {
+          litColor = puddleLit;
         }
 
         float depth = length(vWorldPos - uCamPos);
@@ -5048,9 +5056,9 @@ export class FirstPersonWebGLScene {
 
     if (rawSpread > 0.01) {
       const brothColFallback = {
-        tonkotsu: [0.88, 0.68, 0.36],
-        chili_broth: [0.88, 0.18, 0.15],
-        miso_mushroom: [0.56, 0.22, 0.72]
+        tonkotsu: [0.92, 0.74, 0.44],
+        chili_broth: [0.95, 0.18, 0.2],
+        miso_mushroom: [0.68, 0.18, 0.92]
       };
       const targetCol =
         (tLeak.puddleSpread || 0) > 0.005
@@ -5069,7 +5077,7 @@ export class FirstPersonWebGLScene {
       }
       const pCol = this._trashLeakRenderCol;
       const ly = trashBaseY + 0.004;
-      const puddleAlpha = 0.92 * Math.min(1, rawSpread * 2.5);
+      const puddleAlpha = 0.96 * Math.min(1, rawSpread * 2.5);
 
       this.drawFloorPuddle3D(
         trashX,
@@ -7888,7 +7896,7 @@ export class FirstPersonWebGLScene {
     const gl = this.gl;
     if (!gl || !this.uPuddleParams) return;
     gl.uniform4f(this.uPuddleParams, spread, morph, seed, wallClip);
-    this.drawMesh('floor_quad', x, y, z, sx, 1.0, sz, color, 0.08, null, 0.26, 7, alpha);
+    this.drawMesh('floor_quad', x, y, z, sx, 1.0, sz, color, 0.0, null, 0.0, 7, alpha);
   }
 
   drawTexturedQuad(tex, x, y, z, sx, sy, emissive = 0.75, rot = null) {

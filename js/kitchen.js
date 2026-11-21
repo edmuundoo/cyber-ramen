@@ -1,6 +1,6 @@
-import { GAME_CONFIG } from './config.js?v=106';
-import { gameState } from './state.js?v=106';
-import { audio } from './audio.js?v=106';
+import { GAME_CONFIG } from './config.js?v=107';
+import { gameState } from './state.js?v=107';
+import { audio } from './audio.js?v=107';
 
 export class KitchenSystem {
   constructor(callbacks) {
@@ -129,7 +129,7 @@ export class KitchenSystem {
         if (nextLeak.delay <= 0) {
           tl.queue.shift();
           const prevN = tl.activeCount || 0;
-          const addCol = Array.isArray(nextLeak.color) ? nextLeak.color : [0.88, 0.68, 0.38];
+          const addCol = Array.isArray(nextLeak.color) ? nextLeak.color : [0.92, 0.74, 0.44];
 
           // Смешиваем цвет лужи только в момент, когда эта порция реально просочилась в лужу!
           if (!Array.isArray(tl.color) || prevN === 0) {
@@ -937,9 +937,9 @@ export class KitchenSystem {
     const hadFood = !this.isVesselEmptyOfFood(tossed);
     if (tossed && tossed.broth) {
       const brothRgbMap = {
-        tonkotsu: [0.88, 0.68, 0.36],
-        chili_broth: [0.88, 0.18, 0.15],
-        miso_mushroom: [0.56, 0.22, 0.72]
+        tonkotsu: [0.92, 0.74, 0.44],
+        chili_broth: [0.95, 0.18, 0.2],
+        miso_mushroom: [0.68, 0.18, 0.92]
       };
       const addCol = brothRgbMap[tossed.broth] || brothRgbMap.tonkotsu;
       if (!rt.trashLeak) {
