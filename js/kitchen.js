@@ -1,6 +1,6 @@
-import { GAME_CONFIG } from './config.js?v=112';
-import { gameState } from './state.js?v=112';
-import { audio } from './audio.js?v=112';
+import { GAME_CONFIG } from './config.js?v=113';
+import { gameState } from './state.js?v=113';
+import { audio } from './audio.js?v=113';
 
 export class KitchenSystem {
   constructor(callbacks) {
@@ -204,7 +204,7 @@ export class KitchenSystem {
   }
 
   isAccessoryItem(v) {
-    return Boolean(v && (v.type === 'drink' || v.type === 'chopsticks'));
+    return Boolean(v && (v.type === 'drink' || v.type === 'chopsticks' || v.type === 'bag' || v.type === 'tray'));
   }
 
   isFoodVessel(v) {
@@ -216,6 +216,8 @@ export class KitchenSystem {
     if (v.type === 'bowl') return '🍜 Миска';
     if (v.type === 'box') return '📦 Коробка';
     if (v.type === 'chopsticks') return '🥢 Палочки';
+    if (v.type === 'bag') return '🛍️ Пакет';
+    if (v.type === 'tray') return '🍱 Поднос';
     if (v.type === 'drink') {
       const cfg = GAME_CONFIG.DRINKS?.[v.drinkId];
       return cfg ? `${cfg.emoji} ${cfg.name}` : '🥤 Напиток';
@@ -941,12 +943,18 @@ export class KitchenSystem {
     const leftIsBox = hasLeft && left.type === 'box';
     const rightIsBox = hasRight && right.type === 'box';
     const rightIsAcc = hasRight && this.isAccessoryItem(right);
+    const rightDisposableAcc = hasRight && (right.type === 'drink' || right.type === 'chopsticks');
     const leftFilledBowl = hasLeft && left.type === 'bowl' && !this.isVesselEmptyOfFood(left);
     const rightFilledBowl = hasRight && right.type === 'bowl' && !this.isVesselEmptyOfFood(right);
 
-    if (!leftIsBox && !rightIsBox && !leftFilledBowl && !rightFilledBowl && !rightIsAcc) {
+    if (!leftIsBox && !rightIsBox && !leftFilledBowl && !rightFilledBowl && !rightDisposableAcc) {
       audio.playPenaltyBuzz();
-      this.onToast('🍜 Пустую чистую миску не выбрасывают — верните её в стопку на складе ▶!', '#ffaa00');
+      this.onToast(
+        hasRight && (right.type === 'tray' || right.type === 'bag')
+          ? `${this.getItemLabel(right)} не выбрасывают в мусорку — верните под прилавок или поставьте на стол!`
+          : '🍜 Пустую чистую миску не выбрасывают — верните её в стопку на складе ▶!',
+        '#ffaa00'
+      );
       return null;
     }
 
@@ -1164,8 +1172,17 @@ export class KitchenSystem {
   // - Если на столе стоит ровно 1 банка или палочки (руки свободны) -> правая приподнимает их, ЛЕВАЯ ставит поднос, правая кладёт на поднос!
   // - Если на столе стоит ровно 1 миска/коробка (руки свободны) -> левая приподнимает её, правая ставит поднос, левая ставит на поднос!
   takeTrayFromUnderCounter() {
-    if (this.blockIfBothHandsBusy()) return false;
     const rt = gameState.runtime;
+    // Если в правой руке уже держим пустой поднос — возвращаем его обратно в стопку под прилавком!
+    if (rt.rightHandVessel && rt.rightHandVessel.type === 'tray') {
+      const returnedTray = JSON.parse(JSON.stringify(rt.rightHandVessel));
+      rt.rightHandVessel = null;
+      audio.playTapPop();
+      this.onToast('🍱 Поднос возвращён обратно в стопку под прилавком!', '#00f5d4');
+      this.renderAllKitchen();
+      return { action: 'return_under', itemType: 'tray', tray: returnedTray };
+    }
+    if (this.blockIfBothHandsBusy()) return false;
     if (!rt.assembly) {
       rt.assembly = { hasTray: false, hasBag: false, vessel: null, hasChopsticks: false, drink: null };
     }
@@ -1296,8 +1313,16 @@ export class KitchenSystem {
   // - Если на столе стоит ровно 1 коробка (руки свободны) -> левая приподнимает, правая ставит пакет, левая запечатывает и опускает внутрь!
   // - Если стоял поднос с заказом -> перекладывание заказа с подноса в пакет!
   takeBagFromUnderCounter() {
-    if (this.blockIfBothHandsBusy()) return null;
     const rt = gameState.runtime;
+    // Если в правой руке уже держим пустой пакет — возвращаем его обратно под холодильник!
+    if (rt.rightHandVessel && rt.rightHandVessel.type === 'bag') {
+      rt.rightHandVessel = null;
+      audio.playTapPop();
+      this.onToast('🛍️ Пакет возвращён обратно под холодильник!', '#00f5d4');
+      this.renderAllKitchen();
+      return { action: 'return_under', itemType: 'bag' };
+    }
+    if (this.blockIfBothHandsBusy()) return null;
     if (!rt.assembly) {
       rt.assembly = { hasTray: false, hasBag: false, vessel: null, hasChopsticks: false, drink: null };
     }
@@ -1425,18 +1450,19 @@ export class KitchenSystem {
     if (a.vessel) present.push('vessel');
     if (a.drink) present.push('drink');
     if (a.hasChopsticks) present.push('chopsticks');
-    const hist = Array.isArray(a.bagHistory) ? a.bagHistory.filter((k) => present.includes(k)) : [];
-    for (const k of present) {
-      if (!hist.includes(k)) hist.push(k);
+    // Упрощённый LIFO: коробка и банка сохраняют точный порядок укладки, а палочки ВСЕГДА достаются последними!
+    const nonChop = (Array.isArray(a.bagHistory) ? a.bagHistory : []).filter(
+      (k) => k !== 'chopsticks' && present.includes(k)
+    );
+    for (const k of ['vessel', 'drink']) {
+      if (present.includes(k) && !nonChop.includes(k)) nonChop.push(k);
     }
+    const hist = present.includes('chopsticks') ? ['chopsticks', ...nonChop] : nonChop;
     a.bagHistory = hist;
     return hist;
   }
 
-  // Поставить посуду, напиток или палочки на поднос / в пакет, или забрать обратно в нужную руку!
-  // Для пакета:
-  // - Пустой пакет + пустые руки -> убираем пакет обратно под прилавок!
-  // - Непустой пакет + пустые руки (или продолжаем доставать в свободную вторую руку) -> достаём по очереди LIFO (последнее положенное — первым!) в обе руки!
+  // Поставить посуду, напиток, палочки, пакет или поднос на зону сборки, или забрать пустой пакет/поднос в правую руку!
   handleAssemblyZoneTap(preferredPart = null) {
     const rt = gameState.runtime;
     if (!rt.assembly) {
@@ -1463,25 +1489,88 @@ export class KitchenSystem {
       return null;
     }
 
-    // 0.0 СПЕЦИАЛЬНАЯ ЛОГИКА ДЛЯ ПАКЕТА: уборка пустого пакета под стол ИЛИ вынимание содержимого в обратном порядке (LIFO) в обе руки!
+    // 0.-1 В ПРАВОЙ руке пустой ПАКЕТ или ПОДНОС -> ставим пакет на поднос / поднос под пакет!
+    if (hasRight && rightV.type === 'bag') {
+      if (a.hasBag) {
+        audio.playPenaltyBuzz();
+        this.onToast('🛍️ Пакет уже стоит на столе!', '#ffaa00');
+        return null;
+      }
+      if (a.vessel && a.vessel.type === 'bowl') {
+        audio.playPenaltyBuzz();
+        this.onToast(
+          '🚫 Тарелку нельзя положить в пакет — только 📦 Коробку! Сначала заберите миску с подноса.',
+          '#ff385c'
+        );
+        return null;
+      }
+      const hadItems = Boolean(a.vessel || a.hasChopsticks || a.drink);
+      const prevVessel = a.vessel ? JSON.parse(JSON.stringify(a.vessel)) : null;
+      const prevChopsticks = Boolean(a.hasChopsticks);
+      const prevDrink = a.drink || null;
+      a.hasBag = true;
+      a.bagHistory = [];
+      a.unpackingBag = false;
+      if (a.vessel) a.bagHistory.push('vessel');
+      if (a.drink) a.bagHistory.push('drink');
+      if (a.hasChopsticks) a.bagHistory.push('chopsticks');
+      rt.rightHandVessel = null;
+      audio.playTapPop();
+      if (hadItems) {
+        audio.playSealerPress();
+        this.onToast('🛍️ Пакет поставлен на поднос, заказ аккуратно переложен внутрь!', '#00f5d4');
+        this.renderAllKitchen();
+        return { action: 'repack_bag', hadItems: true, onTray: true, prevVessel, prevChopsticks, prevDrink };
+      }
+      this.onToast('🛍️ Пакет поставлен прямо на поднос!', '#00f5d4');
+      this.renderAllKitchen();
+      return { action: 'place_accessory', itemType: 'bag', intoBag: false, onTray: true };
+    }
+
+    if (hasRight && rightV.type === 'tray') {
+      if (a.hasTray) {
+        audio.playPenaltyBuzz();
+        this.onToast('🍱 Поднос уже стоит на столе!', '#ffaa00');
+        return null;
+      }
+      a.hasTray = true;
+      if (rt.tableSpill && rt.tableSpill.level > 0) {
+        a.isDirtyTray = true;
+        a.dirtyTrayBroth = rt.tableSpill.broth || 'tonkotsu';
+      } else {
+        a.isDirtyTray = Boolean(rightV.isDirtyTray);
+        a.dirtyTrayBroth = rightV.dirtyTrayBroth || null;
+      }
+      const trayCopy = JSON.parse(JSON.stringify(rightV));
+      rt.rightHandVessel = null;
+      audio.playTapPop();
+      this.onToast('🍱 Поднос поставлен на центральную столешницу!', '#00f5d4');
+      this.renderAllKitchen();
+      return { action: 'place_accessory', itemType: 'tray', tray: trayCopy };
+    }
+
+    // 0.0 СПЕЦИАЛЬНАЯ ЛОГИКА ДЛЯ ПАКЕТА:
+    // - Пустой пакет + пустые руки -> берём пустой пакет в ПРАВУЮ руку (можно поставить на стол, справа ▶ или под холодильник)!
+    // - Непустой пакет + пустые руки (или вторая свободная рука) -> достаём по LIFO (палочки всегда последними!) в обе руки!
     if (a.hasBag) {
       const bagHist = this.getSyncedBagHistory(a);
 
-      // Пустой пакет + пустые руки -> убираем пакет обратно под прилавок!
+      // Пустой пакет + пустые руки -> берём пустой пакет в ПРАВУЮ руку!
       if (bagHist.length === 0 && !hasHand && !hasRight) {
         const wasOnTray = Boolean(a.hasTray);
         a.hasBag = false;
         a.bagHistory = [];
         a.unpackingBag = false;
+        rt.rightHandVessel = { type: 'bag' };
         audio.playTapPop();
         this.onToast(
           wasOnTray
-            ? '🛍️ Пустой пакет убран обратно под прилавок — остался чистый поднос!'
-            : '🛍️ Пустой пакет убран обратно под прилавок!',
+            ? '🛍️ Пустой пакет взят с подноса в правую руку! Поставьте на стол, справа ▶ или уберите под холодильник.'
+            : '🛍️ Пустой пакет взят в правую руку! Поставьте на стол, справа ▶ или уберите под холодильник.',
           '#00f5d4'
         );
         this.renderAllKitchen();
-        return { action: 'return_bag', wasOnTray };
+        return { action: 'pickup_accessory', itemType: 'bag', onTray: wasOnTray };
       }
 
       // Непустой пакет: начинаем доставать с пустыми руками ИЛИ продолжаем доставать в свободную вторую руку!
@@ -1541,6 +1630,27 @@ export class KitchenSystem {
           return null;
         }
       }
+    }
+
+    // 0.0Б ПУСТОЙ ПОДНОС (без пакета и без предметов на нём) + пустые руки -> берём пустой поднос в ПРАВУЮ руку!
+    if (a.hasTray && !a.hasBag && !a.vessel && !a.drink && !a.hasChopsticks && !hasHand && !hasRight) {
+      const liftedTray = {
+        type: 'tray',
+        isDirtyTray: Boolean(a.isDirtyTray),
+        dirtyTrayBroth: a.dirtyTrayBroth || null,
+        hasBag: false
+      };
+      a.hasTray = false;
+      a.isDirtyTray = false;
+      a.dirtyTrayBroth = null;
+      rt.rightHandVessel = liftedTray;
+      audio.playTapPop();
+      this.onToast(
+        '🍱 Пустой поднос взят в правую руку! Поставьте на стол, справа ▶ или верните в стопку под прилавком.',
+        '#00f5d4'
+      );
+      this.renderAllKitchen();
+      return { action: 'pickup_accessory', itemType: 'tray', tray: liftedTray };
     }
 
     // 0А. Точечный тап по банке на подносе (когда правая рука свободна, и не мешаем постановке посуды из левой)
@@ -2181,36 +2291,44 @@ export class KitchenSystem {
   // НОВАЯ ПРАВАЯ СТОЛЕШНИЦА-РЕЗЕРВ СПРАВА ОТ ХОЛОДИЛЬНИКА (СЕКТОР 3):
   // Умный подбор случайных НЕПЕРЕСЕКАЮЩИХСЯ точек для свободного складирования тарелок и коробок!
   // =========================================================================
-  findFreeReserveSpot(items = []) {
-    const minX = 0.62;
-    const maxX = 1.16;
-    const minZ = 0.70;
-    const maxZ = 1.28;
-    const minDist = 0.275;
+  findFreeReserveSpot(items = [], placingType = null) {
+    const getRadius = (t) => (t === 'tray' ? 0.255 : t === 'bag' ? 0.195 : 0.138);
+    const myR = getRadius(placingType);
+    const isLarge = placingType === 'tray' || placingType === 'bag';
+    const minX = placingType === 'tray' ? 0.72 : placingType === 'bag' ? 0.68 : 0.62;
+    const maxX = placingType === 'tray' ? 1.06 : placingType === 'bag' ? 1.1 : 1.16;
+    const minZ = placingType === 'tray' ? 0.84 : placingType === 'bag' ? 0.78 : 0.7;
+    const maxZ = placingType === 'tray' ? 1.2 : placingType === 'bag' ? 1.24 : 1.28;
 
-    const isClear = (x, z, distLimit) => {
+    const pickRot = () =>
+      isLarge
+        ? +(-Math.PI * 0.5 + (Math.random() - 0.5) * 0.22).toFixed(3)
+        : +((Math.random() - 0.5) * 0.45).toFixed(3);
+
+    const isClear = (x, z, slack = 1.0) => {
       for (const it of items) {
-        if (Math.hypot(x - it.x, z - it.z) < distLimit) return false;
+        const itR = getRadius(it?.vessel?.type);
+        if (Math.hypot(x - it.x, z - it.z) < (myR + itR) * slack) return false;
       }
       return true;
     };
 
-    // 1. До 90 случайных точек по всей поверхности столешницы (естественная живая расстановка без жёсткой сетки!)
+    // 1. До 90 случайных точек по всей поверхности столешницы (естественная живая расстановка без пересечений!)
     for (let attempt = 0; attempt < 90; attempt++) {
       const rx = minX + Math.random() * (maxX - minX);
       const rz = minZ + Math.random() * (maxZ - minZ);
-      if (isClear(rx, rz, minDist)) {
+      if (isClear(rx, rz, 1.0)) {
         return {
           x: +rx.toFixed(3),
           z: +rz.toFixed(3),
-          rotY: +((Math.random() - 0.5) * 0.45).toFixed(3)
+          rotY: pickRot()
         };
       }
     }
 
-    // 2. Fallback: плотный поиск самой свободной точки, когда стол почти заполнен (до 6-8 предметов без пересечений!)
+    // 2. Fallback: плотный поиск самой свободной точки, когда стол почти заполнен!
     let best = null;
-    let bestMinD = 0;
+    let bestMargin = -Infinity;
     const steps = 7;
     for (let ix = 0; ix < steps; ix++) {
       for (let iz = 0; iz < steps; iz++) {
@@ -2218,17 +2336,18 @@ export class KitchenSystem {
         const cz = minZ + (iz / (steps - 1)) * (maxZ - minZ) + (Math.random() - 0.5) * 0.025;
         const clampedX = Math.max(minX, Math.min(maxX, cx));
         const clampedZ = Math.max(minZ, Math.min(maxZ, cz));
-        let nearest = Infinity;
+        let minMargin = Infinity;
         for (const it of items) {
-          const d = Math.hypot(clampedX - it.x, clampedZ - it.z);
-          if (d < nearest) nearest = d;
+          const itR = getRadius(it?.vessel?.type);
+          const margin = Math.hypot(clampedX - it.x, clampedZ - it.z) - (myR + itR) * 0.92;
+          if (margin < minMargin) minMargin = margin;
         }
-        if (nearest >= 0.252 && nearest > bestMinD) {
-          bestMinD = nearest;
+        if (minMargin >= 0 && minMargin > bestMargin) {
+          bestMargin = minMargin;
           best = {
             x: +clampedX.toFixed(3),
             z: +clampedZ.toFixed(3),
-            rotY: +((Math.random() - 0.5) * 0.45).toFixed(3)
+            rotY: pickRot()
           };
         }
       }
@@ -2247,21 +2366,25 @@ export class KitchenSystem {
 
     if (!hasLeft && !hasRight) {
       audio.playTapPop();
-      this.onToast('📦 Свободная столешница справа от холодильника — сюда можно складывать посуду, напитки и палочки!', '#00f5d4');
+      this.onToast('📦 Свободная столешница справа от холодильника — сюда можно складывать посуду, напитки, палочки, подносы и пакеты!', '#00f5d4');
       return null;
     }
 
-    const spot = this.findFreeReserveSpot(rt.reserveItems);
+    const fromRight = hasRight;
+    const srcObj = fromRight ? right : left;
+    const spot = this.findFreeReserveSpot(rt.reserveItems, srcObj?.type);
     if (!spot) {
       audio.playPenaltyBuzz();
       this.onToast('🚫 На правой столешнице больше нет свободного места! Заберите что-нибудь со стола.', '#ffaa00');
       return null;
     }
 
-    const fromRight = hasRight;
-    const placedVessel = JSON.parse(JSON.stringify(fromRight ? right : left));
+    const placedVessel = JSON.parse(JSON.stringify(srcObj));
     if (this.isFoodVessel(placedVessel)) {
       placedVessel.wasStagedOnTable = true;
+    }
+    if (placedVessel.type === 'tray') {
+      placedVessel.hasBag = false;
     }
 
     const item = {
@@ -2305,13 +2428,57 @@ export class KitchenSystem {
     const right = rt.rightHandVessel;
     const hasLeft = Boolean(left && left.type);
     const hasRight = Boolean(right && right.type);
+    const item = rt.reserveItems[idx];
+
+    // Особый случай 1: В правой руке ПАКЕТ, а мы тапнули прямо по ПОДНОСУ на правой столешнице -> ставим пакет ПРЯМО НА ПОДНОС!
+    if (hasRight && right.type === 'bag' && item.vessel?.type === 'tray' && !item.vessel.hasBag) {
+      item.vessel.hasBag = true;
+      rt.rightHandVessel = null;
+      audio.playTapPop();
+      this.onToast('🛍️ Пакет поставлен прямо на поднос на правой столешнице!', '#00f5d4');
+      this.renderAllKitchen();
+      return {
+        action: 'place',
+        item: {
+          id: `${item.id}_bag`,
+          parentId: item.id,
+          x: item.x,
+          z: item.z,
+          rotY: item.rotY,
+          yOffset: 0.013,
+          vessel: { type: 'bag' }
+        },
+        fromRight: true
+      };
+    }
+
+    // Особый случай 2: На правой столешнице стоит ПОДНОС с ПАКЕТОМ сверху, правая рука свободна -> забираем ПАКЕТ в правую руку (поднос остаётся)!
+    if (!hasRight && item.vessel?.type === 'tray' && item.vessel.hasBag) {
+      item.vessel.hasBag = false;
+      rt.rightHandVessel = { type: 'bag' };
+      audio.playTapPop();
+      this.onToast('🛍️ Пакет взят с подноса на правой столешнице в правую руку.', '#00f5d4');
+      this.renderAllKitchen();
+      return {
+        action: 'pickup',
+        item: {
+          id: `${item.id}_bag`,
+          parentId: item.id,
+          x: item.x,
+          z: item.z,
+          rotY: item.rotY,
+          yOffset: 0.013,
+          vessel: { type: 'bag' }
+        },
+        fromRight: true
+      };
+    }
 
     // Если обе руки заняты -> ставим предмет из правой руки на свободное место столешницы!
     if (hasLeft && hasRight) {
       return this.handleReserveSurfaceTap();
     }
 
-    const item = rt.reserveItems[idx];
     const pickedVessel = JSON.parse(JSON.stringify(item.vessel));
 
     // 0. Напиток или палочки ВСЕГДА забираются в ПРАВУЮ руку (независимо от левой!)
@@ -2470,6 +2637,109 @@ export class KitchenSystem {
       return null;
     }
 
+    // Если в правой руке пустой ПОДНОС или пустой ПАКЕТ -> ставим его прямо в центральную зону сборки!
+    if (hasRight && (right.type === 'tray' || right.type === 'bag')) {
+      const isTray = right.type === 'tray';
+      if (rt.centerItems.length > 1) {
+        audio.playPenaltyBuzz();
+        this.onToast(
+          `🚫 На столе слишком много предметов (${rt.centerItems.length} шт.) — освободите место под ${isTray ? 'поднос' : 'пакет'}!`,
+          '#ffaa00'
+        );
+        return null;
+      }
+      if (!rt.assembly) {
+        rt.assembly = {
+          hasTray: false,
+          hasBag: false,
+          vessel: null,
+          hasChopsticks: false,
+          drink: null,
+          bagHistory: [],
+          unpackingBag: false
+        };
+      }
+      if (rt.centerItems.length === 1) {
+        const solo = rt.centerItems[0];
+        if (!isTray && solo?.vessel?.type === 'bowl') {
+          audio.playPenaltyBuzz();
+          this.onToast('🚫 Тарелку нельзя положить в пакет — только 📦 Коробку!', '#ff385c');
+          return null;
+        }
+        if (hasLeft || this.isAccessoryItem(solo?.vessel)) {
+          audio.playPenaltyBuzz();
+          this.onToast(
+            `🚫 Сначала уберите стоящий на столе предмет или освободите левую руку, чтобы поставить ${isTray ? 'поднос' : 'пакет'}!`,
+            '#ffaa00'
+          );
+          return null;
+        }
+        const popped = rt.centerItems.pop();
+        rt.assembly.vessel = JSON.parse(JSON.stringify(popped.vessel));
+        if (isTray) {
+          rt.assembly.hasTray = true;
+          if (rt.tableSpill && rt.tableSpill.level > 0) {
+            rt.assembly.isDirtyTray = true;
+            rt.assembly.dirtyTrayBroth = rt.tableSpill.broth || 'tonkotsu';
+          } else {
+            rt.assembly.isDirtyTray = Boolean(right.isDirtyTray);
+            rt.assembly.dirtyTrayBroth = right.dirtyTrayBroth || null;
+          }
+          rt.rightHandVessel = null;
+          audio.playTapPop();
+          this.onToast(`🍱 Поднос поставлен на стол, ${this.getItemLabel(popped.vessel)} — на подносе!`, '#00f5d4');
+          this.renderAllKitchen();
+          return { action: 'tray_auto_move', autoMoveItem: popped, leftHandOnly: false };
+        }
+        rt.assembly.hasBag = true;
+        rt.assembly.bagHistory = ['vessel'];
+        rt.assembly.unpackingBag = false;
+        rt.rightHandVessel = null;
+        audio.playTapPop();
+        audio.playSealerPress();
+        this.onToast('🛍️ Пакет поставлен на стол, коробка аккуратно упакована внутрь!', '#00f5d4');
+        this.renderAllKitchen();
+        return {
+          action: 'bag_auto_move',
+          hadItems: true,
+          onTray: false,
+          fromCenterItem: popped,
+          leftHandOnly: false,
+          prevVessel: JSON.parse(JSON.stringify(popped.vessel)),
+          prevChopsticks: false,
+          prevDrink: null
+        };
+      }
+
+      // Стол пуст -> спокойно ставим поднос или пакет из правой руки на центральный стол!
+      if (isTray) {
+        const trayCopy = JSON.parse(JSON.stringify(right));
+        rt.assembly.hasTray = true;
+        if (rt.tableSpill && rt.tableSpill.level > 0) {
+          rt.assembly.isDirtyTray = true;
+          rt.assembly.dirtyTrayBroth = rt.tableSpill.broth || 'tonkotsu';
+          audio.playPenaltyBuzz();
+          this.onToast('💦 Поднос поставлен прямо на грязную лужу и испачкался! Вытрите тряпкой 🧽!', '#ff385c');
+        } else {
+          rt.assembly.isDirtyTray = Boolean(right.isDirtyTray);
+          rt.assembly.dirtyTrayBroth = right.dirtyTrayBroth || null;
+          audio.playTapPop();
+          this.onToast('🍱 Поднос поставлен обратно на центральную столешницу!', '#00f5d4');
+        }
+        rt.rightHandVessel = null;
+        this.renderAllKitchen();
+        return { action: 'place_accessory', itemType: 'tray', tray: trayCopy };
+      }
+      rt.assembly.hasBag = true;
+      rt.assembly.bagHistory = [];
+      rt.assembly.unpackingBag = false;
+      rt.rightHandVessel = null;
+      audio.playTapPop();
+      this.onToast('🛍️ Пакет поставлен обратно на центральную столешницу!', '#00f5d4');
+      this.renderAllKitchen();
+      return { action: 'place_accessory', itemType: 'bag', onTray: false };
+    }
+
     const fromRight = hasRight;
     const srcItem = fromRight ? right : left;
     const preferRight = Boolean(srcItem && this.isAccessoryItem(srcItem));
@@ -2529,8 +2799,8 @@ export class KitchenSystem {
     const hasLeft = Boolean(left && left.type);
     const hasRight = Boolean(right && right.type);
 
-    // Если обе руки заняты -> ставим предмет из правой руки на свободное место центральной столешницы (если < 3)!
-    if (hasLeft && hasRight) {
+    // Если обе руки заняты ИЛИ в правой руке пустой поднос/пакет -> делегируем постановку на центральную столешницу!
+    if ((hasLeft && hasRight) || (hasRight && (right.type === 'tray' || right.type === 'bag'))) {
       return this.handleCenterSurfaceTap();
     }
 

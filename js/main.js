@@ -1,16 +1,16 @@
-import { GAME_CONFIG } from './config.js?v=112';
-import { gameState, createShiftRuntimeState } from './state.js?v=112';
-import { audio } from './audio.js?v=112';
+import { GAME_CONFIG } from './config.js?v=113';
+import { gameState, createShiftRuntimeState } from './state.js?v=113';
+import { audio } from './audio.js?v=113';
 import {
   buildCustomerPortraitSVG,
   buildCourierDroneSVG,
   generateAppleTouchIcon
-} from './renderer.js?v=112';
-import { FirstPersonWebGLScene } from './webgl3d.js?v=112';
-import { CustomerAndDeliverySystem } from './customers.js?v=112';
-import { KitchenSystem } from './kitchen.js?v=112';
-import { EconomySystem } from './economy.js?v=112';
-import { TutorialSystem } from './tutorial.js?v=112';
+} from './renderer.js?v=113';
+import { FirstPersonWebGLScene } from './webgl3d.js?v=113';
+import { CustomerAndDeliverySystem } from './customers.js?v=113';
+import { KitchenSystem } from './kitchen.js?v=113';
+import { EconomySystem } from './economy.js?v=113';
+import { TutorialSystem } from './tutorial.js?v=113';
 
 class CyberRamenApp {
   constructor() {
@@ -172,7 +172,11 @@ class CyberRamenApp {
     if (hitId === 'under_tray_stack') {
       const res = this.kitchenSystem.takeTrayFromUnderCounter();
       if (res) {
-        this.scene3D.triggerTrayPlaceAnim(res);
+        if (res.action === 'return_under') {
+          this.scene3D.triggerUnderReturnAnim(res);
+        } else {
+          this.scene3D.triggerTrayPlaceAnim(res);
+        }
       }
       return;
     }
@@ -180,7 +184,11 @@ class CyberRamenApp {
     if (hitId === 'under_bag_stack') {
       const res = this.kitchenSystem.takeBagFromUnderCounter();
       if (res) {
-        this.scene3D.triggerBagPackAnim(res);
+        if (res.action === 'return_under') {
+          this.scene3D.triggerUnderReturnAnim(res);
+        } else {
+          this.scene3D.triggerBagPackAnim(res);
+        }
       }
       return;
     }
@@ -211,6 +219,8 @@ class CyberRamenApp {
           this.scene3D.triggerDualHandAnim(res.action, res);
         } else if (res.action === 'place_accessory' || res.action === 'pickup_accessory') {
           this.scene3D.triggerAssemblyAccessoryAnim(res);
+        } else if (res.action === 'repack_bag') {
+          this.scene3D.triggerBagPackAnim(res);
         } else if (res.action === 'return_bag') {
           this.scene3D.triggerBagReturnAnim(res);
         } else {
@@ -286,7 +296,15 @@ class CyberRamenApp {
     if (hitId === 'center_counter_surface') {
       const res = this.kitchenSystem.handleCenterSurfaceTap();
       if (res) {
-        this.scene3D.triggerReserveAnim(res);
+        if (res.action === 'place_accessory' || res.action === 'pickup_accessory') {
+          this.scene3D.triggerAssemblyAccessoryAnim(res);
+        } else if (res.action === 'tray_auto_move') {
+          this.scene3D.triggerTrayPlaceAnim(res);
+        } else if (res.action === 'bag_auto_move') {
+          this.scene3D.triggerBagPackAnim(res);
+        } else {
+          this.scene3D.triggerReserveAnim(res);
+        }
       }
       return;
     }
@@ -297,6 +315,12 @@ class CyberRamenApp {
       if (res) {
         if (res.action === 'pickup_tray_right' || res.action === 'handoff_and_pickup_tray_left') {
           this.scene3D.triggerDualHandAnim(res.action, res);
+        } else if (res.action === 'place_accessory' || res.action === 'pickup_accessory') {
+          this.scene3D.triggerAssemblyAccessoryAnim(res);
+        } else if (res.action === 'tray_auto_move') {
+          this.scene3D.triggerTrayPlaceAnim(res);
+        } else if (res.action === 'bag_auto_move') {
+          this.scene3D.triggerBagPackAnim(res);
         } else {
           this.scene3D.triggerReserveAnim(res);
         }
@@ -449,7 +473,7 @@ class CyberRamenApp {
 
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker
-        .register('./sw.js?v=112', { updateViaCache: 'none' })
+        .register('./sw.js?v=113', { updateViaCache: 'none' })
         .then((reg) => reg.update())
         .catch(() => {});
     }
