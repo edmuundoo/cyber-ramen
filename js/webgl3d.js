@@ -1,5 +1,5 @@
-import { GAME_CONFIG } from './config.js?v=95';
-import { gameState } from './state.js?v=95';
+import { GAME_CONFIG } from './config.js?v=96';
+import { gameState } from './state.js?v=96';
 import {
   createAlleyBackdropTexture,
   createBuildingFacadeTexture,
@@ -9,7 +9,7 @@ import {
   createWallMenuSignTexture,
   createPedestrianTextures,
   AnimeCustomerTextureRenderer
-} from './art3d.js?v=95';
+} from './art3d.js?v=96';
 
 /**
  * Полноэкранный WebGL 3D движок от первого лица с процедурной высокодетализированной
@@ -4497,8 +4497,7 @@ export class FirstPersonWebGLScene {
     }
 
     // 1Б2. СТЕКАНИЕ ЧИСТОГО ВЫЛИТОГО БУЛЬОНА В СЛИВ (когда вылили только бульон без лапши/топпингов!):
-    // 1) Бульон разливается по дну чаши во время струи из миски/коробки;
-    // 2) Держится немного на дне, затем уровень плавно опускается и лужица спокойно стекает в решётку слива!
+    // Гладкий глянцевый слой бульона наполняет дно раковины, немного держится и спокойно уходит вниз в слив (без воронок и колец!)
     if (this.sinkDrainAnim.active && !isClogged && waterFill <= 0.02) {
       const dp = Math.min(1, this.sinkDrainAnim.timer / this.sinkDrainAnim.duration);
       const drainBrothMap = {
@@ -4507,40 +4506,23 @@ export class FirstPersonWebGLScene {
         miso_mushroom: [0.68, 0.22, 0.88]
       };
       const dCol = drainBrothMap[this.sinkDrainAnim.broth] || drainBrothMap.tonkotsu;
-      const drainX = sinkX + 0.02;
-      const drainZ = sinkZ;
 
       let poolFill = 0;
       if (dp >= 0.09 && dp < 0.28) {
-        // Фаза 1: бульон разливается от центра слива по дну чаши
         const t = (dp - 0.09) / 0.19;
         poolFill = t * t * (3 - 2 * t);
       } else if (dp >= 0.28 && dp < 0.44) {
-        // Фаза 2: бульон немного держится на дне раковины с лёгкой рябью
         poolFill = 1.0;
       } else if (dp >= 0.44) {
-        // Фаза 3: плавное стекание в слив — уровень падает, а лужица стягивается в решётку слива!
         const t = (dp - 0.44) / 0.56;
         const s = t * t * (3 - 2 * t);
         poolFill = Math.max(0, 1.0 - s);
       }
 
       if (poolFill > 0.015) {
-        const layerFill = Math.min(1, Math.max(0, (poolFill - 0.22) / 0.78));
-        const ripple = Math.sin(this.time * 8.5) * 0.0016 * poolFill;
-        if (layerFill > 0.02) {
-          // Основной слой бульона по дну чаши раковины (плавно опускается к решётке)
-          const lh = 0.024 * layerFill;
-          const spreadX = 0.26 + 0.225 * Math.sqrt(layerFill);
-          const spreadZ = 0.24 + 0.225 * Math.sqrt(layerFill);
-          const cx = drainX + (sinkX - drainX) * layerFill;
-          this.drawBox(cx, floorY + 0.008 + lh * 0.5 + ripple, drainZ, spreadX, lh, spreadZ, dCol, 0.34, null, 0.96, 4, 0.72 * Math.min(1, layerFill * 1.4));
-        }
-
-        // Стягивающаяся круглая лужица прямо поверх сливной решётки (остаётся до самого конца стекания!)
-        const puddleR = 0.055 + 0.175 * Math.sqrt(poolFill);
-        const puddleH = 0.004 + 0.012 * poolFill;
-        this.drawMesh('cylinder', drainX, floorY + 0.009 + puddleH * 0.5, drainZ, puddleR, puddleH, puddleR, dCol, 0.38, null, 0.98, 4, 0.78 * Math.min(1, poolFill * 2.2));
+        const lh = 0.028 * poolFill;
+        const alpha = 0.76 * Math.min(1, poolFill * 2.4);
+        this.drawBox(sinkX, floorY + 0.008 + lh * 0.5, sinkZ, 0.485, lh, 0.465, dCol, 0.26, null, 0.94, 0, alpha);
       }
     }
 
