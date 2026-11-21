@@ -1,16 +1,16 @@
-import { GAME_CONFIG } from './config.js?v=107';
-import { gameState, createShiftRuntimeState } from './state.js?v=107';
-import { audio } from './audio.js?v=107';
+import { GAME_CONFIG } from './config.js?v=108';
+import { gameState, createShiftRuntimeState } from './state.js?v=108';
+import { audio } from './audio.js?v=108';
 import {
   buildCustomerPortraitSVG,
   buildCourierDroneSVG,
   generateAppleTouchIcon
-} from './renderer.js?v=107';
-import { FirstPersonWebGLScene } from './webgl3d.js?v=107';
-import { CustomerAndDeliverySystem } from './customers.js?v=107';
-import { KitchenSystem } from './kitchen.js?v=107';
-import { EconomySystem } from './economy.js?v=107';
-import { TutorialSystem } from './tutorial.js?v=107';
+} from './renderer.js?v=108';
+import { FirstPersonWebGLScene } from './webgl3d.js?v=108';
+import { CustomerAndDeliverySystem } from './customers.js?v=108';
+import { KitchenSystem } from './kitchen.js?v=108';
+import { EconomySystem } from './economy.js?v=108';
+import { TutorialSystem } from './tutorial.js?v=108';
 
 class CyberRamenApp {
   constructor() {
@@ -197,11 +197,20 @@ class CyberRamenApp {
       return;
     }
 
-    if (hitId === 'assembly_zone' || hitId === 'center_vessel' || hitId.startsWith('table_slot_')) {
-      const res = this.kitchenSystem.handleAssemblyZoneTap();
+    if (
+      hitId === 'assembly_zone' ||
+      hitId === 'center_vessel' ||
+      hitId === 'tray_drink' ||
+      hitId === 'tray_chopsticks' ||
+      hitId.startsWith('table_slot_')
+    ) {
+      const preferredPart = hitId === 'tray_drink' ? 'drink' : hitId === 'tray_chopsticks' ? 'chopsticks' : null;
+      const res = this.kitchenSystem.handleAssemblyZoneTap(preferredPart);
       if (res) {
         if (res.action === 'pickup_tray_right' || res.action === 'handoff_and_pickup_tray_left') {
           this.scene3D.triggerDualHandAnim(res.action, res);
+        } else if (res.action === 'place_accessory' || res.action === 'pickup_accessory') {
+          this.scene3D.triggerAssemblyAccessoryAnim(res);
         } else {
           this.scene3D.triggerAssemblyVesselAnim(res);
         }
@@ -218,9 +227,9 @@ class CyberRamenApp {
     }
 
     if (hitId === 'table_chopsticks') {
-      const ok = this.kitchenSystem.addChopsticksToAssembly();
-      if (ok) {
-        this.scene3D.triggerChopsticksPlaceAnim();
+      const res = this.kitchenSystem.takeChopsticksFromCup();
+      if (res) {
+        this.scene3D.triggerRightItemGrabAnim(res);
       }
       return;
     }
@@ -295,7 +304,10 @@ class CyberRamenApp {
 
     if (hitId === 'customer_serve') {
       if (gameState.runtime.cameraFocus === 'customer') {
-        const hasHeld = Boolean(gameState.runtime.activeVessel && gameState.runtime.activeVessel.type);
+        const hasHeld = Boolean(
+          (gameState.runtime.activeVessel && gameState.runtime.activeVessel.type) ||
+          (gameState.runtime.rightHandVessel && gameState.runtime.rightHandVessel.type)
+        );
         if (gameState.runtime.carryingAssembly && !hasHeld && this.kitchenSystem.hasAssembledOrder()) {
           const served = this.kitchenSystem.serveToCounterCustomer();
           if (served) {
@@ -376,19 +388,9 @@ class CyberRamenApp {
 
     if (hitId.startsWith('fridge_drink_')) {
       const drinkId = hitId.slice('fridge_drink_'.length);
-      const res = this.kitchenSystem.addDrinkToAssembly(drinkId);
+      const res = this.kitchenSystem.takeDrinkFromFridge(drinkId);
       if (res) {
-        this.scene3D.triggerDrinkPlaceAnim(res.drinkId, res.intoBag);
-        // Ждём ~460мс, пока правая рука дотянется до банки, возьмёт её и чуть опустит к себе,
-        // и ровно в этот момент закрываем холодильник и поворачиваем камеру на стол — рука едет вместе с нами и ставит банку!
-        setTimeout(() => {
-          if (gameState.runtime.fridgeOpen && gameState.runtime.activeSector === 2) {
-            gameState.runtime.fridgeOpen = false;
-            this.scene3D.triggerFridgeDoorAnim('close');
-            gameState.runtime.cameraFocus = 'worktable';
-            this.switchSector(1);
-          }
-        }, 460);
+        this.scene3D.triggerRightItemGrabAnim(res);
       }
       return;
     }
@@ -442,7 +444,7 @@ class CyberRamenApp {
 
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker
-        .register('./sw.js?v=107', { updateViaCache: 'none' })
+        .register('./sw.js?v=108', { updateViaCache: 'none' })
         .then((reg) => reg.update())
         .catch(() => {});
     }
